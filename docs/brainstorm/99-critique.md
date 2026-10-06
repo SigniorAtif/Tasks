@@ -1,0 +1,343 @@
+# 99 · Critique of the brainstorm
+
+> Slice: 99-critique · Written 2026-10-06 · Status: review of slices 01–13 and 10-wildcard against `JOURNEY.md`
+> Method: every slice's TL;DR, assumptions, recommendation, traps, challenges, open decisions and proposed entries were read in full; implementation walkthroughs were cross-checked for concrete names (tables, columns, keys, endpoints, payloads, enums, thresholds). Citations are `file § heading`.
+> Nothing here is decided. It is a list of things Atif has to decide, with a recommended answer for each.
+
+---
+
+## 1. TL;DR
+
+1. **The slices are each good. Put together, they describe roughly three times more v0 than you have hours.** 04's sync ladder alone is 12–13 focused days in v0 (`04 § 5.12`), which is about the whole v0 budget in 13 (about 63 hours, `13 § 5.2`). Add 03's 2–3 part-time weeks of backend plumbing, 09's roughly three weeks of frontend, 06's auth and 07's infra weekends, and the slices' own v0 estimates add up to something like 150–200 hours. 13's steelman says about 50 hours are available before end-sems (`13 § 4`). v0 has to be cut down to what JOURNEY §8 actually says: recurring calendar, groups, cancel/skip.
+2. **The biggest real contradiction is the client data model.** 04 says "full per-user replica in Dexie, hand-rolled push/pull sync with HLC per-field LWW". 09 says "TanStack Query is the only cache, local-first sync is a trap, Dexie is overkill". 13 assumes online-first with offline *reads* only. 03 assumes offline writes are replayed as ordinary REST calls. These cannot all be built. Pick 09's server-first model plus a small offline queue for cancel, confirm and capture. That is also 04's own fallback (`04 § 4.9`, "Down to approach A").
+3. **Occurrence identity is contested, and 01 is right.** 01, 02 and 04 key an occurrence by `(series_id, original local date)`. 03, 09, 13 and the wildcard key it by original local *start date-time* (RECURRENCE-ID style). Only the date key survives "change the time of all DBMS classes" without rewriting every exception (`01 § 5.4`). Write one shared `packages/core` types file before writing any code, so these keys, enums and table names are decided once.
+4. **Sessions are modelled three incompatible ways.** 02 puts a no-overlap exclusion constraint and a one-open-session index on *all* sessions. 05 splits sessions into user *assertions* (no overlap) and integration *evidence* (overlap allowed, resolved at read time). 04 lets the latest start win. 05's model is the only one that survives v3 integrations, and it costs nothing to adopt in v1 (one `kind` column). Also, 02's `touch_row` trigger bumps the user's sync revision on every heartbeat, which is exactly the load trap 04 and 05 warn about.
+5. **The semester date is unknown and it matters more than any library choice.** 13 assumes semester 4 starts about 30 Nov 2026 (based on KIIT's 2025-26 calendar). 12 assumes "early 2027". If 13 is right, the D-004 semester swap has to work about eight weeks from now, straddling end-sems. Confirm the KIIT dates this week.
+6. **Several §7 questions got two different answers, and one got none.** Gap thresholds (05: Claude Code 30 min, back-date cap 3 h; 08: 20 min, cap 90 min), commit trailer format (`Planner-Task: T-42`, `Planner-Task: t42`, `Task: <id>`), and the git hook install method (06: per-repo shim; 08: global config hook; 13: per-repo `sh` + `curl`) all conflict. **Nobody chose an app name**, and the name decides the origin, which is effectively permanent for a PWA (installs, push subscriptions, IndexedDB and cookies are all per origin).
+7. **Most locked-decision challenges are right and cheap to accept:** Claude Code hooks before the VS Code extension (08), "Claude's first prompt opens a self-closing auto session, not the manual timer" (05), a time-boxed calibration log refining D-009 (05), extra classes and "not held" wording for D-005 (12), and restating D-007's native trigger as measured friction (09).
+8. **From the wildcard, steal the cheap disciplines, not the architecture:** a shared pure core package, injected `now`/`tz`, idempotent client IDs, dry-run previews with batch undo, "signal versus fact" for heartbeats, and the local-only PWA as the *fallback* if the skeleton isn't live by 18 Oct (which 13 already proposes).
+
+---
+
+## 2. Contradictions between slices
+
+Grouped by area. "A says / B says" columns name the main positions; other slices are listed where they take a third position. Resolutions point at the minimal stack in §8.
+
+### 2.1 Recurrence and the calendar data model
+
+| Topic | Slice A says | Slice B says (and others) | Why it matters | Suggested resolution |
+|---|---|---|---|---|
+| Occurrence identity | **01 § 5.4**: `${seriesId}:${YYYY-MM-DD}`; extras `x:${overrideId}`. 02 § 5.3 (`UNIQUE (series_id, occurrence_date)`) and 04 § 5.7 agree. | **03 § 5.6**: `${seriesId}~${originalStartBasic}`, URL `/occurrences/20261006T100000`. **09 § 5.3**: `${seriesId}:${originalStart}`. **13 § 5.3 v0.2**: unique `(series_id, original_start)`. **Wildcard § 4.3**: `${ruleId}@${originalStartLocal}`. | Every cancel, move, confirmation and session reference hangs off this key. With a date-time key, "change all DBMS classes to 10:30" orphans every existing exception unless you rewrite them. | Adopt 01's date key. It is unique in the supported subset (one occurrence per series per local date) and computable before any row exists. |
+| Rule format | **01 § 5.2**: custom JSON `{freq, interval, byDay}`, `COUNT` converted to `until_date` on save. | **02 § 5.3**: `rrule text` holding an RRULE body, CHECKed by regex, including `MONTHLY`. 11 A6, 13 § 2 and 04 § 2 assume an RRULE subset. 13 assumes `COUNT` is stored. | Two storage shapes for the same thing; 02's regex CHECK allows `MONTHLY`, which 01's expander deliberately doesn't support. | 01's JSON with a Postgres CHECK on `rule->>'freq'`. Keep `toRRULE()` for a later ICS export. |
+| Entity layers | **01 § 5.1**: group → `recurring_item` ("DBMS") → `series` (one timing pattern). Attendance and the portal baseline are per item. | **02 § 5.3**: group → `recurring_series` directly; a subject is `lower(trim(title))` (02 § 5.7). **12 § 9 Q7**: an explicit subject field defaulted from the title. | Attendance is per subject (KIIT's 75% rule), and one subject is usually two or three series. Title normalisation breaks the day someone renames one slot. | Use 12's middle path: a `subject` text column on series, defaulted from the title. Add 01's item table only if it's ever needed. |
+| Exception columns | **01 § 5.3** `occurrence_override`: `status scheduled/cancelled/deleted`, `cancel_reason prof/self`, move as `new_date` + `new_start_time` (wall clock), `kind modified/extra`, `confirmed_at`. | **02** `occurrence_overrides`: `cancel_reason not_held/skipped`, `moved_starts_at/moved_ends_at timestamptz`, `attended_confirmed_at`, `deleted_at`, `rev`. **04 § 5.2** `occurrence_exceptions`: `status cancelled/skipped/moved/attended` *plus* `cancel_reason prof_cancelled/self_skipped`. | Three table names and three shapes. 04 can say "skipped" two different ways. 01 stores moves as wall-clock (consistent with its three time rules); 02 and 04 store instants. | 01's shape with 02's enum *meanings*: `cancel_reason` ∈ `not_held`, `skipped` (02 § 8 is right that the DB should store meaning, not "who"); moves in wall-clock fields; one `confirmed_at`. Name it `occurrence_override`. |
+| Cancel-reason vocabulary on the wire | 01: `prof` / `self`. 09: `by: 'prof' \| 'self'`. 10: `prof` / `skipped`. | 03: `prof_cancelled / skipped / holiday / other`. 12: `not_held / skipped / confirmed_went`. 13: `prof_cancelled / skipped / holiday`. | Seven spellings of two (or three) states across UI, API and DB. | DB and API: `not_held`, `skipped`, and a system-only `holiday` origin (13 § 8). UI labels stay "Prof cancelled / I skipped". |
+| Holidays and "days off" | **01 § 5.8**: a `day_exception` layer (one row per holiday), applied at expansion, covers series created later, undo per import batch. | **02** has no such table: holidays are override rows with `not_held` + `cancel_note` + `import_batch_id`. **03 § 5.11**: `POST /groups/{id}/bulk-cancel`. **12 § 5.5** "Days off" offers *both* "Holiday (not held)" and "I'm away (skipped)". **13 § 5.3**: "pause group from X to Y". | Row-per-occurrence holidays don't cover series created later, and undo becomes a hunt. 12's "I'm away" can't be expressed by 01's layer, which only means "not held". | 01's layer, with a small extension: `day_exception.effect` ∈ `not_held`, `skipped` so 12's "I'm away" works. |
+| Series time zone | **01 § 5.9**: tz mode on the *group* (`anchored` with `tzid`, or `floating` with a `user_tz_period` history table). | **02 § 5.1**: `tzid` on every *series*; "floating" deferred (02 § 9 Q13). 04 § 2 assumes per-series zone. | Different place, different semantics when the user travels. | For v0, store 02's per-series `tzid` and treat everything as anchored; Atif lives in IST. Add 01's floating mode only when someone travels. |
+| Split lineage | **01**: `split_from_series_id` on the new series. | **02**: `previous_series_id` on the new series. **04 § 2/§ 4.4**: `successor_id` on the *old* series, which offline cancels follow forward. | 04's conflict rule (a cancel on a split series lands on the successor) needs a forward pointer that 01 and 02 don't store. | Store 02's `previous_series_id`. Splits are online-only (04 § 4.3), so the forward lookup can be a query. |
+| Extra (make-up) classes | **01**: `occurrence_override.kind = 'extra'`, key `x:<id>`. | **02**: a series with `rrule NULL` is a single occurrence. **12 § 8.1**: needed, "one-off occurrence inside a group". | Both work, but they key differently and attendance code must count them. | 01's `extra` override (it already counts toward the item's attendance in 01's tests O10). |
+| Attendance confirmation storage | **01 § 5.10**: per-occurrence `confirmed_at`; explicitly *rejects* a per-day "confirmed" row (a series created later would look retroactively confirmed). | **02**: per-occurrence `attended_confirmed_at` *and* `day_reviews`. **03 § 5.2/§ 5.11**: the attendance module owns "**only** day-level confirmations"; `PUT /v1/days/{date}/attendance {skipped: keys[]}`. **04**: `day_reviews` + status `attended`. | 03's day-level truth reintroduces the flaw 01 identified. | Per-occurrence confirmations are the truth (01). Keep `day_reviews` only as "shutdown done" (useful to suppress the reminder, 05 § 5.15), never for attendance. |
+| Group fields | **01**: `busy`, `observes_holidays`, `tz_mode`, `attendance_threshold`, `attendance_tracking_from`, per-item baseline. | **02**: `attendance_target_pct`, `sort_key`, none of 01's other fields. **10 A2**: `bufferBeforeMin`, `bufferAfterMin`, `kind: protected`. **12 § 10**: needs threshold *and* tracking start date. | `attendance_tracking_from` is needed from day one (12 § 8.3, 01 § 5.10), or every class before install shows as unconfirmed. 02 lacks it. | v0 group: colour, active range, attendance on/off, threshold, tracking start, `busy`. Add buffers in v2, holidays flag with the holiday layer. |
+| Expansion window cap | **01 § 5.12**: 400 days. | **03 § 5.6**, **13 § 5.3**: 62 days. | Attendance projections and conflict checks span a semester (about 140 days). | 62 days on the public range endpoint, no cap on internal calls that already pass a bounded group range. |
+| "Edit all" without splits | **01 § 5.6**: timing edits under "all" are a split from today; history is never rewritten. | **13 § 5.5** cut list: if behind, drop "this and following" and "offer 'only this' or 'all'". | With 01's date key, an in-place time change for "all" is safe for exceptions; a *weekday* change orphans them. With 13's date-time key, even the time change orphans everything. | Keep 13's cut, but restrict in-place "all" to title, room and time. Weekday changes go through "end series, create new". This only works with the date key, one more reason to choose it. |
+
+### 2.2 Sync, client cache and API shape
+
+| Topic | Slice A says | Slice B says (and others) | Why it matters | Suggested resolution |
+|---|---|---|---|---|
+| Client data model | **04 § 4**: full per-user replica in Dexie (base tables + view tables), outbox, Web Locks leader tab, `useLiveQuery`. | **09 § 4/§ 5.7**: TanStack Query is the *only* server-state cache, persisted with `idb-keyval`; "Dexie is overkill" (09 § 5.1); "Local-first sync because offline" is trap 12. **13 § 2**: online-first, offline *reads* only in v0/v1; local-first is trap 2. **11 § 5.7**: its own IndexedDB outbox doing `PUT /entities/:id`. | Four client storage designs; 04 and 09 each assume the other agrees with them (04 § 2 row 09; 09 § 2 row 04). | Server-first (09) with paused mutations for a short list of offline-safe writes: cancel/skip, confirm, capture. Capture uses the same mutation queue, not a third outbox. |
+| Write protocol | **04 § 5.3**: named mutations with a per-client `seq` to `POST /sync/push`, `GET /sync/pull?cursor=epoch:version`. | **03 § 2 row 04**: offline writes are "ordinary API calls carrying client-generated ids", about 40 REST endpoints. **09**: REST `PATCH` + `If-Match`. **11**: `PUT /entities/:id`. **01 § 5.12**: resource endpoints like `PUT /v1/occurrences/{seriesId}/{date}`. | RPC-style mutation log versus resource REST is the core API decision; integrations (08) and native (D-007) want REST. | Resource REST under `/api/v1` with client UUIDs and natural keys (01, 03). No `/sync/*` endpoints in v0–v2. |
+| Conflict rule | **04 § 4.4**: per-field LWW ordered by a hybrid logical clock, `field_clock jsonb` on every row. | **09 § 2**: per-row `version`, `If-Match`, **409** on conflict. **01 § 7 O9**: LWW on `updated_at`. **03**: natural idempotency, no versioning rule stated. | One user on two devices rarely edits the same field offline; the rules differ in code size by about 10×. | Last write wins at the server, plus 01's natural-key upserts. Revisit only if dogfooding shows a real lost edit. |
+| Change cursor and "versions" | **02 § 5.3**: `users.rev` bumped *per row* by a trigger, stamped on each row. | **04 § 5.4**: `sync_state.version` bumped *once per transaction* by `withUserTx`, plus a guard trigger. **05 § 5.3**: `user_live.version` and `sessions.version` (visible changes only). **09**: per-row `version` for `If-Match`. **03 § 2**: `GET /v1/changes?since` "assumed". | Four counters named "version" or "rev" with different bump rules. | None in v0. If a delta feed is ever needed, use 04's per-user transaction counter, which is also where 05's ETag can come from. |
+| Where expansion runs | **01 § 9 Q10**: shared package, server canonical, client for offline. **04 § 5.7**: client expands from the replica. **10 A7**: client replica of today + 14 days. | **09 § 2 row 01**: "The client never runs RRULE expansion". | Determines whether "time back" works offline (10 § 9 Q4) and whether the PWA ships the recurrence package. | Server expands in v0 (09). The package stays pure and shared, so the client can expand later without a rewrite. |
+| Where "time back" runs | **10 § 10**: a pure shared package, client-side for instant offline suggestions. | **09 § 2 row 10**: suggestions come from the API; "the client never computes them". | Same as above. | Server in v2; client later if the toast feels slow. |
+| Tombstones and purge | **02 § 5.1**: `deleted_at` is a 30-day trash, cascades with a shared timestamp, then purge. | **04 § 5.8**: 90-day tombstone GC with a horizon and a `reset` pull. **05 § 5.15**: 30 days. | With no replica there are no tombstones to sync, only trash. | 02's 30-day trash. No horizon logic until there is a delta feed. |
+| PWA tooling | **04 § 5.11**: Serwist. | **09 § 5.1**: `vite-plugin-pwa` 2.0.0 (two days old, pin exactly). | Minor. | 09 owns the client; use its choice, with its pinned fallback. |
+| Client-version signalling | **02 § 5.8**: `X-Planner-Schema` header, 426. | **03 § 5.6**: `Planner-Client: kind/semver`, `GET /v1/meta`, `400 client-version-unsupported`. **07 § 7 #17**: `X-Client-Release`, `MIN_CLIENT_RELEASE`, 426. | Three headers for one job. | One header (03's `Planner-Client`), added when the first non-PWA client ships (v1.5). |
+| API path prefix and host | **03 § 9 Q2**: `/v1` at the root of one origin (`planner.ahmedatif.in`); its alternative `api.planner.ahmedatif.in`. | **06 § 5.3**: `/api/auth/*` and `/api/v1/*` on `plan.ahmedatif.in`. **07 § 5.10**: `tasks.ahmedatif.in/api` for the PWA *plus* `api.ahmedatif.in` for token clients. **08 § 2**: `https://tasks.ahmedatif.in/api/v1`. **09 § 2**: possibly a separate origin with CORS. | Three hostnames for the same app. 03's `api.planner.ahmedatif.in` is a second-level name that Cloudflare's free certificate doesn't cover (07 § 5.4). | One origin, `/api/v1` and `/api/auth`. No separate `api.` host until there is a measured reason; 06's "Bearer never falls back to cookie" rule already makes token routes CSRF-safe. |
+
+### 2.3 Sessions, heartbeats and integrations
+
+| Topic | Slice A says | Slice B says (and others) | Why it matters | Suggested resolution |
+|---|---|---|---|---|
+| Session model | **05 § 5.3**: one table with `kind` (`timer`, `manual_entry`, `auto`) × `source`; exclusion constraint only on assertions; one running timer per user; one open auto span per `(user, source, context_key)`; overlaps resolved by `attribute()` at read time. | **02 § 5.3**: GiST no-overlap on *all* sessions; one open session per user. **04 § 4.4**: latest start owns "running"; duplicate starts within 60 s merge; exclusion on all. **13 v1.2**: one open session per user. | 02's constraints make v3's "VS Code evidence while a manual timer runs" impossible to store. 05's model costs one column in v1. | 05's model. In v1 only `kind = 'timer'` and `manual_entry` exist, so behaviour equals 02's. |
+| Session vocab | 02: `source` timer/manual/git/vscode/claude_code/import; `end_reason` stopped/idle/capped/switched/edited. | 03: `SessionSource` manual/vscode/claude-code/git/native; `ClosedReason` stopped/idle/superseded. 04: manual/git/vscode/claude. 05: `close_reason` user_stop/switched/gap_timeout/hard_cap/merged/edited. 08: manual/git/vscode/claude_code/browser plus `inferred`/`confidence`. 10: timer/editor/claude/git plus `start_confidence`. | Hyphen versus underscore alone will break a CHECK constraint. | Take 05's lists (the most complete), snake_case everywhere, defined once in `packages/core`. |
+| Where `last_seen` lives | **05 § 5.3**: on the `sessions` row, unindexed, `fillfactor 85`, never bumps `version` (HOT updates). | **04 § 5.2**: separate non-synced `session_liveness` table. **02 § 5.3**: `last_seen_at` on `sessions`, *and* `touch_row` fires on every UPDATE of `sessions`, bumping `users.rev` and taking the user row lock. | 02's trigger turns every heartbeat into two row writes plus a sync change. That is the "single biggest load trap" in 05 § 6 #5 and 04 § 6 #6. | 05's placement. Whatever change-tracking trigger exists must skip updates that only touch `last_seen`. |
+| Ingest endpoints | **03 § 5.8**: `POST /v1/activity` (`events[{at, kind}]`) and `POST /v1/integrations/git/commits`. | **05 § 5.6**: `POST /v1/activity` with `{batchId, deviceId, items[{intervals[{from,to}]}]}` and `POST /v1/commits`. **08 § 5.3**: one `POST /v1/ingest` with commit, rewrite and heartbeat events. **13 v1.5**: `POST /commits`. | Same path in 03 and 05 with incompatible bodies; three endpoint layouts. | 08's single ingest endpoint with its envelope (it carries `sentAt`, idempotency keys and rewrite events). Heartbeat items carry 05's `{from, to}` intervals, which 05's merge needs. |
+| Commit dedupe key | 02: `UNIQUE (user_id, sha)`. | 03: `(user_id, repo_link_id, sha)`. 05: `(user_id, repo_key, sha)`. 08: `(user_id, repo_key, sha)` + `superseded_by`. 13: `(repo_id, sha)`. | Forks and unlinked repos behave differently under each. | 05/08's `(user_id, repo_key, sha)`: it works before a repo is linked. |
+| Gap thresholds (§7) | **05 § 5.6**: VS Code 15 min, Claude Code 30, git 60; tails 1/2/0 min; fixed constants. | **08 § 5.7**: VS Code 15, Claude Code **20**, git 60; per-user tunable `session_policy`. **02**: one `idle_timeout_s` (900) frozen per row. **03 § 5.8**: one `tailCredit` of 2 min. **10 A4**: sessions end at `last_seen`, no tail. | Two answers to an open JOURNEY question. 05 explicitly lists "user-adjustable thresholds" as its trigger to switch to an event-log design (05 § 4). | 05's numbers as constants until the calibration log has two weeks of data; then decide and log it in JOURNEY. |
+| Back-dating commit-only sessions | **05 § 5.8**: 30-min credit, earlier only by file mtimes, floor at previous commit, cap 3 h, min 5 min. | **08 § 5.7**: learned allowance (median of the last 30 observations, clamped 10–90 min), hard cap 90 min. | Different numbers for the same "commits mark the end" risk. | 05's fixed rule in v3; 08's learned allowance once there are 30 observations. |
+| Commit → task tokens | **02 § 5.1**: `T-42`, trailer `Planner-Task: T-42`, branch `t42-fix-login`. | **08 § 5.5**: trailer `Planner-Task: t42`, branch regex requiring a `t` prefix (`feat/t42-…`). **05 § 5.9**: trailer `Task: <short-id>`, branch `t-4f2a-fix-login`. | Trailer key and short-ref format must match between the hook, the parser and the UI. | 08's `Planner-Task:` trailer and `t<number>` branch token; display refs as `T-42`, parse case-insensitively. |
+| `.planner` file | **02 § 5.7**: JSON `{"v":1,"link":"<repo_links.id>"}` (indirection through a server row). | **08 § 5.6**: TOML with `project = "prj_…"` and `[[path]]` prefixes. **06 A8**, **13 v1.5**: project ID. | 02's indirection lets a repo be re-pointed without editing every clone; 08's file is human-readable and supports monorepos. | 08's TOML with 02's insight: store a link id, not a project id, under the key `link`. |
+| ID format | **02 § 5.1**: bare UUIDv7 (`uuid` columns). | **08 § 2 row 02**: "ids are opaque strings (`prj_…`, `tsk_…`)". | 08's `.planner` example and branch parsing assume prefixed ids. | Bare UUIDv7 in the DB; prefixes, if wanted, only at the display layer. |
+| Timer API and conflicts | **05 § 5.5**: `POST /v1/timer/start` (switch with a 30-s undo token), `/stop`, `/undo-switch`. | **03 § 5.11**: `POST /v1/sessions` (supersedes), `/sessions/{id}/stop`, `POST /v1/sessions/ensure`. **08 § 2**: starting while another runs → **409** with the running session. **04 Q4**: a manual timer is never closed by an auto session. | Switch-with-undo versus 409 is a user-visible behaviour. | Switch with undo for the PWA (05, 12); `ensure` never switches an explicit timer (08 test 30, 04 Q4). |
+| Offline timer start | **04 § 4.3**: start/stop works offline, provisional. | **05 § 5.5**: "v1 doesn't fake it" ("will start when you're back"). | Different promises. | 05. Offline timer starts are rare and the 409 path covers them. |
+| Raw activity retention (D-009) | **03 § 8**: `activity_batches` for 30 days. | **05 § 4**: a flag-gated `activity_spans_debug` calibration log, on for the first month only. **08 § 5.3**: idempotency keys stored 30 days server-side, while 05 says interval union makes a dedupe table unnecessary. | Three mechanisms for "keep some raw evidence". | 05's calibration log, nothing else. Interval merging is idempotent, so no key table. |
+
+### 2.4 Auth, identity and tokens
+
+| Topic | Slice A says | Slice B says (and others) | Why it matters | Suggested resolution |
+|---|---|---|---|---|
+| Sign-in method | **06 § 5.4**: Google + email allowlist in v0; OTP codes in v1; magic links never. | **07 A6** and § 9 Q3: magic-link email, with Resend → SES. **13 § 9 Q3**: GitHub OAuth by default. | 07's email infrastructure exists for a flow 06 rejects. | 06: Google + allowlist. No email provider until other users arrive. |
+| User and profile tables | **02 § 5.3**: one `users` table holding `tzid`, `day_boundary`, `idle_timeout_s`, `timer_cap_s`, `next_task_ref`, `rev`; every FK points at it. | **06 § 5.2**: Better Auth owns `identity."user"`; app data lives in `planner.profile(timezone, week_starts)`. **07 § 5.4** scrub script uses `users`, `auth_sessions`, `integration_tokens`. | Better Auth creates its own user table; 02's composite FKs and trigger target the wrong one. | 06's split. Move 02's app columns to `planner.profile`; FKs reference `identity."user"(id)`. |
+| Token prefix and CLI name | **06**: `pln_`, CLI `pln`. 02 agrees on `pln_`. | **03 § 5.7**, **11 § 5.8**: `pat_…`. **07 A6**: `plnr_`. **08**: CLI `planner`. **Wildcard**: CLI `pl`. | The prefix is baked into gitleaks rules and docs; the CLI name into hook shims. | Decide with the app name (§4.2). |
+| Scopes | **06 § 5.7**: `sessions:read/write`, `commits:write`, `projects:read`, `tasks:read/write`, `dump:write`, `calendar:read`. | **02 § 5.3**: `api_tokens.scopes` CHECK allows only four values (it would reject `projects:read`). **03**: `ingest:write`, `calendar:read`. **05**: `activity:write`. **08**: `ingest:write`. **11**: `capture:write`. | A DB CHECK that rejects the auth slice's own scopes. | 06's registry plus one `ingest:write` for 08's ingest endpoint. No CHECK on scope values; validate in code. |
+| When tokens arrive | **06 § 5.16**: v3. | **13 § 4**: v1.5 with the git hook. **11 § 9 Q15**: v2, for the Capture API. | Three timings. | v1.5, designed per 06, used by both the hook and the Capture API. |
+| Hook installation | **06 § 5.9/trap 11**: a per-repo 4-line shim calling `pln hook post-commit`; warns `~/.gitconfig` is in your dotfiles repo. | **08 § 5.4**: a Git ≥ 2.54 config-based *global* hook in `~/.gitconfig`, verified alongside husky on Git 2.55. **13 v1.5**: per-repo POSIX `sh` + `curl`, queue in `.git/planner-queue`. | Three designs for the first integration. | 08's global config hook (verified on your machine); 06's concern is only about tokens, and the hook line holds none. |
+| Device flow endpoints | **06 § 5.8**: `/device/code`, `/device/lookup`. | **08 § 2**: `POST /v1/auth/device`, `POST /v1/auth/device/token`. | Minor. | 06's, since it builds them. Not needed before v3. |
+
+### 2.5 Infra, jobs and runtime
+
+| Topic | Slice A says | Slice B says (and others) | Why it matters | Suggested resolution |
+|---|---|---|---|---|
+| Process topology | **03 § 4.1**: one Node process serves the API *and* the PWA's static files, with an in-process scheduler. | **07 § 5.1**: Caddy serves static files; a separate `worker` process runs jobs, reminders, the sweeper and push. | Two deployables versus one. | 03 until v2; when push arrives, the worker is the same image with a different command (07), which is cheap. |
+| Job runner and reminder table | **03 § 5.9**: croner every minute over `notification_schedules.next_fire_at`, `FOR UPDATE SKIP LOCKED`, at-most-once. **05 § 5.15**: the same pattern on a `reminders` table. | **07 A4/§ 5.11**: pg-boss or graphile-worker in the worker; selects users whose local time "falls in the current minute" with a `reminder_sends` unique row. | 07's "current minute" scan misses reminders across a restart unless its catch-up logic is right; 03 and 05's due-time column self-heals. | 03/05's due-time column and claim query. One table, called `reminders` (05). |
+| Shutdown time and nudges | 05: 21:30 default; long-timer nudge 4 h, cap 12 h. | 12: 21:00; nudge at 3 h and midnight. 13: 22:00. 07: about 21:00. 12 also wants block-start pushes with a "Start timer" action that 05's nudge catalogue doesn't include. | Small, but these are product decisions disguised as constants. | Ask Atif (05 § 9 Q7 asks the right question). |
+| Hosting | **07 § 4**: one India-region VPS (Oracle Always Free if capacity exists, else a 2 GB India VPS), Compose, Postgres on the box. 04 § 4.6 follows 07. | **13 § 2 row 07**: free tiers throughout (static host, small API host, managed Postgres), ₹0. **03 § 4.3**: long-running process, serverless only as a fallback. | 13's dates assume free-tier hosting with no ops; 07's design needs the 1–2 weekends it budgets. | 07, trimmed (§8), with a hard one-evening timebox on Oracle. |
+| Node version and Temporal | **03 § 5.12**: Node 26, "Temporal is built in", removes the polyfill on the server. | **01 § 5.9**: Arch's Node 26.9.0 on Atif's machine has `typeof Temporal === 'undefined'`; always import the ponyfill. **07 § 5.7**: `node:24-slim`. **09**: native Temporal, polyfill only where missing. | Mixed native/polyfill engines are exactly the "replicas disagree" risk (wildcard § 14 #2). | Node 24 LTS and `import { Temporal } from 'temporal-polyfill'` everywhere, server and client (01). |
+| TypeScript and lint | **03 § 5.12**: TypeScript 6.0.x, because `typescript-eslint` doesn't support 7. | **09 § 5.1**: TypeScript 7.0.2 with Biome. | One monorepo, one compiler. | TypeScript 6.0.x with Biome (13 allows either); move to 7 when nothing blocks it. |
+| Postgres driver | **02 § 5.10**, **03**: `pg`. | **04 § 5.4**: `postgres` (postgres.js) in all sync code. | Minor. | `pg`, through Drizzle. |
+| RLS | **02 § 5.9**: enabled *and forced* from the first migration, with `app_rw`, `app_jobs` (BYPASSRLS) and `app_auth` roles and a definer function. | **03 § 6 trap 14**: RLS as the primary mechanism is a trap; scope by `userId` in every repo function, add RLS later as defence in depth. | A day or two of v0 and a source of pooled-connection subtleties. | 03. `user_id` on every row and one cross-user test now; RLS before a second real user. |
+| Voice audio | **02 § 5.3**: `audio_key` in object storage, keep 30 days (02 § 9 Q11). | **07 § 9 Q12**: don't store. **11 § 5.9**: never on the server; 30 days on the device. **03 A11** and **07 A9**: transcribed on device with Web Speech. **12**: browser speech recognition. | Three storage policies and two transcription assumptions. | 11: keyboard dictation first; recorded audio stays on the device. |
+
+### 2.6 Scope, sequencing and UX
+
+| Topic | Slice A says | Slice B says (and others) | Why it matters | Suggested resolution |
+|---|---|---|---|---|
+| What v0 contains | **JOURNEY § 8**: recurring calendar, groups, cancel/skip. **01 § 5.14**: the dogfood point is step 4 (expand, DST, overrides, schema, calendar endpoint); splits, conflicts and holidays come after. | **12 § 5.17**: v0 includes move, edit with the scope chooser (splits) and "Days off". **13 § 5.3**: v0.3 includes splits, conflicts, holiday bulk-cancel and backup drills; v0.4 a live semester swap. **04**: L0–L2.5 sync. **03**: OpenAPI, codegen, contract diff, dependency-cruiser. | See §1 point 1. | §8's v0: render, cancel/skip with reason, archive and create groups. Everything else below 13's exam line. |
+| Semester 4 start | **13 § 2**: about 30 Nov 2026, derived from KIIT's 2025-26 calendar ("next semester from 21 Nov"). | **12 § 1/§ 10**: "early 2027"; build the swap before January. | Decides when D-004 must work and when the formal dogfood can happen. | 13's assumption is better sourced. Confirm with the actual calendar now. |
+| Mobile planning | **12 § 5.4/§ 10**: tap-a-gap on mobile; long-press drag deferred "only if missed". **13 v1.1**: a "Plan…" sheet replaces drag on mobile. | **09 § 4/§ 5.11**: v1 builds a touch long-press gesture engine (two-week timebox); "Plan…" is the documented primary on phones (09 Q5). | 12 calls touch drag "the single biggest time sink"; 09 schedules it anyway. | 12. Desktop drag only in v1. |
+| Drag implementation | **09 § 4**: a custom pointer-event engine, `@dnd-kit` as fallback. | **12 § 2 row 09**: assumes a library with a keyboard sensor (dnd-kit). **13 § 6 trap 3**: "a hand-rolled drag-and-drop calendar grid… use a library". | Whether v1 spends two weeks on gestures. | Library on desktop first (dnd-kit or FullCalendar's interaction plugin behind 09's `TimeGridProps`). Custom only if the library fights the background-layer rule. |
+| Task over a cancelled class | **09 § 10**: the task takes full width on top of the striped ghost. | **12 § 5.5**: about 85% width, right-aligned, so a strip of stripes stays visible. | Cosmetic. | 12 (it shows both facts). |
+| Quick-add preview | **11 § 5.13 step 4**: highlight overlay *and* chips. | **12 § 10**: chips, explicitly *not* inline highlights (contenteditable bugs on Android). | Minor. | 12. |
+| Undo windows | 12: an 8-second toast for everything. | 05: a 30-second undo token for timer switches. 01: a 10-minute undo token for the semester swap. | Fine if intentional. | Keep all three; write them down. |
+| Breakdown with AI | **10 § 5.8**: `suggestBreakdown` returns `SubtaskDraft[]` through `LlmProvider.generateStructured(req)`; Groq first. | **11 § 5.11**: `LLMProvider.generate<T>(prompt, schema)` returns *quick-add lines* that go through the parser and preview. **08 § 1**: breakdown happens through the MCP tool `breakdown_dump_item` using *your own* Claude. | Three breakdown paths and two interface shapes for one optional feature. | 10's interface signature, 11's output contract (lines through the same parser), and 08's MCP tool calling the same "apply breakdown" endpoint. All in v3+. |
+| Morning plan | **10 § 5.7**: a two-pass greedy morning draft, plus a morning push (10 A8). | **12 § 4**: "no morning wizard", morning is just Today. **JOURNEY § 6**: no morning plan in the backlog. | Scope added by one slice. | Drop it from v2; 12's switch condition decides whether it ever comes. |
+
+### 2.7 Assumption audit: what each slice expected versus what it got
+
+| Slice | Assumed | Actually | Severity |
+|---|---|---|---|
+| 01 | 02 has `recurring_item`; 09 imports the recurrence package for offline rendering; 05 lets a session reference `(series_id, occurrence_date)`. | 02 has no item layer; 09 never expands on the client; 05's sessions reference `block_id` only. | Medium |
+| 02 | 01 stores an RRULE body; 05 only needs "one open session, no overlap"; 08's `.planner` holds a link id; 09 mirrors tables in IndexedDB; 10 uses an EWMA. | 01 uses JSON; 05 needs overlapping evidence; 08 holds a project id; 09 uses the Query cache; 10 uses a Kalman filter (needs variance, not one number). | High (sessions) |
+| 03 | 01's key is the original start date-time and the runtime is `rrule-temporal`; 04 replays offline writes as REST calls; 07 serves the PWA from the Node process; 08's hook is `sh` + `curl`; voice is on-device. | 01 uses a date key and its own expander; 04 has `/sync/push`; 07 uses Caddy and a worker; 08 uses a Node flusher; 11 uses Groq on the server. | High (key, sync) |
+| 04 | 01 has `successor_id`; 02 carries `version` + `field_clock`; 05 keeps `last_seen` off the row; 09 uses Serwist + Dexie `liveQuery`; 13 lets v0 climb L0–L3. | None of these hold: 09 rejects local-first and 13 calls it a trap. | High |
+| 05 | 02 names `tasks.completed_at`, `blocks.start_at`, `users.timezone`; 04's trigger ignores heartbeat-only updates; 06 grants `activity:write` and a `deviceId`; 08 sends intervals and a `Task:` trailer. | 02 uses `closed_at`, `starts_at`, `tzid`, and its trigger fires on every update; 06 has no such scope; 08 sends `windowStart/windowEnd` and `Planner-Task:`. | High (trigger) |
+| 06 | One origin `plan.ahmedatif.in`; the share target is a POST handled in the service worker; `.planner` holds a project id. | 07 adds `api.ahmedatif.in`; 09 uses a GET share target; 02 wants a link id. | Low |
+| 07 | Magic-link auth and a `plnr_` prefix; pg-boss/graphile in a worker; voice transcribed on device. | 06 rejects magic links and uses `pln_`; 03/05 use croner; 11 transcribes on the server. | Medium |
+| 08 | One `POST /v1/ingest`; per-user threshold settings; prefixed ids; `ingest:write` scope. | 03 and 05 define other endpoints; 05 uses constants; 02 uses bare UUIDs; 06 has no ingest scope. | Medium |
+| 09 | Server expands; key is `seriesId + originalStart`; 03 uses per-row `version` + `If-Match`; 04 is server-first; cookie on a sibling subdomain; static host on a separate origin. | 01 shares expansion and uses a date key; 03 doesn't version rows; 04 is local-first; 06 and 07 use one origin. | High (04) |
+| 10 | Group buffers and a `protected` kind exist; tasks have `priority`, `not_before`, `kind`, `estimate_source`; sessions end at `last_seen`; a per-user morning job exists. | None of these fields exist in 01 or 02; 05 ends sessions at `last_seen + tail`; nobody schedules a morning job. | Medium (priority is 20% of the score and has no column) |
+| 11 | Dump items have `last_touched_at`, `state`, `cooking_until`, `tags[]`; tasks have do/due kinds; a `capture:write` scope; 10's `generate(prompt, schema)`. | 02 has `touched_at`, `status`, no cooking or tags, `due_on/due_at`; 06 has `dump:write`; 10's signature differs. | Low–medium |
+| 12 | A drag library; browser speech recognition; 03 returns inverse operations for undo; block-start pushes. | 09 builds its own; 11 uses keyboard dictation; 03 doesn't specify undo; 05 doesn't send block-start pushes. | Low |
+| 13 | 04 is online-first with offline reads only; 07 uses free tiers; 08 is `sh` + `curl`; 06 delivers tokens at v1.5; 01 stores `COUNT` and keys by start time. | All five are wrong. | High: 13's dates rest on them |
+
+---
+
+## 3. Overengineering for a solo student
+
+The budget is the frame. 13 assumes about 10 hours a week in term, about 2 in exam weeks, and says its own estimates are probably 1.3–1.8× too low (`13 § 1`). Today is 6 Oct. Durga Puja runs 16–21 Oct, Diwali is 8 Nov, and end-sems start around 9 Nov (`13 § 2`). That leaves roughly 40–50 working hours before exams. Each item below is judged against that, for v0/v1 specifically.
+
+1. **Hand-rolled full-replica sync (`04 § 4`, `§ 5.12`).**
+   - *Proposed:* Dexie base and view tables, an outbox with per-client sequence numbers, `/sync/push` and `/sync/pull`, a hybrid logical clock with per-field `field_clock`, tombstone horizons, restore epochs, Web Locks leader election, and a convergence property test, with L0–L2.5 inside v0.
+   - *Why too much now:* 12–13 focused days is the entire v0 budget, and it buys offline *edits* for one user who is mostly online and on one device at a time. 04's own steelman says so (`04 § 4.8`).
+   - *Simpler:* 09's persisted Query cache plus paused mutations for cancel/skip, confirm and capture, with idempotent natural-key PUTs. That's 04's own "stop at L2" fallback.
+   - *When it's worth it:* after dogfooding shows lost edits or blank offline weeks more than a couple of times, or when a native client needs the same offline model.
+
+2. **API platform machinery before the second client (`03 § 4.1`, `§ 5.6`, `§ 5.13` steps 1–6).**
+   - *Proposed for v0:* generated `openapi-fetch` client, a committed OpenAPI snapshot with a CI diff, `dependency-cruiser` boundary rules, about ten modules with an after-commit event bus, `Planner-Client` header and `/v1/meta`, RFC 9457 problem types, Scalar docs. The `Idempotency-Key` table lands in v1.
+   - *Why too much now:* the PWA is the only client until v1.5, it ships in the same deploy as the API, and 03 itself says contract diffs should only warn until v3 (`03 § 9 Q10`). 03's strongest-argument-against (`03 § 4.2`) is essentially this point, and its own switch condition ("more than a third of time on plumbing") will probably trigger.
+   - *Simpler:* Hono routes validated by zod schemas from `packages/core`, which the PWA imports directly. Modules are folders. Errors use one JSON shape. Natural idempotency (client UUIDs, PUT by natural key) is enough; the generic key table waits until `POST /sessions/ensure` exists in v3.
+   - *When it's worth it:* the OpenAPI document and generated docs at v1.5, when the git hook becomes the first non-TypeScript client; contract diffs and version headers at v3.
+   - *Fair note:* 03's REST-not-tRPC call, its "no Redis, no queue" stance and its `SKIP LOCKED` sweep are right-sized.
+
+3. **Database hardening on day one (`02 § 5.1`, `§ 5.9`).**
+   - *Proposed:* forced RLS, three DB roles, a `SECURITY DEFINER` token lookup, composite FKs everywhere with `ON DELETE SET NULL (col)` in custom migrations, a per-row `rev` trigger, deterministic UUIDv5 override ids, a short-ref trigger, fractional sort keys.
+   - *Why too much now:* v0 has one user and four tables. Drizzle can't express half of it, so it becomes custom SQL you maintain from the first week, and the `rev` trigger actively harms heartbeats later (§2.3).
+   - *Simpler:* `user_id` on every row, every repository function scoped by user, and one test proving user B can't read user A (03 trap 14). Natural-key unique constraints replace UUIDv5 ids. Keep 02's three time rules and its deletion vocabulary, which cost nothing and prevent real bugs.
+   - *When it's worth it:* RLS and composite FKs before a second real person has an account; a change cursor only if a delta feed exists.
+
+4. **Production operations stack (`07 § 4`, `§ 5.18`).**
+   - *Proposed by v1:* a separate worker, staging as "yesterday's prod" with weekly automated restore drills, SOPS secrets, squawk migration lint, Healthchecks dead-man switch, ntfy alerts and an `api.` host; by v2, WAL-G PITR and evacuation drills.
+   - *Why too much now:* none of it changes Atif's week, and some has failure modes of its own (07's own trap 8 about WAL archive bloat). Oracle's free tier also needs a credit card, ARM builds and a double firewall (07 traps 19–20), which can eat an evening or a week.
+   - *Simpler for v0–v1:* one box with Compose (Caddy, api, Postgres), a nightly `pg_dump` encrypted to R2, one documented restore, a free uptime check. `.env` on the box, backed up in a password manager.
+   - *When it's worth it:* staging and PITR before anyone else's data is on the box (07's own phasing for PITR is "v2", which is right); the worker when push lands.
+   - *Fair note:* 07's "clients only ever talk to `*.ahmedatif.in`" rule (the 2026 `*.supabase.co` block) and "never publish the DB port" trap are cheap and important.
+
+5. **Touch gesture engine in v1 (`09 § 4`, `§ 5.5`).**
+   - *Proposed:* a pointer-event state machine for move, resize, place and long-press on touch, with auto-scroll, in a two-week timebox.
+   - *Why too much:* 12 calls touch drag on a scrolling timeline "the single biggest time sink in this whole app" (`12 § 1`), and 13 lists it as trap 3. Two weeks is a fifth of v1.
+   - *Simpler:* tap-a-gap and the "Plan…" sheet on mobile (both 09 and 12 already design it), desktop drag with a library.
+   - *When it's worth it:* 12's condition, "only if missed after a month of using the Move sheet".
+   - *Fair note:* 09's render-only v0 grid is fine. Positioning absolutely-placed blocks is mostly CSS, and the background-layer rule for cancelled blocks really is awkward in FullCalendar.
+
+6. **Estimator and ranking science (`10 § 4`, `§ 5.4`, `§ 5.9`).**
+   - *Proposed:* a tuned 1-D Kalman filter per scope, a conditional-logit fit in a replay harness, bootstrap confidence intervals, team-draft interleaving, a knapsack DP and a morning-plan draft.
+   - *Why too much for v2:* with one user and about five decisions a day, there won't be 150 logged decisions until spring. The morning plan isn't in the backlog.
+   - *Simpler:* an exponential moving average of `ln(actual/estimate)` with a clamp (10 itself calls it the special case), a ranked list by deadline and fit with reason strings, and no morning plan.
+   - *When it's worth it:* the replay harness after about three months of logs.
+   - *Fair note:* two cheap things in 10 are right *now*: snapshot the estimate at first session (02 already has `estimate_frozen_min`) and log each suggestion with its features. Data you don't log can't be recovered.
+
+7. **The integration platform (`08 § 4`, `§ 5.13`).**
+   - *Proposed:* `planner-core` plus a CLI, a maildir spool, privacy filters, monorepo `[[path]]` resolution, a learned allowance, a 10-tool MCP server, VS Code packaging for two stores, about 25 focused days.
+   - *Why it's fine but must be staged:* the architecture is right for three clients, and 08's steelman about a `curl` script is answered well. But at v1.5 only the hook exists.
+   - *Simpler for v1.5:* shim, spool, flush, link, login; no MCP, no `[[path]]`, no learned allowance.
+   - *When it's worth it:* each piece when its client ships.
+
+8. **Capture breadth in v1–v2 (`11 § 4`, `§ 5.13`).**
+   - *Proposed:* v1 is about 13–18 days (sigils, outbox, `/capture` route, aging, breakdown with provenance); v2 adds chrono-node with eight custom parsers, Hinglish, a policy layer, recurrence clauses, the Capture API, Groq transcription and a resurfacing card (about 21–26 days).
+   - *Why too much:* JOURNEY's v1 dump is "fast capture of ideas". 13's minimum lovable quick add is "10 patterns he actually types".
+   - *Simpler:* v1 is a text box with keyboard dictation and a home-screen shortcut. v2 quick add covers the ten patterns. Groq STT only if keyboard dictation proves insufficient.
+   - *Fair note:* 11 is right to keep the dump unparsed and to store `source_text`.
+
+9. **Smaller items.**
+   - 01's floating time-zone mode, `user_tz_period`, day swaps and `conflict_ack` table (defer; 01's own Q1 and Q2 agree).
+   - 06's email OTP, invite codes and passkeys in v1 (defer until there is a second user).
+   - 13's Stryker mutation run and OpenAPI diff in v0.2 (cut).
+   - 12's command palette and single-key shortcuts (v2 is fine).
+
+**Where slices were right to keep it simple.** 01's sort-and-sweep over an interval tree, and its ~60-line expander tested against `rrule-temporal` as an oracle. 02's checklist items over unlimited nesting. 03 and 04 on no Redis, no queue library, no GraphQL. 05's polling before SSE, and no WebSockets. 06's database sessions over JWTs, and no passwords. 07's no Kubernetes, no Terraform, no self-hosted Grafana. 09's no SSR. 10's no MILP and no bandits. 11's keyboard dictation first. 12's single ritual. 13's cut lists and exam-week rule.
+
+---
+
+## 4. Missing pieces nobody covered
+
+### 4.1 JOURNEY §7 open questions: were they answered?
+
+| §7 question | Answered by | Status |
+|---|---|---|
+| PWA vs native on a shared backend | 09 § 8 (restate the trigger as measured capture/timer friction; Capacitor later), 11 § 8 (Android PWA can share-target; Capture API + HTTP Shortcuts) | **Answered.** One input is missing: which phone Atif uses (09 Q1, 11 Q1, 12 Q1, 13 Q12 all ask; nobody can answer it for him). |
+| Which free/cheap LLM path | 10 § 5.8 (none by default; Groq free tier server-side; Chrome on-device opportunistically; BYO key; Gemini opt-in), 11 (Groq Whisper for STT), 08 (breakdown via your own Claude over MCP) | **Answered**, with three overlapping breakdown paths (§2.6). |
+| Session gap threshold | 05 § 5.6, 08 § 5.7 | **Answered twice, differently** (Claude Code 30 vs 20 min, back-date cap 3 h vs 90 min). |
+| How commits map to tasks | 05 § 5.9, 08 § 5.5, 02 § 5.1 | **Answered**, same precedence, different token formats. |
+| App name | Nobody. 06 and 03 use placeholders and say "rename once named". | **Unanswered**, and it blocks v0 (below). |
+
+### 4.2 Gaps between slices
+
+1. **The app name and origin.** The hostname you deploy the PWA to is effectively permanent: the installed app, push subscriptions, IndexedDB contents and cookies all belong to that origin. Renaming later means every device reinstalls and re-subscribes. The name also fixes the token prefix, CLI name, keyring service, VAPID `subject`, Google OAuth client name and the `.planner` docs URL. Decide the subdomain before v0.0's first deploy; the product name can still change.
+2. **A single source of truth for shared types.** Every slice defines its own enums and table names, and §2 is the result. Nobody owns `packages/core/types.ts`. Make writing it (occurrence key, cancel reasons, session kinds and sources, table names) the first task of v0.0.
+3. **Demo access versus an allowlist of one.** 13 v1.4 wants a "Try the demo" button with a seeded account reset nightly. 06 v0 only lets allowlisted Google accounts in. Nobody designs how an anonymous interviewer gets a session for the demo account, how that account is kept read-mostly and rate-limited, or how it's kept away from push and email. It's small, but it's the most-used feature during interview season.
+4. **A licence for a public repo.** 07 Q2 and 13 Q4 both say "public from day one". Nobody picks a licence. Without one, the code is "all rights reserved". MIT is the common choice for a portfolio piece; AGPL if you want hosted forks to stay open.
+5. **Dogfood telemetry.** 12's switch condition (mornings with zero blocks), 11's correction rate, 10's suggestion events, 09's drag reliability check and 13's exit criteria (≥ 12 of 14 days used) all need measurements. Nobody designs the table. One `app_events(user_id, at, name, props jsonb)` table, first-party only, written from the server where possible, answers all of them. Mention it in a privacy note.
+6. **A user's time zone changing.** 01 has a tz history table and an "ask before switching" prompt; 05 has its own prompt for reminders; 02 stores `tzid` per series. Nobody owns the single flow: detect, ask once, update the profile, recompute `next_fire_at`. For v0 (IST only), store the zone and skip the flow, but note it.
+7. **Export, import and backups using one format.** 06 designs `GET /me/export` (JSON); 13 makes the timetable fixture the D-008 import format; the wildcard suggests a nightly JSONL export. Nobody connects them, and nobody designs importing your own export (which 13's local-only fallback depends on). Use one documented JSON format for seed, fixture, import and export.
+8. **Undo semantics.** 12 makes an 8-second Undo the universal pattern and assumes "mutations return enough to render an inverse" (12 § 2 row 03). 03 doesn't say how. For v0 it's easy (un-cancel is an upsert back to null, 01 § 5.6), but splits, bulk "Days off" and the semester swap need batch ids (01 has `import_batch_id` and a 10-minute swap undo token). Write down the rule: single-row actions undo by inverse write; multi-row actions carry a `batch_id`.
+9. **Offline session expiry.** If the 30-day cookie expires while the phone holds queued cancels, what happens? 06 covers sign-out with unsynced changes, not expiry. The queue must survive a 401 and replay after login.
+10. **Browser coverage for Brave.** 05 found that Brave ships with push off and 06 that passkeys are weak on Linux Brave, and Brave is Atif's daily browser. Nobody checks PWA install and the service worker under Brave Shields on Android. Add it to the v0.0 definition of done.
+11. **Covered, for the record:** account deletion and export (06 § 5.12, 07's `deletion_log`), accessibility (09 § 5.9, 12 § 5.15), an error budget (07 Q11), seed data (02 § 5.8, 07 § 5.4 and 13's fixture describe one seed three ways; merge them), and "the task returns to the list unticked", which 02, 05, 12 and 13 all derive on read with no job, the best-converged design in the brainstorm. i18n only matters for Hinglish date words (11) and 12/24-hour time (12 Q16).
+
+---
+
+## 5. Top 5 risks to actually shipping v0
+
+1. **Plumbing eats the pre-exam window.**
+   - *Why:* §3 and §1. The slices' combined v0 is about three times the hours available, and the plumbing (auth, hosting, sync, contracts) comes first in every plan.
+   - *Early warning:* 13's own trigger, the skeleton not live in production by Sunday 18 Oct (more than about 18 hours spent). Another: a week passes without his real timetable on the phone.
+   - *Mitigation:* §8's minimal stack. Hold 13's 18 Oct switch: if missed, ship v0 as a local-only PWA on the same `packages/core` and add the server after exams.
+2. **Building on an unsettled contract.**
+   - *Why:* occurrence key, cancel vocabulary, session model and table names differ across five or more slices (§2). Code written against one slice and UI against another will need rework at the worst time.
+   - *Early warning:* two key formats or two reason enums appear in the code; a migration renames a column in the first month.
+   - *Mitigation:* one `types.ts` plus one ADR in JOURNEY before code; every new name goes through it.
+3. **The semester date.**
+   - *Why:* if semester 4 starts around 30 Nov (13), the D-004 swap, the formal dogfood and the end-sems all land within three weeks of each other. If it starts in January (12), there's slack.
+   - *Early warning:* the date is still unconfirmed next week.
+   - *Mitigation:* confirm now. Make the minimum swap "archive old group, create new group by copying it" (12's copy path), which needs no conflict view or import.
+4. **Hosting and mobile platform friction.**
+   - *Why:* Oracle capacity and its double firewall, ARM images, first-party cookies inside an installed PWA, Brave's push setting, and iOS install requirements are all discovered late and cost evenings (07 traps 19–20, 05 § 5.14, 13 § 5.1).
+   - *Early warning:* more than one evening on Oracle; the login doesn't survive a phone restart.
+   - *Mitigation:* timebox Oracle to one evening, then pay for a small India VPS; one origin; test the installed PWA on the real phone in v0.0 (13's definition of done already says so).
+5. **The dogfood produces no signal.**
+   - *Why:* exams have no classes (13 § 4), so a v0 finished just before end-sems sits unused, and an app you don't open can't validate the model. The second risk here is the "unconfirmed forever" spiral if the shutdown isn't used.
+   - *Early warning:* fewer than 4 opens a week in November; cancels recorded somewhere else (WhatsApp, memory).
+   - *Mitigation:* soft dogfood from the day his timetable renders (13 v0.2); keep v0 so small that it's done before Puja ends; use the formal window at the start of semester 4 with 13's exit criteria.
+
+---
+
+## 6. Recommendations I disagree with
+
+### 6.1 Slice recommendations
+
+1. **04: full replica and HLC sync in v0.** Disagree. It solves a multi-device offline-edit problem that one person, mostly online, rarely has, and it spends the v0 budget doing it. 04's own fallbacks are the right plan: persisted reads plus a queue for cancel and capture. Its schema advice (vanilla Postgres, host-agnostic, backups with a restore drill, the warnings about `updated_at` cursors and Neon with always-on pollers) is excellent and should be kept.
+2. **09: the touch gesture engine in v1.** Disagree with the timing, agree with the architecture. Build 09's render-only grid and its `TimeGridProps` adapter; build desktop drag with a library; adopt 12's tap-a-gap on mobile.
+3. **03: contract-first codegen from v0.** Partially disagree. Keep REST, zod, problem-JSON and natural idempotency. Defer the generated client, snapshot diff, dependency-cruiser, version headers and the idempotency-key table. 03's argument that "paying in v3 means rewriting every mutation path" doesn't hold if the routes are REST and zod-validated from day one; publishing an OpenAPI document from those schemas later is a day of work, not a rewrite.
+4. **02: forced RLS, roles and composite FKs from the first migration; the all-sessions exclusion constraint; `touch_row` on `sessions`.** Disagree on timing for the first, and on design for the second and third (§2.3). Agree strongly with 02's three time rules, its deletion vocabulary, `day_boundary` at 04:00, `estimate_frozen_min`, and "past blocks are append-only, re-planning creates a new block".
+5. **03: day-level attendance confirmation (`PUT /v1/days/{date}/attendance`).** Disagree, for 01's reason: a series created later would look confirmed. Keep the endpoint shape (one call per review) but write per-occurrence confirmations.
+6. **03/09/13: occurrence keys based on start date-time.** Disagree; see §2.1.
+7. **07: Oracle as the default host, a separate `api.` host, a worker from v1, staging in v1.** Partially disagree. One box is right; Oracle is fine *if* it works in one evening. The `api.` host buys CSRF immunity that 06's bearer rule already provides; the worker and staging can wait for v2 and for a second user.
+8. **08: per-user tunable gap thresholds.** Disagree. 05 is right that user-tunable thresholds which apply to the past are the one thing its design can't do; keep them constant until the calibration log says otherwise.
+9. **10: Kalman filter, conditional logit, morning plan in v2.** Disagree on timing. An EMA in log space with clamping ships the "learning-rate step" story JOURNEY already tells. The Kalman version is a great *v3 refactor* to talk about, with the data to justify it.
+10. **11: Groq transcription and the Capture API in v2.** Partially disagree. The Capture API is right (it's the cheapest answer to the mobile-capture risk), but it should ride on the v1.5 token work rather than force tokens forward. Server STT waits until keyboard dictation is shown to be insufficient.
+11. **13: GitHub OAuth, free-tier hosting, `sh` + `curl` hook.** Disagree with these three assumptions (06, 07 and 08 argue better for Google, one VPS and a spool with a Node flusher). Agree with almost everything else in 13: vertical slices, the engine as a test-first milestone, the exam rule, cut lists, the fixture as import format, and the 18 Oct switch.
+12. **06: v1 email OTP, invites and passkeys.** Disagree on timing only; there's no second user in v1. Everything about tokens (format, SHA-256, no refresh tokens, device flow, keychain storage) is right.
+
+### 6.2 Challenges to locked decisions: verdicts
+
+| Decision | Challenge raised | Verdict |
+|---|---|---|
+| D-009 | 05 § 8: the load maths counts one source and omits UI polling (≈175 req/s worst case, and the UI channel is the larger load). | **Right.** Update the reasoning in JOURNEY; the decision stands. |
+| D-009 | 05 § 4, 03 § 8: keep some raw evidence so thresholds can be tuned (calibration log vs 30-day batches). | **Right, use one mechanism:** 05's flag-gated calibration log during the first month of v3. |
+| D-009 | 04 § 8, wildcard § 15: "computed lazily" must end in a materialised close, because other readers don't see `last_seen`. | **Right.** 05's view plus a 5-minute sweeper. |
+| D-009 | 07 § 8: the real cost is write amplification, not request rate. | **Right.** Keep `last_seen` unindexed and out of any change trigger. |
+| D-006 | 05 § 8.3: Claude Code's first prompt should open a self-closing auto session, not the manual timer. | **Right.** A timer that starts itself but needs a human to stop it recreates the forgotten-timer problem. |
+| D-006 | 08 § 8: Claude Code hooks (about 2 days) before the VS Code extension (2–3 weeks). | **Right.** Atif uses Claude Code daily; this fixes "commits mark the end" sooner. |
+| D-006 / §8 roadmap | 13 § 4: the git hook moves to v1.5. | **Right.** It's "core first, then the hook", which D-006 already says. |
+| D-007 | 09 § 8: restate the native trigger as measured capture/timer friction; it depends on the phone OS. | **Right.** Also take 11's correction to the §5 risk wording (Android PWAs can receive shares). |
+| D-007 | Wildcard § 15: a log-relay design has no rich API. | Moot unless the Ledger is adopted (it shouldn't be). |
+| D-005 | 01 § 8: the evening review needs a third option, "it was cancelled". 02 § 8 and 12 § 8.2: store "not held", not "prof". 13 § 8: a system-level `holiday` origin. | **Right**, all three; they're the same fix. |
+| D-005 | 12 § 8.1: extra classes change the denominator. | **Right.** Small and needed for KIIT. |
+| D-010 | 12 § 8.3, 01 Q8: never auto-confirm; bounded backlog grid; tracking start date. | **Right.** |
+| D-004 | 01 § 8: define "archive" as "no future occurrences, past ones still visible". 12 § 10: the swap is needed before "Later". | **Right**, and more urgent than 12 thinks if 13's semester date holds. |
+| D-003 | Wildcard: a static ICS feed at a secret URL. | Fine for "Later". |
+
+---
+
+## 7. What the wildcard got right
+
+The Ledger (`10-wildcard`) is a well-argued design that shouldn't be built: its own steelman (`§ 14`, points 1, 2 and 9) names the three things that could sink a solo student. Its "worth stealing" list (`§ 16`) is the most useful part. Verdicts:
+
+| # | Idea | Adopt? | Already adopted independently by |
+|---|---|---|---|
+| 1 | Integrations emit observations; sessions come from a replayable inference function | **Partly, in v3.** 05's interval merge already *is* a pure function over evidence; the calibration log gives replay for the first month. Full recompute only if 05's switch condition fires. | 05 (calibration log, switch to "evidence log + projection"), 03 (raw batches) |
+| 2 | Occurrence identity = rule + original start; overrides only | **Yes, with a date instead of a date-time** (01's argument). | 01, 02, 04 (date); 03, 09, 13 (date-time) |
+| 3 | Attendance derived from deviations + reviews | **Yes.** Per-occurrence confirmations, not day rows. | 01, 02, 12 |
+| 4 | Append-only activity log with `actor` and `batch_id` | **Later.** Start with `batch_id` on bulk actions only (undo). | 02 (`row_history` as a switch option), 01 (`import_batch_id`) |
+| 5 | Client idempotency keys and an outbox | **Yes, small:** client UUIDs and natural keys; a queue for a few offline writes; a spool for the hook. | 02, 03, 04, 08, 11 |
+| 6 | What-if previews by dry run, applied under one `batch_id` | **Yes** for semester swap, holiday import and splits. | 01 (`dryRun` on swap, split and import), 12 (scope preview sentence) |
+| 7 | One shared core package | **Yes, from day one** (types, time, recurrence; later scheduling and quick add). | 01, 03, 10, 11, 13 (09 opts out of client expansion, which is fine for v0) |
+| 8 | Inject `now` and `tz` into every derivation | **Yes, free.** Add 13's lint rule banning `Date.now` in core. | 10, 13, 02 (`localDateOf`) |
+| 9 | One CLI as the integration surface | **Yes, at v1.5.** | 08, 06 |
+| 10 | Signal versus fact for heartbeats | **Yes, free.** | 04, 05 |
+| 11 | Bitemporal stamps (`occurred_at`, `recorded_at`) on sessions and commits | **Yes, cheap.** | 03 (`received_at`), 05 (skew correction) |
+| 12 | Static ICS feed at a secret URL | Later (D-003). | 03 (dynamic feed), 05 (`.ics` reminder fallback) |
+| 13 | Ship v0 as a local-only PWA | **As the fallback only.** It fails the two-device need (13 § 4), but it's the right move if the skeleton slips past 18 Oct. | 13 (its switch condition) |
+| 14 | Nightly JSONL export to a private git repo | **Yes, in v1.** A second backup, a working export, and history you can grep. | Nobody |
+
+Not worth stealing, and I agree with the wildcard: full event sourcing, CRDTs, CalDAV storage, git-as-database, LiveStore or Jazz, end-to-end encryption in v1, peer-to-peer sync.
+
+---
+
+## 8. A coherent minimal stack
+
+The stack below resolves every high-severity contradiction in §2 with the least work for v0, and it doesn't close any door the slices want open later. It is TypeScript end to end, with one pnpm monorepo (`apps/web`, `apps/api`, `packages/core`). `packages/core` holds the shared types, Temporal helpers and 01's recurrence engine, and gets written first. The backend is a single Hono process on Node 24 that serves the PWA's static files and a REST API on one origin. Postgres runs on the same small India-region box under Docker Compose, behind Caddy and Cloudflare, with a nightly encrypted dump to R2. The data model is 01's recurrence design (rules plus sparse overrides keyed by series and local date, a holiday layer, splits for timing edits) written with 02's conventions (client UUIDv7, three time rules, deletion verbs, `user_id` everywhere), with RLS deferred. The PWA is 09's React SPA with TanStack Query as the only cache, persisted for offline reading, plus a small queue of offline-safe writes. Auth is 06's Better Auth with Google and an allowlist of one. There are no jobs until v2, when an in-process ticker over due-time columns sends the shutdown push. Everything else (sync engine, OpenAPI codegen, workers, staging, PITR, tokens, LLMs) arrives with the milestone that needs it.
+
+| Concern | Choice for v0 | From | Arrives later |
+|---|---|---|---|
+| Language and repo | TypeScript; pnpm workspace `apps/web`, `apps/api`, `packages/core` | 03, 13, wildcard #7 | `packages/scheduling`, `packages/quickadd` in v2 (10, 11) |
+| Runtime and time | Node 24 LTS; `temporal-polyfill` imported explicitly everywhere; no `Date` in core | 01, 07, 13 | Native Temporal when Safari and every Node build ship it |
+| Framework | Hono, one process, modules as folders | 03 (trimmed) | Worker container from the same image in v2 (07) |
+| API style | REST + JSON at `/api/v1`, zod schemas from `packages/core`; idempotent PUT by natural key or client UUID | 01, 03 | OpenAPI document at v1.5 for the hook; contract diff and version header at v3 (03) |
+| Database | Postgres 17/18 on the box; Drizzle 0.45 with reviewed SQL migrations | 02, 04, 07 | RLS and composite FKs before a second user (02) |
+| Calendar data | Group → series (`rule` JSON, `subject`, `tzid`) → `occurrence_override` keyed `(series_id, original_date)` with `not_held`/`skipped`; `day_exception` layer | 01 + 02 conventions + 12 (subject) | Floating time zones, day swaps, conflict acks (01) |
+| Sync level | Server-first; persisted TanStack Query cache; paused mutations for cancel/skip, confirm, capture | 09 (= 04's L1/L2 fallback) | 04's replica only if dogfooding proves the need |
+| Expansion | Server-side `GET /api/v1/calendar` (62-day cap), shared pure package | 01, 03, 09 | Client-side expansion for offline weeks (01) |
+| Auth | Better Auth, Google + allowlist of one, DB sessions in an HttpOnly cookie | 06 | `pln_`-style tokens and device flow at v1.5 (06 design, 13 timing) |
+| Hosting | One India VPS (Oracle free if it works in one evening, else ~$5–12/month); Compose with Caddy, api, Postgres; Cloudflare DNS; one origin | 07 (trimmed), 04 § 4.6 | Staging, PITR, alerts before other users (07) |
+| Backups | Nightly `pg_dump` encrypted with `age` to R2; one restore drill written up in JOURNEY | 04, 07, 13 | JSONL export in v1 (wildcard #14); WAL-G in v2 (07) |
+| Frontend | React 19 + Vite SPA, TanStack Router and Query, Tailwind + shadcn, `vite-plugin-pwa` | 09 | Capacitor wrapper if the native trigger fires (09) |
+| Calendar UI | Custom render-only grid with the background-layer rule; tap to cancel; tap-a-gap on mobile | 09, 12 | Desktop drag with a library in v1; touch drag only if missed (12) |
+| Job runner | None in v0–v1 | 03, 05 | v2: croner tick over `reminders.next_fire_at` with `SKIP LOCKED`, at-most-once (03, 05) |
+| Realtime | Refetch on focus + polling while visible | 05 | SSE hints if polling feels laggy (05) |
+| Sessions (v1) | 05's single table with `kind` and `source`; exclusion on assertions only; `last_seen` unindexed and outside any trigger | 05 | Auto sessions, attribution and calibration log in v3 (05) |
+| Integrations | None in v0 | 13 | v1.5 git hook: global config hook + spool + CLI (08); then Claude Code hooks, then VS Code (08's reordering) |
+| LLM | None | 10, D-002 | v3+: 10's interface, 11's "quick-add lines" output |
+| Observability | pino logs, `/healthz` with the deployed SHA, a free uptime check | 03, 07, 13 | Sentry and dead-man switch with the worker (07) |
