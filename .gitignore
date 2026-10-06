@@ -1,0 +1,11 @@
+# Local agent/tooling state
+.claude-flow/
+.swarm/
+*.rvf
+*.rvf.lock
+ruvector.db
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
