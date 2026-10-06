@@ -2,22 +2,16 @@
 
 > Brainstorm slice 13 of 14. Written 2026-10-05. Depends on slices 01–12 and the wildcard. I haven't read them, so §2 lists every assumption I make about them.
 > Inputs: `JOURNEY.md` (D-001..D-010, §5 risks, §6 backlog, §8 roadmap) and the original idea note.
+>
+> **Revised 2026-10-06.** The first version assumed about 10 h/week and an end-sem deadline taken from a guessed KIIT calendar. Neither came from Atif, and he has since confirmed that both are wrong: he works far more than 10 h/week, there is no deadline, and the app is a long-term, final-year-project-scale goal. This revision removes the capacity table, the calendar, the target dates and the 18 Oct switch. Estimates and caps stay, but only as **relative sizes and scope alarms**, not as a calendar. Decisions that stand on their own merit are unchanged.
 
 ---
 
 ## 1. TL;DR
 
 - **Approach:** build in **vertical slices on a walking skeleton**. Every milestone ends deployed, usable on Atif's phone, and demo-able. I borrow one rule from the engine-first approach: the **recurrence engine gets its own test-first milestone** (a pure package with property tests) before any calendar UI exists. From the integration-first approach I take one thing: the **git post-commit hook moves forward to v1.5**, ahead of the v2 features.
-- **Assumed capacity:** about **10 h/week during term, about 2 h/week in exam weeks, about 15 h/week in summer**. On that budget, v0 is roughly 63 h, v1 roughly 52 h, the v1.5 hook roughly 12 h and v2 roughly 42 h. My estimates are probably 1.3–1.8× too low, so every milestone has a hard cap and an ordered cut list.
-- **Dates** (they rest on an assumed KIIT calendar, see §2):
-  - walking skeleton live by **14 Oct**
-  - real timetable on the phone by **1 Nov**
-  - cancel/skip before end-sems (around 9 Nov)
-  - exam weeks are maintenance-only
-  - **formal 2-week dogfood in the first two weeks of semester 4 (about 30 Nov – 13 Dec)**
-  - **v1 resume-ready by about 24 Jan 2027**
-  - git hook by mid-February, v2 by the end of April, v3 over the summer
-- **Why the dogfood waits for semester 4:** exam weeks have no classes to recur, and the semester change is the real test of D-004.
+- **Sizes, not dates:** v0 is roughly 63 h of work, v1 roughly 52 h, the v1.5 hook roughly 12 h and v2 roughly 42 h. My estimates are probably 1.3–1.8× too low, so every milestone has a cap and an ordered cut list. A blown cap means "stop and re-scope", not "you're late". There is no calendar: milestones are ordered by dependency (§5.4), and each one ships when it's done.
+- **Dogfood as soon as the timetable renders**, and run the formal 2-week evaluation right after v0.3 while classes are running. The semester swap (D-004) is tested at the next real semester change, or rehearsed with a copied group if that's far off.
 - **Auth in v0: yes, but owner-only.** A real login library with an allowlist of one, and `user_id` on every row from the first migration. Three reasons:
   - The URL is public.
   - The phone needs a session that survives restarts.
@@ -40,7 +34,7 @@ I wrote this plan in parallel with the design slices, so its estimates rest on t
 | **01 Recurrence** | A series stores a small **RFC 5545 RRULE subset**: daily, weekly by weekday, every N days, and an end by UNTIL or COUNT. It also stores a local start time, a duration and an IANA timezone. **Occurrences are expanded on read** for a requested window. Exceptions are keyed by `(series_id, original_start)` and are one of cancelled(reason), moved, or overridden. "This and following" means **splitting into two series**. Time maths uses **Temporal** with `disambiguation: 'compatible'`: native in Node 26 and Chrome 144+, polyfilled for Safari. | If occurrences are **materialised into rows**, v0.1 needs about 6 h more for a materialiser and horizon-extension job. The tests change from "expand" to "materialise, then query", but the properties stay the same. If 01 picks a library (e.g. rrule.js) over an own subset, v0.1 shrinks by about 4 h, but the timezone tests matter more because those libraries have known TZ quirks. |
 | **02 Data model** | Task / Block (planned time) / Session are separate (as §6 says). Groups own series. **Every table has `user_id`.** Deletes are soft deletes. | Different names don't move any dates. Merging Block and Session would merge v1.1 and v1.2. |
 | **03 Backend** | A **TypeScript monolith with a REST API** (Hono or Fastify), separate from the PWA. Validation uses zod, and the OpenAPI document is generated from the zod schemas. | A full-stack framework with server actions saves about 3 h in the skeleton. I'd still keep a small REST surface for the hook and VS Code, because D-007 says API-first. The contract tests don't change. |
-| **04 DB & sync** | **Postgres on a free tier**, online-first. The client caches recently fetched windows for **offline reading** only. No offline writes in v0 or v1. | If 04 picks **local-first sync** (a Replicache/Zero/PowerSync/Electric-style engine), the skeleton grows by 10–15 h and v0 slips about 2 weeks, past the end-sems. I'd then trigger the switch condition in §4. |
+| **04 DB & sync** | **Postgres on a free tier**, online-first. The client caches recently fetched windows for **offline reading** only. No offline writes in v0 or v1. | If 04 picks **local-first sync** (a Replicache/Zero/PowerSync/Electric-style engine), the skeleton grows by 10–15 h and the first real use moves back by the same amount. See the switch conditions in §4. |
 | **05 Sessions & realtime** | A **server-owned timer**: a session row holds `started_at` and the client ticks locally. No websockets. D-009 batched heartbeats only arrive with the v3 integrations. | Live sync of the timer across devices over SSE or websockets adds about 4 h to v1.2. |
 | **06 Auth** | v0 is **owner-only** through a maintained library, using a cookie session. **Personal API tokens** (stored hashed) arrive in v1.5 for the hook. | Full multi-user signup now adds about 5 h to the skeleton. No auth at all saves about 3 h, but I argue against it in §5.1. |
 | **07 Infra** | Free tiers throughout: a static PWA host, a small API host, managed Postgres, a region near India, GitHub Actions, and a subdomain of `ahmedatif.in`. **₹0/month** apart from the domain he already owns. | If the hosts have **cold starts over about 3 s**, the offline cache in v0.2 becomes even more important (it is already a must). A self-managed VPS adds about 4 h to the skeleton, but also adds operations stories. |
@@ -58,19 +52,7 @@ I wrote this plan in parallel with the design slices, so its estimates rest on t
   - Playwright 1.63 (5 Sep 2026)
   - `@testcontainers/postgresql` 12.1.0
   - Temporal is native in Node 26 (LTS from October 2026) and Chrome 144+, but not in Safari.
-- **KIIT calendar.** I couldn't find the 2026-27 calendar for second-year B.Tech. I derived dates from two published calendars:
-  - KIIT's 2025-26 School of Engineering calendar: autumn session 7 Jul – 19 Nov 2025, mid-sem 8–13 Sep, end-sem 10–19 Nov, next semester from 21 Nov; spring mid-sem 2–7 Feb 2026 and end-sem 4–13 Apr 2026.
-  - The 2025 first-year autumn session: 18 Jul – 29 Nov 2025.
-- **Festivals.** Durga Puja 2026 runs from Shashthi on 16 Oct to Dashami on 20/21 Oct. Diwali (Lakshmi Puja) is 8 Nov 2026.
-- **Assumed 2026-27 calendar** (please confirm, §9 Q2):
-
-  | Event | Assumed dates |
-  |---|---|
-  | Semester 3 end-sems | about 9–25 Nov 2026 |
-  | Semester 4 classes start | about 30 Nov 2026 |
-  | Semester 4 mid-sems | about 1–6 Feb 2027 |
-  | Semester 4 end-sems | about 5–17 Apr 2027 |
-  | Summer break | mid-April to early July 2027 |
+- **Academic calendar: removed.** The first version derived an assumed 2026-27 KIIT calendar (end-sems, semester 4 start, festivals) and planned around it. Atif confirmed the plan shouldn't depend on semester dates, so nothing below does. Real holidays and exam weeks still appear as *test data* (§5.7, §7), because they are good edge cases.
 
 ---
 
@@ -78,14 +60,14 @@ I wrote this plan in parallel with the design slices, so its estimates rest on t
 
 | Approach | Pros | Cons | Solo-dev effort | Interview value |
 |---|---|---|---|---|
-| **A. Walking skeleton + vertical slices** (tracer bullets: deploy hello-world with auth, DB and CI first, then add one thin end-to-end feature at a time) | Every milestone is usable and demo-able. Infra risks (cookies, PWA install, free-tier quirks) show up in week 1, not week 10. Dogfooding starts early. Motivation stays high because the phone keeps improving. A stop at any point still leaves a working product. | About 14 h of plumbing before any calendar exists, which is the scarcest stretch of the term. Thin slices tempt you to under-design the hard core (recurrence) and rewrite it later. Schema migrations on live dogfood data cost real care. | Medium. Steady and predictable. Total effort to v1 is about 115 h. | High. "Deployed with CI from day one, shipped every 2 weeks, changed course based on usage data" is the story interviewers want from a student project. |
-| **B. Engine-first, layer by layer** (full domain model and recurrence library with tests → DB schema → complete API → UI last) | The hardest part gets full attention. The cleanest architecture. Lots of tests. The core package is reusable by the hook and VS Code later. | Nothing usable for 6–8 weeks, so no dogfooding before exams. You design APIs nobody has called yet, and the UI then finds they're wrong. Highest risk of stalling during exams with "a great library and no app". | Medium-high. Lots of rework once the UI arrives. Calendar risk: v0 lands after the end-sems. | Medium-high for depth ("I wrote a property-tested recurrence engine"). Weaker on product ("did anyone use it?"). |
+| **A. Walking skeleton + vertical slices** (tracer bullets: deploy hello-world with auth, DB and CI first, then add one thin end-to-end feature at a time) | Every milestone is usable and demo-able. Infra risks (cookies, PWA install, free-tier quirks) show up in week 1, not week 10. Dogfooding starts early. Motivation stays high because the phone keeps improving. A stop at any point still leaves a working product. | About 14 h of plumbing before any calendar exists. Thin slices tempt you to under-design the hard core (recurrence) and rewrite it later. Schema migrations on live dogfood data cost real care. | Medium. Steady and predictable. Total effort to v1 is about 115 h. | High. "Deployed with CI from day one, shipped every 2 weeks, changed course based on usage data" is the story interviewers want from a student project. |
+| **B. Engine-first, layer by layer** (full domain model and recurrence library with tests → DB schema → complete API → UI last) | The hardest part gets full attention. The cleanest architecture. Lots of tests. The core package is reusable by the hook and VS Code later. | Nothing usable for weeks, so no dogfooding until the end. You design APIs nobody has called yet, and the UI then finds they're wrong. Highest risk of stalling with "a great library and no app". | Medium-high. Lots of rework once the UI arrives. | Medium-high for depth ("I wrote a property-tested recurrence engine"). Weaker on product ("did anyone use it?"). |
 | **C. Integration-first** ("hook the git commit on day 1": build commit ingestion → sessions → timer first, then tasks, calendar last) | Starts with the "gold" feature (§6). It produces data every day without any discipline (he commits anyway). It is the most unusual demo. It attacks the timer-friction risk first. | It inverts D-006 ("core first"), which is locked. Commits without tasks or projects have nowhere meaningful to attach. The calendar, which is the reason the app exists (vision §1), comes last. The ingestion API gets designed before the domain is understood. | Low at first (a hook is small), high later (re-mapping orphan commits, reworking the session model). | High novelty, but a weak core. An interviewer asks "so where's the planner?" |
 
 **What each approach optimises for.**
 
 - **A optimises for learning from use.** Its unit of progress is "something I can do on my phone today that I couldn't yesterday". Its weakness is that it can treat the recurrence engine as just another slice, when it is really the foundation everything stands on. §5 fixes that by giving the engine its own test-first milestone.
-- **B optimises for correctness of the core.** For a planner whose central promise is "your fixed week is always right", that matters. But B delays the only test that matters for a personal tool (does he actually open it?) until after the end-sems. It also designs an API before any client exists to push back on it.
+- **B optimises for correctness of the core.** For a planner whose central promise is "your fixed week is always right", that matters. But B delays the only test that matters for a personal tool (does he actually open it?) until everything is built. It also designs an API before any client exists to push back on it.
 - **C optimises for the most distinctive feature.** Its timing is wrong rather than its idea. The hook really is tiny on the client side. The open questions sit on the server: mapping commits to tasks, gap thresholds, and sessions without a start signal (§5, §7). Those can't be answered well before tasks and sessions exist.
 
 ---
@@ -94,50 +76,38 @@ I wrote this plan in parallel with the design slices, so its estimates rest on t
 
 **Choose A (walking skeleton + vertical slices), with two grafts.**
 
-1. **From B:** v0.1 is a **pure, test-first recurrence package** with no DB and no UI. Its definition of done is written as properties, not screens. The skeleton (v0.0) and the engine (v0.1) can overlap, because the engine needs no internet. He can write property tests on a train home for Puja.
+1. **From B:** v0.1 is a **pure, test-first recurrence package** with no DB and no UI. Its definition of done is written as properties, not screens. The skeleton (v0.0) and the engine (v0.1) can overlap, because the engine needs no internet or deploy loop.
 2. **From C:** the **git post-commit hook moves forward to v1.5**, right after the core is complete and before the v2 features. This is a re-order *within* the draft roadmap. It does not violate D-006, which says "Core first. Then the git post-commit hook…". The v2 items (attendance stats, quick add, time back, estimation multiplier, shutdown reminder) are "Accepted" in §6, not "Core". Three reasons to move it:
    - It is the best interview story.
    - It retires the timer-friction risk earlier.
    - From v1.5 onward, the app's own development gets tracked by the app. That gives real data for the estimation multiplier in v2.3.
 
-**The strongest argument against it (steelman).** In the five weeks before the end-sems Atif has roughly 50 hours, and A spends about 14 of them, nearly a third, on things that don't change his week at all: CI, auth, DNS, cookies, deploy pipelines. A **local-only PWA** (Vite + IndexedDB, no backend, no login) built on the same `packages/core` engine could put his real timetable on his phone in about 20 hours. That buys about three extra weeks of dogfooding before exams. It also answers the only question v0 exists to answer: *"Is this model of my week right, and will I actually open it?"* The backend could then be built in the calmer post-exam week. Moving the data over is just an export/import of the JSON format that D-008 needs anyway. Deploying early also creates an operations burden (free-tier limits, expiring secrets, a 2 a.m. database suspension) at exactly the moment he should be revising. Finally, a single-user app with no collaboration doesn't strictly need a server to be useful.
+**The strongest argument against it (steelman).** A spends about 14 hours, roughly a fifth of v0, on things that don't change his week at all: CI, auth, DNS, cookies, deploy pipelines. A **local-only PWA** (Vite + IndexedDB, no backend, no login) built on the same `packages/core` engine could put his real timetable on his phone in about 20 hours, so dogfooding starts sooner. It also answers the only question v0 exists to answer: *"Is this model of my week right, and will I actually open it?"* The backend could come right after. Moving the data over is just an export/import of the JSON format that D-008 needs anyway. Deploying early also creates an operations burden (host limits, expiring secrets, a 2 a.m. database problem) before there's anything worth operating. Finally, a single-user app with no collaboration doesn't strictly need a server to be useful.
 
 **Why I still choose A.**
 
 - **Two devices.** He plans on the laptop and checks the next class on the phone, between classes, on campus Wi-Fi or 4G. A local-only app on one device fails that use case.
 - **D-007 is API-first.** The backend isn't optional; it only gets postponed.
-- **The skeleton retires the infra risks that are hardest to debug,** while there is still slack to absorb them. These are SameSite cookies on mobile, PWA install, and free-tier cold starts.
-- **The interview story is stronger.** "Deployed and continuously integrated from week one" beats "rewrote the storage layer in month two".
+- **The skeleton retires the infra risks that are hardest to debug,** before any feature depends on them. These are SameSite cookies on mobile, PWA install, and host cold starts.
+- **The interview and project-report story is stronger.** "Deployed and continuously integrated from week one" beats "rewrote the storage layer in month two".
+- **Without a deadline, the steelman's main benefit shrinks.** A few days' earlier dogfooding isn't worth building the storage layer twice.
 
-**When to switch.** If the skeleton isn't live in production by **Sunday 18 October** (meaning it has eaten more than about 18 hours), stop the backend work. Ship v0 as a local-only PWA on the phone, reusing `packages/core` and the same JSON fixture format, and pick the server back up in the post-exam week (from about 26 Nov). Two more triggers:
+**When to switch.** These are effort- and evidence-based, not dated:
 
-- If slice 04 picks a local-first sync engine, switch to the same local-first v0.
-- If the v0.1 property tests show the series/exception model is wrong (for example, split semantics can't be made consistent), pause all UI work and go engine-first for one week.
+- If the skeleton blows through its 18 h cap without being live, stop and find out what's fighting you (usually hosting or cookies). Only fall back to a local-only PWA on the same `packages/core` if hosting stays blocked for a long stretch.
+- If the v0.1 property tests show the series/exception model is wrong (for example, split semantics can't be made consistent), pause all UI work and go engine-first until it's fixed.
 
 ---
 
 ## 5. Implementation walkthrough
 
-### 5.1 Capacity model and the v0 auth decision
+### 5.1 The v0 auth decision
 
-**Capacity (assumed; please correct in §9 Q1):**
-
-| Period (assumed) | h/week | Notes |
-|---|---|---|
-| 5 Oct – 15 Oct (classes) | 10 | Post-mid-sem stretch, assignments due |
-| 16 – 25 Oct (Durga Puja) | 12 | Anywhere from 4 h (travelling home) to 20 h (staying on campus) |
-| 26 Oct – 8 Nov (last classes, Diwali 8 Nov) | 8–10 | Assignment and lab-record crunch |
-| 9 – 25 Nov (end-sem exams) | ~2 | **Maintenance only**: P0 fixes, no features |
-| 26 – 29 Nov (gap) | 15 | Short break between semesters, if KIIT gives one |
-| Dec – Jan (Sem 4, before mid-sems) | 10 | The steadiest building stretch |
-| 1 – 6 Feb (mid-sems) | ~2 | Maintenance only |
-| Feb – Mar | 10 | |
-| 5 – 17 Apr (end-sems) | ~2 | Maintenance only |
-| Mid-Apr – early Jul (summer) | 15 | Drops to about 8 if he gets an internship, which is the point of the project |
+(The first version opened with a week-by-week capacity table. It was a guess, so it's gone; see the note at the top.)
 
 **Is auth needed in v0? Yes, owner-only.** The options:
 
-1. **No auth.** Anyone with the URL can read and edit his schedule, and he can never share a link. This only works for a local-only app, which is the §4 fallback.
+1. **No auth.** Anyone with the URL can read and edit his schedule, and he can never share a link. This only works for a local-only app, which is the §4 contingency.
 2. **HTTP basic auth or a shared-secret header at the host.** About 1 hour, but it is clunky in an installed PWA (it prompts again after restarts and doesn't fit the service worker), and the hook needs real tokens later anyway. It all gets thrown away.
 3. **Real login through a maintained library, with an allowlist of one** (GitHub OAuth matching his GitHub user ID, or a passkey/email link, whichever slice 06 picks), plus a 30-day `httpOnly` `Secure` `SameSite=Lax` cookie. About 3 hours, and nothing gets thrown away.
 
@@ -147,27 +117,29 @@ Put **`user_id` on every table from migration 0001**, even with one user. It cos
 
 ### 5.2 Milestone overview
 
-| Milestone | Goal | Estimate (h) | Cap (h) | Target window | Demo-able outcome |
+| Milestone | Goal | Estimate (h) | Cap (h) | Depends on | Demo-able outcome |
 |---|---|---|---|---|---|
-| **v0.0** Walking skeleton | Prove the plumbing in production | 13.5 | 18 | 5–14 Oct | Merge a PR → 3 minutes later the phone shows the new commit SHA after login |
-| **v0.1** Recurrence engine | Pure, deterministic, property-tested expansion | 13 | 17 | 12–23 Oct | `pnpm test core`: thousands of generated cases, golden KIIT weeks, TZ matrix |
-| **v0.2** Readable calendar | Groups and series in the DB; week/day view on phone and laptop | 15 | 19 | 22 Oct – 1 Nov | His real semester 3 timetable plus the daily run, on the home screen |
-| **v0.3** Cancel, move, groups | Cancel/skip with reason and stripes; moves; splits; group lifecycle | 13.5 | 17 | 1–8 Nov (+ planned spill to 26–29 Nov) | GIF: cancel with "I skipped" → stripes; semester swap with conflict list |
-| **v0.4** Dogfood + fixes | Live semester swap (D-004); fix the top friction | 8 | 10 | 26 Nov – 13 Dec | Exit review entry in JOURNEY with metrics |
-| **v1.0** Tasks & projects | Misc list + projects with nested tasks beside the calendar | 12 | 16 | 1–13 Dec | Plan the app's own backlog inside the app |
-| **v1.1** Drag → block | Planned blocks from tasks; unfinished tasks return unticked | 13 | 17 | 14–27 Dec | Drag "DSA sheet" into Tuesday 16:00, resize to 90 minutes |
-| **v1.2** Timer & sessions | Server-owned timer, sessions, notes, manual commit refs | 12 | 16 | 28 Dec – 10 Jan | Start on the laptop, see it running on the phone, stop, see the session history |
-| **v1.3** Thought dump | Two-tap capture, per project or general, aging signal, convert to task | 6 | 8 | 11–17 Jan | Capture from the home-screen shortcut in under 5 s |
-| **v1.4** Showcase polish | README, architecture diagram, demo user, Lighthouse, a11y | 9 | 12 | 18–24 Jan | **Resume-ready link with a "Try the demo" button** |
-| **v1.5** Git hook | Tokens, `.planner`, idempotent commit ingestion | 12 | 16 | 25 Jan – 14 Feb | Commit in the terminal → the commit appears on the running session |
-| **v2.0** Attendance + evening review | Per-subject range (D-010), in-app evening confirm | 10 | 13 | 15–28 Feb | "DSA: 78–86 %, 3 unconfirmed" |
-| **v2.1** Quick add | Rule-based parser | 10 | 13 | 1–14 Mar | Typing `revise OS tmrw 6pm 1h #os` → a block |
-| **v2.2** Time back | Suggest tasks that fit a freed slot | 7 | 9 | 15–21 Mar | Cancel a class → three suggestions that fit |
-| **v2.3** Estimation multiplier | Per-category learned multiplier | 7 | 9 | 22 Mar – 2 Apr | "You underestimate coding by 1.6×" from his own sessions |
-| **v2.4** Shutdown push | Web Push reminder for the evening review | 8 | 10 | 19–30 Apr | Phone buzzes at 22:00 → one tap → review |
-| **v3.0** VS Code extension | Start button, project from folder, task picker | 20 | 26 | May | Click Start in VS Code → session on the phone |
-| **v3.1** Claude Code hooks / MCP | First prompt in a project folder auto-starts a session (D-006) | 14 | 18 | late May – mid Jun | — |
-| **v3.2** Auto sessions + load check | Heartbeat `last_seen` (D-009), gap close, a k6 run at 83 req/s | 10 | 13 | late Jun | A graph showing that D-009's maths holds |
+| **v0.0** Walking skeleton | Prove the plumbing in production | 13.5 | 18 | — | Merge a PR → 3 minutes later the phone shows the new commit SHA after login |
+| **v0.1** Recurrence engine | Pure, deterministic, property-tested expansion | 13 | 17 | — (runs alongside v0.0) | `pnpm test core`: thousands of generated cases, golden KIIT weeks, TZ matrix |
+| **v0.2** Readable calendar | Groups and series in the DB; week/day view on phone and laptop | 15 | 19 | v0.0, v0.1 | His real timetable plus the daily run, on the home screen |
+| **v0.3** Cancel, move, groups | Cancel/skip with reason and stripes; moves; splits; group lifecycle | 13.5 | 17 | v0.2 | GIF: cancel with "I skipped" → stripes; semester swap with conflict list |
+| **v0.4** Dogfood + fixes | Two-week evaluation; semester swap (D-004); fix the top friction | 8 | 10 | v0.3 | Exit review entry in JOURNEY with metrics |
+| **v1.0** Tasks & projects | Misc list + projects with nested tasks beside the calendar | 12 | 16 | v0.2 (can run during v0.4) | Plan the app's own backlog inside the app |
+| **v1.1** Drag → block | Planned blocks from tasks; unfinished tasks return unticked | 13 | 17 | v1.0, v0.4 exit review | Drag "DSA sheet" into Tuesday 16:00, resize to 90 minutes |
+| **v1.2** Timer & sessions | Server-owned timer, sessions, notes, manual commit refs | 12 | 16 | v1.0 | Start on the laptop, see it running on the phone, stop, see the session history |
+| **v1.3** Thought dump | Two-tap capture, per project or general, aging signal, convert to task | 6 | 8 | v1.0 | Capture from the home-screen shortcut in under 5 s |
+| **v1.4** Showcase polish | README, architecture diagram, demo user, Lighthouse, a11y | 9 | 12 | v1.0–v1.3 | **A shareable link with a "Try the demo" button** |
+| **v1.5** Git hook | Tokens, `.planner`, idempotent commit ingestion | 12 | 16 | v1.2 | Commit in the terminal → the commit appears on the running session |
+| **v2.0** Attendance + evening review | Per-subject range (D-010), in-app evening confirm | 10 | 13 | v0.3 | "DSA: 78–86 %, 3 unconfirmed" |
+| **v2.1** Quick add | Rule-based parser | 10 | 13 | v1.1 | Typing `revise OS tmrw 6pm 1h #os` → a block |
+| **v2.2** Time back | Suggest tasks that fit a freed slot | 7 | 9 | v1.1 | Cancel a class → three suggestions that fit |
+| **v2.3** Estimation multiplier | Per-category learned multiplier | 7 | 9 | v1.2 + weeks of session data | "You underestimate coding by 1.6×" from his own sessions |
+| **v2.4** Shutdown push | Web Push reminder for the evening review | 8 | 10 | v2.0 | Phone buzzes at 22:00 → one tap → review |
+| **v3.0** VS Code extension | Start button, project from folder, task picker | 20 | 26 | v1.5, a stable API | Click Start in VS Code → session on the phone |
+| **v3.1** Claude Code hooks / MCP | First prompt in a project folder auto-starts a session (D-006) | 14 | 18 | v1.5 | — |
+| **v3.2** Auto sessions + load check | Heartbeat `last_seen` (D-009), gap close, a k6 run at 83 req/s | 10 | 13 | v3.0 or v3.1 | A graph showing that D-009's maths holds |
+
+The order inside v2 is flexible: anything whose dependencies are met can go next. v2.3 is the one item that also needs *time*, because the multiplier needs weeks of real sessions to learn from.
 
 The "Later" items (timetable import via D-008, ICS export, browser extension, shared identity) stay unscheduled. One shortcut: the **JSON fixture format from v0.2 becomes the D-008 import format**. That makes "Later: import" mostly a validation-and-preview UI, because the format, parser and tests already exist.
 
@@ -175,7 +147,7 @@ The "Later" items (timetable import via D-008, ICS export, browser extension, sh
 
 ### 5.3 Milestones in detail
 
-#### v0.0 — Walking skeleton (est. 13.5 h, cap 18 h, 5–14 Oct)
+#### v0.0 — Walking skeleton (est. 13.5 h, cap 18 h)
 
 **Goal:** a logged-in owner sees data read from the production DB, inside an installed PWA on his phone, deployed automatically when he merges to `main`.
 
@@ -197,7 +169,7 @@ The "Later" items (timetable import via D-008, ICS export, browser extension, sh
 - `/healthz` shows the SHA of `main`.
 - The §7 v0.0 scenarios pass.
 
-#### v0.1 — Recurrence engine (est. 13 h, cap 17 h, 12–23 Oct)
+#### v0.1 — Recurrence engine (est. 13 h, cap 17 h)
 
 **Goal:** a pure, deterministic `expand(series[], exceptions[], window, viewerTz) → Occurrence[]` in `packages/core/recurrence`, plus `splitSeries` and the exception helpers. No IO, no `Date.now()`; the clock is injected.
 
@@ -217,7 +189,7 @@ The "Later" items (timetable import via D-008, ICS export, browser extension, sh
 - A lint rule forbids `new Date(` and `Date.now` inside `packages/core`.
 - One mutation-testing run (Stryker) on the recurrence folder, with the score recorded in the metrics table. This is a single run, not a CI gate, and it is the first thing to cut.
 
-#### v0.2 — Readable calendar (est. 15 h, cap 19 h, 22 Oct – 1 Nov)
+#### v0.2 — Readable calendar (est. 15 h, cap 19 h)
 
 **Goal:** he creates groups and recurring blocks, and sees this week and the next few weeks on his phone and laptop.
 
@@ -237,14 +209,13 @@ The "Later" items (timetable import via D-008, ICS export, browser extension, sh
 - The user-scoping integration test is green: a second seeded user can't read the owner's rows.
 - **The soft dogfood starts the same day.**
 
-#### v0.3 — Cancel, move, groups lifecycle (est. 13.5 h, cap 17 h, 1–8 Nov, planned spill to 26–29 Nov)
+#### v0.3 — Cancel, move, groups lifecycle (est. 13.5 h, cap 17 h)
 
-The checklist is ordered by priority, so everything above the line must ship before exams start.
+The checklist is ordered by priority. The first three items are what make the app trustworthy enough to dogfood, so they ship first; the rest follow in order.
 
 - [ ] Cancel an occurrence. In groups that track attendance it asks once: "Prof cancelled" / "I skipped" (D-005). Render it greyed out with diagonal stripes, and allow undo — 3.5 h
 - [ ] Playwright E2E: create a weekly block → cancel one with a reason → reload → the stripes persist — 1 h
 - [ ] Nightly encrypted `pg_dump` backup, plus **one restore drill** into a local DB — 1 h
-- — *exam line: everything below may move to 26–29 Nov* —
 - [ ] Group lifecycle: archive; edit the active date range; attendance on/off — 1.5 h
 - [ ] Holiday bulk-cancel: "pause group from date X to date Y" with reason `holiday` (excluded from attendance). This directly serves D-003's "holiday import that bulk-cancels classes" — 1.5 h
 - [ ] Move a single occurrence — 1.5 h
@@ -253,10 +224,10 @@ The checklist is ordered by priority, so everything above the line must ship bef
 
 **Definition of done:** all §7 v0.3 scenarios pass. The E2E suite is green in CI. The restore drill is written up in JOURNEY with how long it took.
 
-#### v0.4 — Dogfood, semester swap, fixes (8 h reserved, 26 Nov – 13 Dec)
+#### v0.4 — Dogfood, semester swap, fixes (8 h reserved)
 
-- [ ] Finish the v0.3 spill.
-- [ ] **The live D-004 test:** archive "Sem 3 Classes", create "Sem 4 Classes" from the new timetable (as fixture JSON → seed, or through the form), and check the conflict view. Time the whole swap.
+- [ ] Finish anything left over from v0.3.
+- [ ] **The D-004 test:** archive the current semester's group, create the next one from the new timetable (as fixture JSON → seed, or through the form), and check the conflict view. Time the whole swap. If the real semester change is far off, rehearse it with a copied group now and repeat it for real when it happens.
 - [ ] Fix the top 3 friction items from the log, P0s first.
 - [ ] Hold the exit review (§5.8) and write it into JOURNEY.
 
@@ -315,54 +286,34 @@ The checklist is ordered by priority, so everything above the line must ship bef
 - `POST /commits` is **idempotent on `(repo_id, sha)`**. It attaches the commit to the running session, or to the project's "unattached commits".
 - Auto-creating sessions from commit gaps waits until v3.2.
 
-### 5.4 Timeline (Gantt)
+### 5.4 Dependency order
+
+There is no calendar. This graph is the plan: a milestone can start once everything pointing at it is done.
 
 ```mermaid
-gantt
-    title Build plan · assumes ~10 h/week in term, ~2 h/week in exams
-    dateFormat YYYY-MM-DD
-    axisFormat %d %b
-
-    section KIIT (assumed)
-    Durga Puja break                 :a1, 2026-10-16, 2026-10-25
-    Sem 3 end-sem exams              :crit, a2, 2026-11-09, 2026-11-25
-    Sem 4 mid-sem exams              :crit, a3, 2027-02-01, 2027-02-07
-    Sem 4 end-sem exams              :crit, a4, 2027-04-05, 2027-04-17
-    Summer break                     :a5, 2027-04-18, 2027-07-04
-
-    section v0 calendar
-    v0.0 Walking skeleton            :v00, 2026-10-05, 2026-10-14
-    v0.1 Recurrence engine           :v01, 2026-10-12, 2026-10-23
-    v0.2 Readable calendar           :v02, 2026-10-22, 2026-11-01
-    v0.3 Cancel, move, groups        :v03, 2026-11-01, 2026-11-08
-    v0.3 spill and v0.4 fixes        :v04, 2026-11-26, 2026-12-13
-    Soft dogfood                     :df1, 2026-11-01, 2026-11-29
-    Formal dogfood (2 weeks)         :crit, df2, 2026-11-30, 2026-12-13
-    v0 exit review                   :milestone, m0, 2026-12-13, 0d
-
-    section v1 core
-    v1.0 Tasks and projects          :v10, 2026-12-01, 2026-12-13
-    v1.1 Drag task to block          :v11, 2026-12-14, 2026-12-27
-    v1.2 Timer and sessions          :v12, 2026-12-28, 2027-01-10
-    v1.3 Thought dump                :v13, 2027-01-11, 2027-01-17
-    v1.4 Showcase polish             :v14, 2027-01-18, 2027-01-24
-    Resume-ready                     :milestone, m1, 2027-01-24, 0d
-    v1.5 Git post-commit hook        :v15, 2027-01-25, 2027-02-14
-
-    section v2 smarts
-    v2.0 Attendance and evening review :v20, 2027-02-15, 2027-02-28
-    v2.1 Quick add parser            :v21, 2027-03-01, 2027-03-14
-    v2.2 Time back                   :v22, 2027-03-15, 2027-03-21
-    v2.3 Estimation multiplier       :v23, 2027-03-22, 2027-04-02
-    v2.4 Shutdown push reminder      :v24, 2027-04-19, 2027-04-30
-
-    section v3 integrations
-    v3.0 VS Code extension           :v30, 2027-05-01, 2027-05-23
-    v3.1 Claude Code hooks and MCP   :v31, 2027-05-24, 2027-06-13
-    v3.2 Auto sessions and load test :v32, 2027-06-14, 2027-06-27
+flowchart LR
+  v00[v0.0 Skeleton] --> v02[v0.2 Calendar]
+  v01[v0.1 Engine] --> v02
+  v02 --> v03[v0.3 Cancel, move, groups]
+  v03 --> v04[v0.4 Dogfood + exit review]
+  v02 --> v10[v1.0 Tasks]
+  v10 --> v11[v1.1 Drag → block]
+  v04 --> v11
+  v10 --> v12[v1.2 Timer]
+  v10 --> v13[v1.3 Dump]
+  v11 & v12 & v13 --> v14[v1.4 Showcase]
+  v12 --> v15[v1.5 Git hook]
+  v03 --> v20[v2.0 Attendance]
+  v11 --> v21[v2.1 Quick add]
+  v11 --> v22[v2.2 Time back]
+  v12 --> v23[v2.3 Multiplier]
+  v20 --> v24[v2.4 Push]
+  v15 --> v30[v3.0 VS Code]
+  v15 --> v31[v3.1 Claude Code]
+  v30 & v31 --> v32[v3.2 Auto sessions]
 ```
 
-**Honest arithmetic for v0.** From 5 Oct to 8 Nov there are about 50 available hours, against 55 h of estimates for v0.0–v0.3. That is why v0.3 has an exam line and a planned spill. **The pre-exam must-haves are v0.2 plus cancel-with-reason.** v1 has about 30% slack built in, because December and January are the most predictable stretch and the planning fallacy is real.
+**The one timing rule that still matters:** start the soft dogfood the day v0.2 renders your real timetable. Use is what tests the model, so it shouldn't wait for the rest of v0.
 
 ### 5.5 What to cut if behind
 
@@ -407,13 +358,13 @@ gantt
 | Timer friction | **v1.2** (server-owned timer) → **v1.5** (commits attach automatically) → **v3.0/3.1** (start signals) | Fraction of coding time with an open session, compared before and after v1.5 |
 | Commits mark the end, not the start | **v3.0** (VS Code Start), **v3.1** (Claude Code first prompt); v1.5 only records | Median start lag (first activity → session start) |
 | Heartbeat load at scale | Already argued on paper (D-009); **v3.2** turns the claim into a measurement: one k6 run at 83 req/s against `last_seen` updates | p95 and error rate at 83 req/s on the free-tier box, in the metrics table |
-| Unmarked skips inflate attendance | **v0.3** records reasons from day one; **v2.0** evening confirm + range | App range vs the university portal's percentage per subject, within 2 points at the end of semester 4 |
+| Unmarked skips inflate attendance | **v0.3** records reasons from day one; **v2.0** evening confirm + range | App range vs the university portal's percentage per subject, within 2 points at the end of a semester |
 | Folder ↔ project matching is fragile | **v1.5** `.planner` link file, name match as fallback | Rename-the-folder test passes |
 | No free LLM | Not on the critical path (D-002); v2 is algorithmic | — |
 | Mobile capture speed | **v1.3** manifest shortcut + Android share target | Median capture time under 5 s over 10 timed tries; if over 10 s, reopen the native question (D-007) |
 | Timetable formats vary | Parked; **v0.2** fixes the JSON format, which later becomes the import format | — |
-| *New:* solo-dev stall during exams | v0.2 before exams; exam weeks are maintenance-only; cut lists | v0.2 live before 9 Nov |
-| *New:* free-tier cold starts and limits | v0.2 offline read cache; measured in the dogfood | Cold open under 4 s on 4G |
+| *New:* open-ended scope (no deadline, so v0 never "finishes") | Caps and cut lists; the scope gate (§5.10); one tagged release per milestone | Every milestone closes with a tag, a GIF and a JOURNEY entry |
+| *New:* host cold starts and limits | v0.2 offline read cache; measured in the dogfood | Cold open under 4 s on 4G |
 | *New:* losing personal data | v0.3 nightly encrypted backup + a restore drill per milestone | Restore drill time written in JOURNEY |
 
 ### 5.7 Testing strategy
@@ -532,11 +483,9 @@ The cases (dates checked with `zdump`):
 
 ### 5.8 Dogfooding protocol
 
-**Timing.** The soft dogfood starts the day v0.2 ships (target 1 Nov): the app becomes the only place the timetable lives. During the end-sems it holds exam one-offs and a recurring "Revision" group, which is real use but light. The **formal 2-week window is the first two full weeks of semester 4** (about 30 Nov – 13 Dec), for three reasons:
+**Timing.** The soft dogfood starts the day v0.2 ships: the app becomes the only place the timetable lives. The **formal 2-week window starts as soon as v0.3 ships**, with one condition: it must be two weeks of *regular classes*. Exam or holiday weeks don't count, because nothing recurs and nothing gets cancelled, so if v0.3 lands in one, start the window after it.
 
-- That is when class recurrence and cancellations are actually exercised.
-- He doesn't know the new timetable by heart yet, so he'll check it constantly. That's the highest natural engagement he'll ever have.
-- The semester swap (D-004) happens right before it.
+When the next semester begins, run the real D-004 swap and take a second, shorter look. A new timetable is when he checks the calendar most, because he doesn't know it by heart yet.
 
 **Rules for the window:**
 
@@ -544,10 +493,10 @@ The cases (dates checked with `zdump`):
 2. **Log friction the moment it happens.** If the app is down, use the markdown file directly; that is why the log doesn't live in the app.
 3. **Fix nothing on the spot** except P0s. Batch everything else into the weekly review, so building doesn't eat the trial.
 
-**Daily friction log** (`docs/dogfood/2026-12-friction.md`, about 2 minutes at night):
+**Daily friction log** (`docs/dogfood/<yyyy-mm>-friction.md`, about 2 minutes at night):
 
 ```md
-## 2026-12-01 (Tue)
+## 2026-11-03 (Tue)
 - 09:52 · phone · tried: check room for OS lab · got: block has no location field · P1 · workaround: memory
 - 13:10 · phone · tried: cancel DBMS (prof absent) · got: 4 taps, reason sheet hid the block · P2
 - opens today: 6 · went back to old timetable: 0 · wrong data seen: 0
@@ -564,7 +513,7 @@ The cases (dates checked with `zdump`):
 | Taps to cancel an occurrence | ≤ 3 |
 | Cold open → next class visible (4G, measured 5×) | median < 4 s; < 1.5 s warm |
 | Cancellations captured vs real (checked against a paper tally kept for the 2 weeks) | ≥ 90 % |
-| Semester swap time (archive + new group + check conflicts) | < 30 min |
+| Semester swap time (archive + new group + check conflicts; a rehearsal counts) | < 30 min |
 | P0 open / P1 open at the end | 0 / ≤ 2, each with a plan |
 
 **Weekly review (Sunday, 20 minutes):**
@@ -579,7 +528,7 @@ The cases (dates checked with `zdump`):
 1. The usage targets above are met.
 2. No open P0s.
 3. Zero wrong-occurrence incidents in the last 7 days.
-4. The semester swap was done through the app, and the conflict view matched reality.
+4. The semester swap was done (or rehearsed) through the app, and the conflict view matched reality.
 5. The honest answer to *"would I be annoyed if this vanished tomorrow?"* is yes.
 
 If the exit criteria fail, extend the window by **one** week of focused fixes, at most once. If usage is the only criterion failing a second time, don't block v1 any longer. A calendar of fixed classes is low-engagement by nature once the timetable is memorised, and tasks plus the timer (v1) are what give daily reasons to open the app. Record the finding in JOURNEY as a lesson rather than a failure.
@@ -652,27 +601,25 @@ There is no staging environment; ephemeral CI databases plus production are enou
 
 ### 5.10 Working rhythm and scope guardrails
 
-**A normal term week (~10 h):**
+**The weekly loop.** Hours aren't the constraint, so the rhythm is about keeping work reviewable, not about fitting it in:
 
 | When | Length | What |
 |---|---|---|
-| Sunday 21:00 | 15 min | Journaling ritual (§5.11) |
-| Sunday 21:15 | 15 min | Plan: at most 3 issues for the week; check the milestone cut-line |
-| Tuesday evening | 1.5 h | One small PR (tests, a fix, a migration) |
-| Thursday evening | 1.5 h | One small PR |
-| Saturday | 4 h | The feature block |
-| Sunday afternoon | 2 h | Finish, deploy, record the GIF, update the issue |
+| Once a week | 15 min | Journaling ritual (§5.11) |
+| Right after | 15 min | Plan: pick the next few issues; check the current milestone against its cap |
+| Through the week | — | Small PRs, each one green and deployable on its own |
+| End of a milestone | ~2 h | Tag, deploy, record the GIF, write the exit note in JOURNEY |
 
 **Session rituals.**
 
 - *Start:* open the issue and write a one-line "done means…" before touching code.
 - *End:* push the work-in-progress branch, and write "next step: …" in the draft PR description.
 
-Sessions are 90 minutes long and days apart, so being able to pick the work back up quickly matters more than raw speed.
+These matter most when work is interrupted, whether by exams, an internship or a week away.
 
-**Exam mode.** It starts 7 days before the first end-sem or mid-sem paper. Only P0 fixes; the dogfood continues (the app plans the revision blocks). There's no guilt and no catching up afterwards: dates move, and scope gets cut from the list.
+**Pause rule.** Whenever something else takes priority (exams, an internship, anything), drop to P0 fixes only and keep using the app. There's no guilt and no catching up afterwards: pick up where you left off, and never compress the remaining work to "make up time".
 
-**Re-planning rule.** If two consecutive weeks deliver less than 50% of the planned hours, move the milestone dates and apply the cut list. Never compress the remaining work.
+**Re-scoping rule.** If a milestone blows through its cap, stop and apply its cut list before writing more code. A blown cap means the estimate or the scope was wrong, and either one is worth a JOURNEY entry.
 
 **Scope gate (enforcing D-001).** Every new idea goes into the parking lot: `docs/parking-lot.md` until v1.3 ships, then the thought dump itself. It enters a milestone only if all three answers are yes:
 
@@ -709,7 +656,7 @@ Hard rules on top of the gate:
    | JS bundle (gzip) | Build output | < 200 kB |
    | Lighthouse PWA / performance | Lighthouse | record it |
    | Dogfood days active / 14 | `events` table | ≥ 12 |
-   | Attendance accuracy vs university portal | Per subject, end of semester 4 | ±2 points |
+   | Attendance accuracy vs university portal | Per subject, end of a semester | ±2 points |
    | Median actual/estimate ratio, before and after the multiplier | Sessions | closer to 1 |
    | Hook overhead per commit | `time git commit` | < 50 ms |
    | CI duration on PRs / flaky reruns per month | Actions | < 5 min / 0 |
@@ -747,7 +694,7 @@ Hard rules on top of the gate:
 - **Task:** Make tracking zero-effort without inflating the number.
 - **Action:** Default-attended; the cancel action asks "prof cancelled / I skipped"; found that unmarked skips inflate it;
   added an evening confirm and showed attendance as a range (confirmed … confirmed + unconfirmed).
-- **Result:** [fill in: app vs portal difference per subject at end of semester 4; taps per day].
+- **Result:** [fill in: app vs portal difference per subject at the end of a semester; taps per day].
 - **Learned:** [fill in].
 ```
 
@@ -865,19 +812,16 @@ Hard rules on top of the gate:
 
 ## 9. Open decisions for Atif
 
-1. **How many hours a week can you really give this?**
-   - Options: 6 / 10 / 15 in term.
-   - *Default: 10 in term, 2 in exam weeks.* Every date in §5 scales with this number.
-2. **What are the actual KIIT dates for your batch?** Semester 3 end-sems, the semester 4 start, the Puja break.
-   - *Default: the assumed dates in §2.* If semester 4 starts earlier than about 30 Nov, the formal dogfood window moves with it.
+1. ~~**How many hours a week can you really give this?**~~ **Answered (2026-10-06):** well over 10 h/week, and hours aren't the constraint. The plan no longer depends on them.
+2. ~~**What are the actual KIIT dates for your batch?**~~ **Answered (2026-10-06):** not needed. Nothing in the plan depends on semester dates any more.
 3. **Auth in v0?**
    - Options: none (local-only) / basic auth / owner-only real login.
    - *Default: owner-only login with an allowlist of one.* GitHub OAuth unless slice 06 picks something else.
 4. **Public or private repo?**
    - *Default: public from day one.* Free Actions minutes, the showcase, and no personal data in the repo; secrets go in GitHub.
 5. **Formal dogfood window?**
-   - Options: right after v0.3 (exam weeks) / the first 2 weeks of semester 4.
-   - *Default: semester 4.* Exams have no classes to recur.
+   - Options: right after v0.3 / wait for the next semester's start.
+   - *Default: right after v0.3,* as long as it's two weeks of regular classes (not exam or holiday weeks). The real semester swap gets its own check when it happens.
 6. **Pull the git hook forward to v1.5?**
    - Options: yes / keep it in v3.
    - *Default: yes.*
@@ -900,13 +844,12 @@ Hard rules on top of the gate:
     - Options: Android / iPhone.
     - *Default: Android Chrome.* On iPhone, push (v2.4) needs an installed PWA, and Temporal needs the polyfill.
 13. **Holiday bulk-cancel in v0.3?**
-    - Options: yes, if hours permit / defer.
-    - *Default: yes.* It's useful for the Puja week and for later semesters.
-14. **When must the project be "resume-ready"?**
-    - *Default: 24 Jan 2027.* Tell me if you're applying for something earlier.
-15. **Puja week: home or campus?**
-    - Options: travelling (about 4 h) / campus (about 20 h).
-    - *Default: 12 h.* If travelling, use it for v0.1, which needs no internet.
+    - Options: yes / defer.
+    - *Default: yes.* Every semester has holidays, and it's the first real test of bulk actions with undo.
+14. **Is this your final-year project, and what does that require?**
+    - Things to find out: the submission and review dates, how it's assessed (demo, report, viva, code review), whether a report or a specific document format is required, and whether a novelty or research component is expected.
+    - *Default: treat it as a long-term personal project with no deadline* until you know. If it becomes the FYP, those requirements may change priorities. For example, a showcase-worthy centrepiece like 04's offline sync could earn its place as its own milestone after v1.
+15. ~~**Puja week: home or campus?**~~ Withdrawn along with the calendar.
 
 ---
 
@@ -914,9 +857,9 @@ Hard rules on top of the gate:
 
 ### D-0XX · Build in vertical slices on a walking skeleton (2026-10-05)
 - **Decision:** Start with a deployed walking skeleton (auth, DB, CI, PWA shell). Then ship thin end-to-end milestones (v0.0–v0.4, v1.0–v1.5…), each deployed, usable on my phone, and demo-able. The recurrence engine is the one exception: it gets its own test-first milestone (v0.1) as a pure package before any calendar UI.
-- **Why:** I have about 10 h/week and exams in November. Vertical slices keep the app usable at every stop point and surface infra problems (cookies, PWA install, cold starts) in week 1. They also let real use, not guesses, shape the next milestone.
-- **Alternatives considered:** engine-first, layer by layer (nothing usable before exams); integration-first with the git hook on day 1 (inverts D-006; commits would have nothing to attach to).
-- **Switch condition:** if the skeleton isn't live by 18 Oct, ship v0 as a local-only PWA on the same core package and add the server after exams.
+- **Why:** Vertical slices keep the app usable at every stop point and surface infra problems (cookies, PWA install, cold starts) in week 1. They also let real use, not guesses, shape the next milestone. This is a long-term project with no deadline, so the risk isn't running out of time; it's building a lot before learning anything.
+- **Alternatives considered:** engine-first, layer by layer (nothing usable for weeks, and APIs designed before any client calls them); integration-first with the git hook on day 1 (inverts D-006; commits would have nothing to attach to).
+- **Switch condition:** if the skeleton blows through its 18 h cap, stop and find what's fighting me. Fall back to a local-only PWA on the same core package only if hosting stays blocked.
 
 ### D-0XX · Owner-only auth in v0; `user_id` on every row (2026-10-05)
 - **Decision:** v0 has a real login (maintained library) restricted to an allowlist of one, with a long-lived first-party cookie. Every table carries `user_id` from the first migration.
@@ -928,20 +871,20 @@ Hard rules on top of the gate:
 - **Why:** "Your fixed week is always right" is the app's core promise, and recurrence edge cases are the top open risk (§5). Properties such as split equivalence and cancel locality cover cases I would never think to write by hand.
 - **Consequences:** No `Date` arithmetic in core (enforced by a lint rule). Temporal with `compatible` disambiguation; a polyfill on Safari.
 
-### D-0XX · Dogfood window = first two weeks of semester 4, with exit criteria (2026-10-05)
-- **Decision:** A soft dogfood starts when v0.2 ships (around 1 Nov). The formal 2-week evaluation runs in the first two weeks of semester 4 (around 30 Nov – 13 Dec), with a daily friction log, a tiny `events` table, and exit criteria: ≥ 12/14 days used, no open P0, zero wrong occurrences in the last 7 days, semester swap in under 30 minutes, and "I'd be annoyed if it vanished."
-- **Why:** End-sem weeks have no classes to recur. The semester swap is the real test of D-004, and a new timetable is when I check the calendar most.
+### D-0XX · Dogfood: soft from v0.2, formal right after v0.3, with exit criteria (2026-10-05, revised 2026-10-06)
+- **Decision:** A soft dogfood starts when v0.2 ships. The formal 2-week evaluation starts when v0.3 ships and covers two weeks of regular classes (exam and holiday weeks don't count). It uses a daily friction log, a tiny `events` table, and exit criteria: ≥ 12/14 days used, no open P0, zero wrong occurrences in the last 7 days, semester swap (real or rehearsed) in under 30 minutes, and "I'd be annoyed if it vanished." The real semester swap gets its own check when the next semester starts.
+- **Why:** Only class weeks exercise recurrence and cancellations. Waiting for a particular semester would delay the only feedback that matters for no reason.
 - **Consequences:** v1.0 (tasks) can be built during the window; v1.1 (drag → block) waits for the exit review. At most one 1-week extension.
 
 ### D-0XX · Pull the git post-commit hook forward to v1.5 (2026-10-05)
 - **Decision:** Build the minimal git hook (tokens, `.planner` link file, idempotent `POST /commits`, attach to the running session) right after v1 core, before the v2 features. Auto-sessions from commit gaps stay in v3.
 - **Why:** D-006 already puts the hook right after core, and the v2 items are "Accepted", not "Core". It attacks timer friction early, it's my strongest interview story, and from then on the app records its own development, which gives real data for the estimation multiplier.
-- **Alternatives considered:** keep it in v3 per the draft roadmap (loses ~4 months of commit data and the story during internship season).
+- **Alternatives considered:** keep it in v3 per the draft roadmap (loses months of commit data, and the story arrives later).
 
-### D-0XX · Exam weeks are maintenance-only (2026-10-05)
-- **Decision:** From 7 days before any mid-sem or end-sem paper until the last paper: only P0 fixes, no features. Dates move; scope is cut from the ordered cut list. Remaining work is never compressed.
-- **Why:** The project only works if it survives the semester. Using the app to plan revision is dogfooding enough.
-- **Consequences:** v0.3 has an explicit "exam line"; everything below it may spill to the post-exam week.
+### D-0XX · Pausing is allowed; catching up is not (2026-10-05, revised 2026-10-06)
+- **Decision:** When something else takes priority (exams, an internship, anything), drop to P0 fixes only and keep using the app. Afterwards, pick up where I left off. Remaining work is never compressed to "make up time"; if a milestone blows its cap, apply its cut list.
+- **Why:** A long-term project only works if it survives the rest of life. Rushed catch-up work is where the worst bugs and shortcuts come from.
+- **Note:** This replaces the first version's "exam weeks are maintenance-only" rule, which was tied to an assumed exam calendar.
 
 ### D-0XX · Testing pyramid and what I deliberately don't test (2026-10-05)
 - **Decision:** A fat base of unit and property tests in `packages/core`. API integration tests against real Postgres. Shared zod contracts with a committed `openapi.json` diff check. Six or fewer Playwright E2E flows on Chromium. No UI pixel snapshots, no global coverage target, no mocked DB, no cross-browser matrix per PR.

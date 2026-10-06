@@ -3,15 +3,17 @@
 > Synthesis of `docs/brainstorm/01`–`13`, `10-wildcard` and `99-critique`, written 2026-10-06.
 > Nothing in this file is decided. It is the shortest path from fifteen long documents to the choices you have to make, with a default for each.
 > `JOURNEY.md` was not edited. Section 4 has every proposed entry, numbered from D-011, ready for you to sort into it.
+>
+> **Revised 2026-10-06.** The first version's verdict and v0 plan rested on "about 50 hours before end-sems", a capacity and calendar that slice 13 assumed and the critique inherited. Atif has confirmed there's no deadline (this is a long-term, final-year-project-scale goal, and hours aren't the constraint), so the date-driven parts are rewritten: the 18 Oct switch, the exam line, the semester-4 dogfood window and the target dates. The system design, the contradictions and their resolutions are unchanged. Two calls that had leaned on the deadline (D-012's v0 scope and D-047's deferred sync) are restated on their merits.
 
 ## Start here
 
 1. Read **§1** (one page) to see the whole system.
-2. Answer **§2.A**: eleven questions, about an hour. Nothing else blocks the first commit.
+2. Answer **§2.A**: nine open questions, about an hour. Nothing else blocks the first commit.
 3. Follow **§5**, the v0 checklist. Its first task is writing `packages/core/src/types.ts`, because the slices disagree on names (§3).
 4. Sort **§4** into JOURNEY.md when you have time. Each entry says where it came from and whether the critique changed it.
 
-**The one-sentence verdict.** Each slice is good on its own, but together they plan roughly 150–200 hours of v0 against about 50 hours available before end-sems (`99 §1`). So the recommended system is deliberately the *smallest* version that keeps every later door open: one TypeScript monorepo, one Hono process, one Postgres, one VPS, a server-first PWA, and the recurrence engine as the one piece built properly from day one.
+**The one-sentence verdict.** Each slice is good on its own, but together they put roughly 150–200 hours of mostly plumbing in front of the first day you actually use the app (`99 §1`). So the recommended system starts with the *smallest* version that keeps every later door open: one TypeScript monorepo, one Hono process, one Postgres, one VPS, a server-first PWA, and the recurrence engine as the one piece built properly from day one. The fuller designs (04's sync, 03's contract tooling, 07's ops stack) aren't rejected; each one arrives with the milestone that needs it.
 
 ### The files
 
@@ -30,8 +32,8 @@
 | `10-wildcard` | "The Ledger", a local-first event-sourced design. Don't build it; steal its disciplines |
 | `11-capture` | One capture bar; parse tasks, keep the dump raw; keyboard dictation is the voice MVP; Capture API + phone automations instead of native |
 | `12-ux-flows` | Three tabs, Today is home, tap-a-gap on mobile, one ritual (evening shutdown), undo instead of confirms, no guilt |
-| `13-build-plan` | Vertical slices on a walking skeleton; recurrence engine test-first; exam weeks maintenance-only; git hook at v1.5 |
-| `99-critique` | Cut v0 to the roadmap; settle one shared types file; server-first sync; adopt 05's session model; confirm the semester date |
+| `13-build-plan` | Vertical slices on a walking skeleton; recurrence engine test-first; milestones ordered by dependency, not dated; git hook at v1.5 |
+| `99-critique` | Keep v0 to the roadmap so real use comes first; settle one shared types file; server-first sync; adopt 05's session model |
 
 > The slice numbering has two `10-` files (`10-scheduling-algorithms`, `10-wildcard`), as requested. They don't collide.
 
@@ -151,7 +153,7 @@ erDiagram
     timestamptz confirmed_at "attendance (v2)"
   }
   DAY_EXCEPTION {
-    uuid id PK "v0.3"
+    uuid id PK "v0.3b"
     uuid user_id FK
     date day
     text effect "not_held | skipped"
@@ -212,14 +214,14 @@ Every open decision from every file, with duplicates merged. Groups are ordered 
 | # | Decision | Options | Suggested default | Read |
 |---|---|---|---|---|
 | A1 | Which phone do you use daily? | Android (Chrome) / iPhone | **Android** assumed by 09, 11, 12, 13. iPhone means push only after Add to Home Screen, no share target, no icon shortcuts, and native moves earlier. Your desktop browser is Brave, which ships with push off (turn on "Use Google services for push messaging") | 09 §8, 12 §5.13, 05 §5.14 |
-| A2 | Real KIIT dates and your hours | Semester 3 end-sems, semester 4 start, Puja plans; 6 / 10 / 15 h per week in term | **10 h/week in term, ~2 in exam weeks; semester 4 ≈ 30 Nov until confirmed.** 12 assumed "early 2027". If 13 is right, the D-004 swap is due in about 8 weeks | 13 §2, §5.1; 99 §5 risk 3 |
+| A2 | ~~Real KIIT dates and your hours~~ | — | **Answered 2026-10-06:** no deadline, hours aren't the constraint, and nothing depends on semester dates. Still open: whether this is formally your final-year project, and what that requires (13 §9 Q14) | 13 §9 |
 | A3 | Subdomain (origin) and app name | `plan.ahmedatif.in` / `tasks.ahmedatif.in` / a named subdomain; separate `api.` host or not | **A neutral subdomain such as `plan.ahmedatif.in`, chosen now. One origin, `/api/v1` and `/api/auth`, no `api.` host.** The origin is effectively permanent for an installed PWA (cookies, push subscriptions, IndexedDB), but the product name can wait. The token prefix and CLI name follow the name later | 99 §4.2, 06 §5.3, 07 §5.10, 03 Q2 |
 | A4 | Public repo, and which licence? | Public / private; MIT / AGPL / none | **Public, MIT.** Nobody picked a licence, and without one the code is "all rights reserved". Add gitleaks to CI | 07 Q2, 13 Q4, 99 §4.2 |
 | A5 | Where does the box live? | Oracle Always Free A1 (Hyderabad/Mumbai) / 2 GB India VPS (~$10–12/month) / Hetzner EU (cheap, 140–170 ms away) / free managed tiers (13's assumption) | **Oracle if you get capacity within one evening, otherwise pay for the India VPS.** 13's ₹0 managed-tier assumption doesn't survive: an always-on process exhausts Neon's free compute | 07 §4, §9 Q1; 04 §4.6; 99 §2.5 |
 | A6 | v0 sign-in | Google + allowlist (Better Auth) / GitHub OAuth (13's default) / passkey / no auth, local-only | **Google + allowlist of one.** No email infrastructure, and it survives a phone restart. Never magic links (they break inside installed PWAs) | 06 §5.4, §9 Q1; 13 §5.1 |
 | A7 | Runtime and compiler | Node 24 / 26; TypeScript 6.0.x / 7.0.x | **Node 24 LTS in Docker and CI, TypeScript 6.0.x + Biome.** Import `temporal-polyfill` explicitly regardless (Node 26.9.0 here has no Temporal). 03 preferred Node 26; 09 preferred TypeScript 7 | 01 §5.9, 03 Q1, 99 §2.5 |
 | A8 | Query layer | Drizzle 0.45 + `pg` / Kysely / raw SQL; Drizzle 1.0 RC | **Drizzle 0.45 stable + `pg`**, migrations generated and reviewed as SQL, no RC | 02 Q12, 03 Q9, 04 Q10 |
-| A9 | Fallback if the skeleton slips | Keep going / switch to a local-only PWA on the same `packages/core` | **Accept 13's rule:** if the deployed skeleton isn't live by Sun 18 Oct, ship v0 local-only and add the server after exams | 13 §4, 10-wildcard §16 #13 |
+| A9 | ~~Fallback if the skeleton slips~~ | — | **Withdrawn with the deadline.** The skeleton's 18 h cap is now an alarm to stop and find what's fighting you. A local-only PWA on the same `packages/core` is a contingency only if hosting stays blocked | 13 §4, 10-wildcard §16 #13 |
 | A10 | RLS from the first migration? | Yes, forced, with three roles (02) / later (03, critique) | **Later.** Scope every query by `user_id` and add one cross-user test now; RLS and composite FKs before a second real person signs in | 02 Q5, 03 trap 14, 99 §3.3 |
 | A11 | Repo conventions | Merge style; CI database; coverage gate | **`--no-ff` merges; Actions `services:` Postgres + Compose locally; 90% branch coverage on `core/recurrence` only** | 13 Q9–Q11 |
 
@@ -239,16 +241,16 @@ Every open decision from every file, with duplicates merged. Groups are ordered 
 | B10 | Calendar UI: custom or library | Custom render-only grid / FullCalendar v7 from day one | **Custom render-only grid for v0** behind a `TimeGridProps` adapter, with FullCalendar v7 as the fallback | 09 Q2 |
 | B11 | Small UI constants | Week start; visible hours; time format; colours; day boundary; moved ghost; mobile default view | **Monday; full 24 h scrolled to `max(now−1h, 07:00)`; 12-hour; fixed 10-colour palette; day starts 04:00; show a ghost for moved classes; Day timeline on mobile** | 09 Q3, Q4, Q8, Q9; 12 Q2, Q16; 02 Q3; 11 Q14 |
 
-### 2.C Before end-sems and semester 4 (v0.3–v0.4)
+### 2.C Calendar edits, the semester swap and the dogfood (v0.3–v0.4)
 
 | # | Decision | Options | Suggested default | Read |
 |---|---|---|---|---|
 | C1 | Offline writes in v0 | None (13) / cancel/skip queued (critique) / full replica L2–L3 (04) | **Persisted reads + paused mutations for cancel/skip only.** Capture joins in v1, confirm in v2 | 04 Q1, 09 Q10, 99 §2.2 |
 | C2 | "Edit all" for timing changes | From today / from semester start / ask, with today preselected | **Ask, with today preselected.** Title, room and time can change in place. A weekday change is "end series, start new" (a split) | 01 Q5, 99 §2.1 |
-| C3 | Holiday layer in v0.3, and who observes it | Build now or defer; attendance groups by default / all groups | **Build it if hours allow (Puja week is the first test). Attendance groups observe holidays by default. `effect` is `not_held` or `skipped`** (the latter covers 12's "I'm away") | 13 Q13, 01 Q9, 99 §2.1 |
-| C4 | Minimum semester swap | Full wizard with conflict view / copy the group + archive the old one | **Copy + archive first; the conflict list if time allows.** Import plugs in later (D-008) | 12 §5.9, 13 §5.3, 99 §5 |
+| C3 | Holiday layer in v0.3, and who observes it | Build now or defer; attendance groups by default / all groups | **Build it in v0.3b. Attendance groups observe holidays by default. `effect` is `not_held` or `skipped`** (the latter covers 12's "I'm away") | 13 Q13, 01 Q9, 99 §2.1 |
+| C4 | Minimum semester swap | Full wizard with conflict view / copy the group + archive the old one | **Copy + archive first; the conflict list right after.** Import plugs in later (D-008) | 12 §5.9, 13 §5.3, 99 §5 |
 | C5 | "Saturday follows Monday's timetable" day swaps | v0 / after the dogfood / never | **After the dogfood**, when you hit a real one | 01 Q2 |
-| C6 | Dogfood window | Right after v0.3 (exam weeks) / first two weeks of semester 4 | **Soft dogfood from v0.2; formal two weeks at the start of semester 4,** with 13's exit criteria | 13 Q5 |
+| C6 | Dogfood window | Right after v0.3 / wait for the next semester's start | **Soft dogfood from v0.2; formal two weeks right after v0.3b, over regular class weeks,** with 13's exit criteria. The real semester swap gets its own check when it happens | 13 Q5, §5.8 |
 | C7 | Backups and ops in v0 | Dumps only / plus PITR; staging; secrets; alerts; deploy tool | **Nightly `pg_dump` → `age` → R2, one restore drill written up; `.env` on the box backed up in a password manager; Compose + `deploy.sh`; Caddy + Let's Encrypt; a free uptime check.** Staging, SOPS, PITR, ntfy and a prod gate wait for v2 or a second user | 07 Q5–Q13, 04 Q9, 99 §3.4 |
 | C8 | Trash retention | 30 / 7 days / forever | **30-day trash.** There are no sync tombstones until a delta feed exists | 02 Q10, 04 Q6 |
 | C9 | Dogfood telemetry | None / a first-party `app_events` table | **One `app_events(user_id, at, name, props)` table**, written server-side. It feeds 13's exit criteria, 12's and 11's switch conditions and 10's logs | 99 §4.2 |
@@ -328,7 +330,7 @@ Every open decision from every file, with duplicates merged. Groups are ordered 
 | H2 | Opening to other users | Sign-up policy; session length; email provider; passkeys; deletion grace | **Invite codes; 30-day sliding sessions; Resend from `mail.ahmedatif.in`, then SES/ZeptoMail before public signup; passkeys at v1.5 with `rpID = ahmedatif.in`; 7-day deletion grace** | 06 Q2, Q3, Q7, Q10, Q12; 07 Q3 |
 | H3 | Shared identity | Better Auth `oauth-provider` / Zitadel or Pocket ID / WorkOS | **Trigger: a second app needs login.** The planner side is plain OIDC either way | 06 Q9 |
 | H4 | 04's replica, if ever adopted | Conflict rule; replica scope; tombstone retention | **Per-field HLC LWW, full replica, 90-day tombstones**, as 04 specifies | 04 Q3, Q6, Q7 |
-| H5 | Resume-ready date | 24 Jan 2027 / earlier | **24 Jan 2027** unless you're applying earlier | 13 Q14 |
+| H5 | Final-year project | Is it formally your FYP? Submission dates, assessment (demo, report, viva), required documents, novelty expectations | **Find out before v1.4.** Until then, no deadline. If it becomes the FYP, its requirements may reorder v2+, e.g. promoting 04's sync (D-047) to its own milestone as a technical centrepiece | 13 Q14 |
 
 ---
 
@@ -359,7 +361,7 @@ The critique (`99`) checked every slice against the others. This table puts each
 | `.planner` | **02:** JSON link id. **08:** TOML project id | 08's TOML holding 02's link id | Critique (E5) |
 | Token timing | **06:** v3. **11:** v2 | v1.5 with the hook | Critique (E2) |
 | Voice and audio | **11:** Groq STT in v2. **02:** audio in object storage for 30 days. **03, 07, 12:** assumed on-device Web Speech | Keyboard dictation; no server audio | Critique (D12) |
-| Semester 4 start | **12:** early 2027 | **13's** ~30 Nov is better sourced | Confirm now (A2) |
+| Semester 4 start | **12:** early 2027 | **13's** ~30 Nov is better sourced | **Withdrawn** with the deadline (A2). Nothing is scheduled against it |
 | Runtime | **03:** Node 26 with native Temporal, TypeScript 6. **09:** TypeScript 7 | Node 24, polyfill everywhere, TypeScript 6 + Biome | Critique. **◆** Verified today: Node 26.9.0 on this machine has no `Temporal` |
 | Expansion window | **01:** 400 days. **03, 13:** 62 days | 62 days public, bounded internal calls | Critique (B7) |
 | Expansion location | **01, 04, 10:** client too, for offline weeks and offline "time back" | Server in v0; shared package for later | Critique (B6) |
@@ -368,7 +370,7 @@ The critique (`99`) checked every slice against the others. This table puts each
 | Task over a cancelled class | **09:** full width over the ghost | **12:** ~85% width, stripes still visible | Critique (D5) |
 | Auth breadth in v1 | **06:** email OTP, invites, passkeys in v1 | Not until a second user | Critique (H2) |
 | Hosts | **07:** `api.ahmedatif.in` for token clients. **03:** `api.planner.…` (a second-level name Cloudflare's free certificate doesn't cover) | One origin | Critique (A3) |
-| Scope of v0 | **12:** move, scope chooser, "Days off". **13:** splits, conflicts, holidays, live swap. **04:** sync ladder. **03:** contract machinery | JOURNEY §8 only: render, cancel/skip with reason, create and archive groups; the rest below an exam line | Critique. **◆** The semester swap must still land before semester 4 (C4), so "below the line" means 26–29 Nov, not "later" |
+| Scope of v0 | **12:** move, scope chooser, "Days off". **13:** splits, conflicts, holidays, live swap. **04:** sync ladder. **03:** contract machinery | JOURNEY §8 first: render, cancel/skip with reason, create and archive groups | Critique. **◆** The rest (swap, days off, move, edit scope, conflicts) is still v0, as v0.3b. It isn't deferred to "later"; it comes once cancel/skip is in daily use |
 
 ### 3.1 Challenges to locked decisions: verdicts
 
@@ -401,7 +403,7 @@ Take its disciplines, not its architecture:
 - "signal versus fact" for heartbeats
 - bitemporal `occurred_at`/`recorded_at` on sessions and commits
 - a nightly JSONL export
-- the local-only PWA *only* as the 18 Oct fallback
+- the local-only PWA *only* as a contingency if hosting stays blocked
 
 Don't take full event sourcing, CRDTs, CalDAV storage, git-as-database, LiveStore/Jazz, end-to-end encryption in v1, or peer-to-peer sync (`99 §7`, `10-wildcard §16`).
 
@@ -419,27 +421,27 @@ Every entry proposed by any slice is here, numbered after D-010.
 ### 4.1 Foundations and scope
 
 ### D-011 · Build in vertical slices on a walking skeleton (2026-10-06)
-- **Decision:** Start with a deployed walking skeleton (login, DB, CI, installable PWA shell). Then ship thin end-to-end milestones, each deployed, usable on my phone and demo-able. The recurrence engine is the exception: it gets its own test-first milestone as a pure package before any calendar UI. If the skeleton isn't live by Sun 18 Oct, v0 ships as a local-only PWA on the same core package, and the server comes after exams.
-- **Why:** About 10 h/week and exams in November. Vertical slices keep the app usable at every stop point and surface infra problems (cookies in an installed PWA, hosting) in week 1.
-- **Alternatives considered:** Engine-first, layer by layer (nothing usable before exams). Integration-first with the git hook on day 1 (inverts D-006; commits would have nothing to attach to).
+- **Decision:** Start with a deployed walking skeleton (login, DB, CI, installable PWA shell). Then ship thin end-to-end milestones, each deployed, usable on my phone and demo-able. The recurrence engine is the exception: it gets its own test-first milestone as a pure package before any calendar UI. Milestones are ordered by dependency, not by date. Each has an hour cap, and blowing a cap means stop and re-scope.
+- **Why:** Vertical slices keep the app usable at every stop point, surface infra problems (cookies in an installed PWA, hosting) in week 1, and let real use shape the next milestone. With no deadline, the risk isn't running out of time; it's building a lot before learning anything.
+- **Alternatives considered:** Engine-first, layer by layer (nothing usable for weeks; APIs designed before any client calls them). Integration-first with the git hook on day 1 (inverts D-006; commits would have nothing to attach to). A local-only v0 (kept only as a contingency if hosting stays blocked).
 - **Source:** 13 §4, 10-wildcard §16 #13 · **Status:** proposed
 
-### D-012 · v0 is the roadmap's v0 and nothing more (2026-10-06)
-- **Decision:** v0 = render my real timetable, create and archive groups, cancel/skip with a reason. Move, "this and following", the holiday layer, the conflict list and the semester swap sit below an exam line and land in the 26–29 Nov gap, before semester 4. Sync engines, contract tooling, workers, staging, RLS and tokens arrive with the milestone that needs them.
-- **Why:** Together, the brainstorm slices planned about 150–200 h of v0 against about 50 h before end-sems. Nearly all of it was plumbing.
-- **Alternatives considered:** Each slice's fuller v0 (04's sync ladder, 03's contract machinery, 07's ops stack, 12's full scope chooser).
-- **Source:** 99 §1, §3, §8; JOURNEY §8 · **Status:** proposed
+### D-012 · v0 is the roadmap's v0; everything else arrives with the milestone that needs it (2026-10-06)
+- **Decision:** v0 = render my real timetable, create and archive groups, cancel/skip with a reason (v0.0–v0.3), then the semester swap, days off, move, edit scope and conflicts (v0.3b). Sync engines, contract tooling, workers, staging, RLS and tokens arrive with the milestone that needs them.
+- **Why:** Together, the brainstorm slices put about 150–200 h of mostly plumbing in front of the first real use. Hours aren't the constraint, but order is. Plumbing built before dogfooding hardens names, schemas and protocols that real use hasn't tested yet, and it keeps pushing back the only test that matters: whether I actually open the app.
+- **Alternatives considered:** Each slice's fuller v0 (04's sync ladder, 03's contract machinery, 07's ops stack, 12's full scope chooser). None is rejected; each is scheduled later.
+- **Source:** 99 §1, §3, §8; JOURNEY §8 · **Status:** proposed (revised 2026-10-06: the first version justified this with a ~50 h pre-exam budget, now withdrawn)
 
-### D-013 · Exam weeks are maintenance-only (2026-10-06)
-- **Decision:** From 7 days before any mid-sem or end-sem paper until the last paper: P0 fixes only, no features. Dates move, and scope is cut from the ordered cut list. Remaining work is never compressed.
-- **Why:** The project only works if it survives the semester. Using the app to plan revision is dogfooding enough.
-- **Source:** 13 §5.10 · **Status:** proposed
+### D-013 · Pausing is allowed; catching up is not (2026-10-06)
+- **Decision:** When something else takes priority (exams, an internship, anything), drop to P0 fixes only and keep using the app. Afterwards, pick up where I left off. Remaining work is never compressed to "make up time"; a milestone that blows its cap gets its cut list applied.
+- **Why:** A long-term project only works if it survives the rest of life. Rushed catch-up work is where the worst shortcuts come from.
+- **Source:** 13 §5.10 · **Status:** proposed (revised 2026-10-06: replaces "exam weeks are maintenance-only", which was tied to an assumed exam calendar)
 
-### D-014 · Dogfood: soft from v0.2, formal in the first two weeks of semester 4 (2026-10-06)
-- **Decision:** The soft dogfood starts the day my timetable renders on the phone. The formal two-week evaluation runs at the start of semester 4. It uses a daily friction log and `app_events` (D-096). Exit criteria: ≥ 12/14 days used, no open P0, zero wrong occurrences in the last 7 days, semester swap in under 30 minutes, and "I'd be annoyed if it vanished".
-- **Why:** End-sem weeks have no classes to recur. The semester change is the real test of D-004.
+### D-014 · Dogfood: soft from v0.2, formal right after v0.3b (2026-10-06)
+- **Decision:** The soft dogfood starts the day my timetable renders on the phone. The formal two-week evaluation starts when v0.3b ships and covers two weeks of regular classes (exam and holiday weeks don't count). It uses a daily friction log and `app_events` (D-096). Exit criteria: ≥ 12/14 days used, no open P0, zero wrong occurrences in the last 7 days, semester swap (real or rehearsed) in under 30 minutes, and "I'd be annoyed if it vanished". The real semester swap gets its own check when the next semester starts.
+- **Why:** Only class weeks exercise recurrence and cancellations. Waiting for a particular semester would delay the only feedback that matters.
 - **Consequence:** v1.0 (tasks) can be built during the window. v1.1 (drag → block) waits for the exit review.
-- **Source:** 13 §5.8 · **Status:** proposed; semester dates to be confirmed
+- **Source:** 13 §5.8 · **Status:** proposed (revised 2026-10-06: no longer tied to semester 4)
 
 ### D-015 · One shared, pure `packages/core`; names decided once (2026-10-06)
 - **Decision:** `packages/core` holds the shared types and zod schemas, the time helpers, the recurrence engine, and later quick add and scheduling. It has no I/O and never reads the clock: `now` and `tz` are always parameters. A lint rule bans `Date` and `Date.now` there. `types.ts` (occurrence key, cancel reasons, session kinds and sources, table names) is written before any other code, and every new name goes through it.
@@ -523,11 +525,11 @@ Every entry proposed by any slice is here, numbered after D-010.
 ### D-029 · Group conflicts via expand + sweep, summarised per series pair (2026-10-06)
 - **Decision:** Expand the busy groups over the overlap of their active ranges, sort the intervals and sweep them. Only a positive overlap counts, and cancelled occurrences are ignored. Results are grouped per pair of series, with "move other / keep both / edit" actions.
 - **Why:** It is correct for biweekly phases, holidays, ranges and DST by construction. O(n log n) on about 1,000 items.
-- **Source:** 01 §5.7 · **Status:** proposed (v0.3, below the exam line)
+- **Source:** 01 §5.7 · **Status:** proposed (v0.3b)
 
-### D-030 · "Archive" means no future occurrences; the semester swap lands before semester 4 (refines D-004) (2026-10-06)
-- **Decision:** An archived group produces no future occurrences, but its past ones stay visible with their attendance. The minimum semester swap is "copy the group, edit the copy, archive the old one", built in the 26–29 Nov gap. The conflict view comes next, and import (D-008) plugs in later.
-- **Why:** The first real swap happens at the start of semester 4. The import can wait; the swap can't.
+### D-030 · "Archive" means no future occurrences; the semester swap is part of v0 (refines D-004) (2026-10-06)
+- **Decision:** An archived group produces no future occurrences, but its past ones stay visible with their attendance. The minimum semester swap is "copy the group, edit the copy, archive the old one", built in v0.3b. The conflict view comes next, and import (D-008) plugs in later.
+- **Why:** Every semester ends in a swap, so it's core to D-004, not a "Later" feature. The import can wait; the swap can't. It's rehearsed with a copied group during the dogfood and done for real at the next semester change.
 - **Source:** 01 §8, 12 §10, 13 §5.3, 99 §5 · **Status:** proposed refinement of D-004
 
 ### D-031 · Extra classes are recorded as one-off occurrences (refines D-005) (2026-10-06)
@@ -631,8 +633,9 @@ Every entry proposed by any slice is here, numbered after D-010.
 
 ### D-047 · A full client replica with HLC sync is deferred, with a trigger (2026-10-06)
 - **Decision:** Not now. If dogfooding shows lost edits or blank offline weeks more than a couple of times, or a native client needs the same offline model, adopt 04's design. That means: a Dexie replica, `/sync/push` and `/sync/pull` with a per-user transaction counter, per-field LWW by hybrid logical clock, tombstones and a restore epoch. PowerSync is the fallback if the hand-rolled version doesn't converge.
-- **Why:** It is 12–13 focused days, the whole v0 budget, and it solves a multi-device offline problem I mostly don't have. Keeping D-034's client UUIDs and D-022's natural keys means adopting it later isn't a migration.
-- **Source:** 04 §4–§5, 99 §3.1 · **Status:** deferred (record it; it's a good interview story about choosing not to build something)
+- **Why:** It is 12–13 focused days, more than the rest of v0 together, and it solves a multi-device offline problem I mostly don't have. Built first, it would tie a sync protocol to a schema that dogfooding hasn't settled. Keeping D-034's client UUIDs and D-022's natural keys means adopting it later isn't a migration.
+- **If this becomes my final-year project:** it's the strongest candidate for a technical centrepiece. Build it as its own milestone after v1, on a schema real use has settled.
+- **Source:** 04 §4–§5, 99 §3.1 · **Status:** deferred, not rejected (record it either way; choosing *when* to build something is a good story)
 
 ### D-048 · Offline scope for the PWA (2026-10-06)
 - **Decision:** Works offline: viewing recently loaded weeks, cancel/skip of an occurrence (v0), quick capture (v1), and attendance confirm (v2). Online-only: starting or stopping the timer (the UI says "will start when you're back"), splits, groups, the semester swap, imports, bulk holidays, settings and integrations.
@@ -931,7 +934,7 @@ Every entry proposed by any slice is here, numbered after D-010.
 - **10:** shared core → D-015 · free time → D-090 · Kalman multiplier → D-091 (changed: EMA first) · weighted score → D-092 · morning plan → D-093 (rejected for now) · LLM path → D-094 · log suggestions → D-095
 - **11:** one capture bar → D-084 · parser → D-085 · voice → D-086 (changed: no Groq until needed) · mobile capture → D-087 · dump aging → D-088 · breakdown → D-089
 - **12:** navigation → D-079 · one ritual → D-080 · tap-a-gap → D-078 · undo → D-081 · no-guilt → D-082 · attendance view → D-032 · unconfirmed never auto → D-033 · extra classes → D-031 · chips → D-084 · semester swap timing → D-030
-- **13:** vertical slices → D-011 · owner-only auth → D-016 · recurrence package → D-015, D-017 · dogfood window → D-014 · git hook v1.5 → D-074 · exam weeks → D-013 · testing pyramid → D-017 · repo/CI → D-018 · fixture = import format → D-020 · JOURNEY as asset → D-019
+- **13:** vertical slices → D-011 · owner-only auth → D-016 · recurrence package → D-015, D-017 · dogfood window → D-014 · git hook v1.5 → D-074 · exam weeks → D-013 (now the pause rule) · testing pyramid → D-017 · repo/CI → D-018 · fixture = import format → D-020 · JOURNEY as asset → D-019
 - **New from the critique / wildcard:** D-012, D-096, D-097
 
 ### 4.13 Proposed rows for JOURNEY §5 (risks) and §6 (backlog)
@@ -941,11 +944,11 @@ Every entry proposed by any slice is here, numbered after D-010.
 | Recurrence edge cases (one-off cancel/move, "this and following", semester end, DST) | **Addressed (design)** | D-021–D-026; property tests (D-017). Remaining: overrides orphaned by weekday changes, mitigated by split-only weekday edits | 01 |
 | Matching a folder to a project by name is fragile | **Addressed (design)** | `.planner` link id + inbox (D-071, D-072) | 08 |
 | Mobile capture speed (widgets, share sheet are native-only) | **Partly addressed** | Reword: only true on iOS. `/capture` route, shortcuts, Android share target, offline queue, Capture API + phone automations (D-087) | 11 |
-| Plumbing eats the pre-exam window | **Open** | D-012's v0 cut; the 18 Oct local-only switch (D-011) | 99 |
+| Plumbing comes before use | **Open** | D-012's v0 scope; soft dogfood from v0.2; the skeleton's 18 h cap as an alarm (D-011) | 99 |
 | Slices built on an unsettled contract (names, keys, enums) | **Open** | `types.ts` first (D-015) | 99 |
-| Semester 4 start date unknown | **Open** | Confirm now; minimum swap = copy + archive (D-030) | 99, 13 |
+| Open-ended scope (no deadline, so v0 never "finishes") | **Open** | Caps, cut lists and the one-in-one-out scope gate; a tag, GIF and JOURNEY entry per milestone (D-011, D-012) | 99, 13 |
 | Hosting and mobile-platform friction (Oracle capacity, cookies in an installed PWA, Brave push, iOS install) | **Open** | One-evening Oracle timebox; one origin; test the installed PWA on the phone in v0.0 | 99, 07 |
-| The dogfood produces no signal | **Open** | Soft dogfood from v0.2; `app_events`; formal window at semester 4 (D-014, D-096) | 99 |
+| The dogfood produces no signal | **Open** | Soft dogfood from v0.2; `app_events`; formal window over regular class weeks right after v0.3b (D-014, D-096) | 99 |
 | Silent data loss from offline replay | Partly addressed | Natural-key upserts, a queue that survives a 401, E2E for cancel → reload | 04, 99 |
 | iOS Safari storage eviction / no Background Sync | Partly addressed | Install prompt, `storage.persist()`, flush on open/focus | 04 |
 | Free-tier or host changes (Oracle limits halved mid-2026; Supabase DNS block in India, Feb 2026) | Addressed (design) | Vanilla Postgres, own backups, clients only use `*.ahmedatif.in` (D-038, D-045, D-065) | 04, 07 |
@@ -956,8 +959,8 @@ Every entry proposed by any slice is here, numbered after D-010.
 
 | Feature (§6) | Status | Notes | From |
 |---|---|---|---|
-| Semester swap (copy + archive) | ✅ Core, v0.4 | Moves out of "Later"; import still later (D-030) | 12, 13 |
-| Holiday / "days off" layer | ✅ Core, v0.3 | D-026 | 01, 13 |
+| Semester swap (copy + archive) | ✅ Core, v0.3b | Moves out of "Later"; import still later (D-030) | 12, 13 |
+| Holiday / "days off" layer | ✅ Core, v0.3b | D-026 | 01, 13 |
 | Extra classes | ✅ Accepted, v2 | D-031 | 12 |
 | Capture API + personal access tokens | ✅ Accepted, v1.5 | Shared with the git hook (D-061, D-087) | 11, 13 |
 | Natural-language quick add | ✅ Accepted | Sigils in v1; the ~10 real patterns in v2 (D-085) | 11, 99 |
@@ -970,26 +973,25 @@ Every entry proposed by any slice is here, numbered after D-010.
 
 ---
 
-## 5. v0 build checklist (start tomorrow, Wed 7 Oct)
+## 5. v0 build checklist
 
-The plan is 13's milestones, trimmed to the critique's minimal stack (D-012). Estimates are 13's, adjusted for the VPS. Assume they're 1.3–1.8× optimistic, which is why each milestone has a cap and everything is ordered so the bottom can be cut.
+The plan is 13's milestones, trimmed to the critique's minimal stack (D-012). Estimates are 13's, adjusted for the VPS. Assume they're 1.3–1.8× optimistic. They're sizes, not dates: the order is the plan, and each cap is an alarm to stop and re-scope (D-011).
 
-| Milestone | Target | Estimate / cap | Demo |
+| Milestone | Depends on | Estimate / cap | Demo |
 |---|---|---|---|
-| Day 0: decisions and setup | Wed 7 Oct | 1.5 h | §2.A answered, repo exists |
-| v0.0 Walking skeleton | Wed 14 Oct (**hard switch Sun 18 Oct**, D-011) | 14 h / 18 h | Merge a PR, and 3 minutes later the installed PWA on your phone shows the new commit SHA after login |
-| v0.1 Recurrence engine | ~Fri 23 Oct (Puja 16–21 Oct) | 11 h / 15 h | `pnpm test` runs thousands of generated cases, golden KIIT weeks and the TZ matrix |
-| v0.2 Readable calendar | ~Sun 1 Nov | 13 h / 17 h | Your real semester-3 timetable on the home screen. **Soft dogfood starts** |
-| v0.3 Cancel/skip (above the exam line) | ~Sun 8 Nov | 8 h / 10 h | Cancel with "I skipped", see the stripes, reload, they persist |
-| Below the exam line | 26–29 Nov, before semester 4 | 10 h / 13 h | Swap semester 3 → 4 in under 30 minutes |
-| v0.4 Formal dogfood | First two weeks of semester 4 | 4 h of fixes | Exit review in JOURNEY |
+| Day 0: decisions and setup | — | 1.5 h | §2.A answered, repo exists |
+| v0.0 Walking skeleton | Day 0 | 14 h / 18 h | Merge a PR, and 3 minutes later the installed PWA on your phone shows the new commit SHA after login |
+| v0.1 Recurrence engine | Day 0 (runs alongside v0.0) | 11 h / 15 h | `pnpm test` runs thousands of generated cases, golden KIIT weeks and the TZ matrix |
+| v0.2 Readable calendar | v0.0, v0.1 | 13 h / 17 h | Your real timetable on the home screen. **Soft dogfood starts** |
+| v0.3 Cancel/skip and groups | v0.2 | 8 h / 10 h | Cancel with "I skipped", see the stripes, reload, they persist |
+| v0.3b Swap, days off, edits | v0.3 | 10 h / 13 h | Swap to a new semester's group in under 30 minutes |
+| v0.4 Formal dogfood | v0.3b, plus two weeks of regular classes | 4 h of fixes | Exit review in JOURNEY |
 
-End-sems (≈ 9–25 Nov) are maintenance-only (D-013).
+Pauses for exams or anything else follow D-013: P0 fixes only, no catch-up afterwards.
 
 ### Day 0 (about 1.5 h)
 
-- [ ] Answer §2.A (A1–A11). Copy the D-entries you accept from §4 into JOURNEY.md.
-- [ ] Look up the real KIIT academic calendar: semester-3 end-sems and the semester-4 start. If semester 4 starts later than ~30 Nov, the below-the-line work gets slack.
+- [ ] Answer §2.A (the nine open rows). Copy the D-entries you accept from §4 into JOURNEY.md.
 - [ ] Pick the subdomain (e.g. `plan.ahmedatif.in`). Make sure `ahmedatif.in` uses Cloudflare nameservers.
 - [ ] **Make the project its own git repo.** Right now this folder sits inside a git repo rooted at your home directory (`/home/atifahmed`, no commits). Run `git init -b main` here so commits don't go there. Add a `LICENSE` (MIT) and `.gitignore` before the first commit.
 - [ ] Before the first commit, delete or ignore `docs/brainstorm/.claude-flow/`, `docs/brainstorm/.swarm/` and `docs/brainstorm/ruvector.db`. They are ruflo plugin state, not project files.
@@ -1071,7 +1073,7 @@ The design is in `01 §5`. `packages/core/recurrence` has no I/O and no clock, a
 - [ ] `expand(series[], overrides[], dayExceptions[], window: {from: ISODate; to: ISODate}): Occurrence[]`. Expand dates first (`PlainDate` only), then attach times and zones with `'compatible'` disambiguation, shifting DST-gap times forward and flagging them. Clip to the group's active range. — 3 h
 - [ ] Daily and weekly by weekday, every N (anchored on the series start, not the window), with an inclusive `untilDate`. `COUNT` is converted to an end date on save. — 2 h
 - [ ] Apply overrides (cancel with a reason, move by `newDate`/`newStartTime`, extra) and day exceptions, with precedence override > day exception > rule. — 2 h
-- [ ] `splitSeries(series, atDate)` (used below the line, cheap to write now). — 1 h
+- [ ] `splitSeries(series, atDate)` (used in v0.3b, cheap to write now). — 1 h
 - [ ] Tests, written alongside: — 3 h
   - about 40 examples
   - properties: window additivity, determinism, cancel locality, "split is a no-op"
@@ -1100,7 +1102,7 @@ The design is in `01 §5`. `packages/core/recurrence` has no I/O and no clock, a
 - A cold open on 4G shows the next class within 4 s, and within 1.5 s with a warm cache.
 - **The soft dogfood starts the same day** (D-014).
 
-### v0.3 Cancel/skip, above the exam line (8 h, cap 10 h)
+### v0.3 Cancel/skip and groups (8 h, cap 10 h)
 
 - [ ] Tap a block to open the cancel sheet. Attendance groups ask "Prof cancelled / I skipped" (stored as `not_held`/`skipped`); other groups just cancel. Cancelled occurrences render as a striped background layer (D-077), with an 8-second Undo that upserts the override back (D-081). — 3.5 h
 - [ ] The cancel works offline as a paused mutation. The queue survives a reload and a 401, then replays (D-046). — 1.5 h
@@ -1108,9 +1110,9 @@ The design is in `01 §5`. `packages/core/recurrence` has no I/O and no clock, a
 - [ ] Nightly `pg_dump` → `age` → R2 from a host `systemd` timer. **Do one restore drill** into a local DB and write up how long it took (D-065). — 1 h
 - [ ] Group lifecycle: create, edit the active range, attendance on/off, archive (meaning no future occurrences, D-030). — 1 h
 
-— *exam line: everything below may move to 26–29 Nov* —
+### v0.3b Swap, days off and edits (10 h, cap 13 h)
 
-### Below the line (26–29 Nov, before semester 4; 10 h, cap 13 h)
+Starts once cancel/skip is in daily use, so these build on a model that's already being tested.
 
 - [ ] **Semester swap, minimum version:** copy a group, edit the copy, archive the old one, with a dry-run preview and a 10-minute undo (D-030). — 2.5 h
 - [ ] **`day_exception` layer** and a "Days off" sheet ("Holiday (not held)" / "I'm away (skipped)"), with undo per batch. Test it on any remaining holiday (D-026). — 2 h
@@ -1119,9 +1121,9 @@ The design is in `01 §5`. `packages/core/recurrence` has no I/O and no clock, a
 - [ ] **Conflict list** when a group is created or activated over another active group (D-029). — 1.5 h
 - [ ] **`app_events` table** recording opens, cancels, swaps and wrong-occurrence reports (D-096). — 0.5 h
 
-### v0.4 Formal dogfood (first two weeks of semester 4)
+### v0.4 Formal dogfood (two weeks of regular classes, right after v0.3b)
 
-- [ ] The live D-004 test: swap to the semester-4 timetable and time it.
+- [ ] The D-004 test: swap to the next semester's timetable and time it. If the real change is far off, rehearse it with a copied group now and repeat it for real when it happens.
 - [ ] Keep a daily friction log (one line a day), and fix the top three items, P0s first.
 - [ ] Exit criteria (D-014):
   - ≥ 12 of 14 days used
