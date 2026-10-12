@@ -1,4 +1,13 @@
 export {
+  DEFAULT_PROFILE,
+  type ErrorCode,
+  type Healthz,
+  type Me,
+  type Problem,
+  type Profile,
+  paths,
+} from './api.ts';
+export {
   type ActiveRange,
   assertValidRule,
   expandDates,
