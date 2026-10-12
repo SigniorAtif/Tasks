@@ -1,8 +1,11 @@
 // Runs once before all test files (Vitest `globalSetup`). The integration
 // tests use a real Postgres (D-017), in a database of their own that they are
-// allowed to wipe: create it if it's missing.
+// allowed to wipe: create it if it's missing, then apply the migrations, the
+// same way production does.
 
 import { Client, escapeIdentifier } from 'pg';
+import { runMigrations } from '../db/migrations.ts';
+import { createPool } from '../db/pool.ts';
 import { testDatabaseUrl } from './env.ts';
 
 export default async function setup(): Promise<void> {
@@ -27,5 +30,12 @@ export default async function setup(): Promise<void> {
     if (existing.rowCount === 0) await client.query(`create database ${escapeIdentifier(name)}`);
   } finally {
     await client.end();
+  }
+
+  const pool = createPool(url.toString());
+  try {
+    await runMigrations(pool);
+  } finally {
+    await pool.end();
   }
 }
