@@ -1,0 +1,57 @@
+# Caddy: the only program on the box that faces the internet. It handles HTTPS and
+# forwards every request to the API, which serves both /api and the PWA itself.
+#
+# SITE_ADDRESS (from .env) picks the mode:
+#   tasks.ahmedatif.in   production: HTTPS with an automatic Let's Encrypt certificate
+#   http://localhost     a laptop: plain HTTP, no certificate
+{
+	servers {
+		# Cloudflare sits in front of the box, so every request arrives from a Cloudflare
+		# address. Cloudflare puts the visitor's real IP in CF-Connecting-IP. Believe that
+		# header only when the request really comes from Cloudflare (its published ranges,
+		# https://www.cloudflare.com/ips/, checked 2026-10-12); from anyone else it could
+		# be a lie. Re-check the list every few months.
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+
+		# Limits for slow or stuck clients. There's deliberately no write timeout: it would
+		# also cut off long responses, such as live updates later on.
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
+}
+
+{$SITE_ADDRESS:tasks.ahmedatif.in} {
+	# One JSON line per request on stdout: `docker compose logs caddy`. Caddy hides
+	# cookies and Authorization headers in these logs by default.
+	log {
+		output stdout
+		format json
+	}
+
+	encode zstd gzip
+
+	# HSTS: "for the next year, only ever use HTTPS for this host". Only meaningful (and
+	# only sent) over HTTPS. No includeSubDomains and no preload: both are hard to undo.
+	@https protocol https
+	header @https Strict-Transport-Security "max-age=31536000"
+
+	reverse_proxy api:3000 {
+		# Hand the API exactly one visitor IP: the one Caddy worked out above. Passing the
+		# incoming X-Forwarded-For along would let a visitor put a fake IP at its front.
+		header_up X-Forwarded-For {client_ip}
+
+		# While a deploy restarts the API, hold requests for up to 10 s and retry, instead
+		# of answering 502 at once.
+		lb_try_duration 10s
+		lb_try_interval 250ms
+
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 30s
+		}
+	}
+}
