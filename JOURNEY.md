@@ -96,7 +96,7 @@ Format: what was decided → why → alternatives considered.
   - a fresh clone runs with `pnpm i && pnpm dev` in about 36 s, or 7 s with a warm package store;
   - the image is 379 MB unpacked;
   - a local production deploy takes 12 s.
-- **Status:** built and tested locally; not deployed yet. Four defaults are still mine to confirm: A6 (Google + allowlist), A8 (Drizzle 0.45 + `pg`), A10 (no RLS yet) and A11 (`--no-ff` merges, CI Postgres via `services:`, coverage gate on recurrence only).
+- **Status:** built and tested locally; not deployed yet. The four open defaults were confirmed on 2026-10-12: A6 (Google + allowlist; hand-built auth waits for the v1.5 machine tokens), A8 (Drizzle 0.45 + `pg`), A10 (RLS arrives with v0.2's first data tables, earlier than planned) and A11 (`--no-ff` merges, CI Postgres via `services:`, coverage gate on recurrence only).
 
 ---
 

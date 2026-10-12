@@ -191,7 +191,7 @@ erDiagram
 |---|---|---|
 | Runtime | Node 24 LTS in the image and CI (your local Node 26 is fine); `temporal-polyfill` imported explicitly everywhere; TypeScript 6.0.x + Biome; no `Date` in `packages/core` | Native Temporal when every target ships it |
 | Server | Hono, one process, modules as folders, zod validation, one JSON error shape | OpenAPI document at v1.5; contract diff at v3 |
-| Data | Postgres 18 on the box, Drizzle 0.45 + reviewed SQL migrations, `user_id` on every row | RLS and composite FKs before a second real user |
+| Data | Postgres 18 on the box, Drizzle 0.45 + reviewed SQL migrations, `user_id` on every row; RLS and composite FKs on the calendar tables from v0.2 (A10) | RLS on later tables as they arrive |
 | Sync | Server-first; persisted TanStack Query; paused mutations for cancel/skip | Capture and confirm join the queue in v1/v2; 04's replica only if dogfooding proves the need |
 | Auth | Better Auth, Google sign-in, allowlist of one, DB session in an HttpOnly cookie | Scoped tokens + device flow at v1.5 |
 | Hosting | One India VPS (Oracle Always Free if it works within one evening, else a ~$10–12/month 2 GB VPS), Caddy + api + Postgres, Cloudflare DNS, one origin | Worker container at v2; staging and PITR before other users |
@@ -218,12 +218,12 @@ Every open decision from every file, with duplicates merged. Groups are ordered 
 | A3 | ~~Subdomain (origin)~~ and app name | — | **Answered 2026-10-09: `tasks.ahmedatif.in`.** One origin, `/api/v1` and `/api/auth`, no `api.` host. The product name can still wait; the token prefix and CLI name follow it later | 99 §4.2, 06 §5.3, 07 §5.10, 03 Q2 |
 | A4 | ~~Public repo, and which licence?~~ | — | **Answered 2026-10-09: public, MIT.** Add gitleaks to CI | 07 Q2, 13 Q4, 99 §4.2 |
 | A5 | ~~Where does the box live?~~ | — | **Answered 2026-10-09: Oracle Always Free A1 (Hyderabad/Mumbai) if capacity comes within one evening, otherwise a paid 2 GB India VPS (~$10–12/month)** | 07 §4, §9 Q1; 04 §4.6; 99 §2.5 |
-| A6 | v0 sign-in | Google + allowlist (Better Auth) / GitHub OAuth (13's default) / passkey / no auth, local-only | **Google + allowlist of one.** No email infrastructure, and it survives a phone restart. Never magic links (they break inside installed PWAs) | 06 §5.4, §9 Q1; 13 §5.1 |
+| A6 | ~~v0 sign-in~~ | — | **Answered 2026-10-12: Google + allowlist (Better Auth).** No email infrastructure, and it survives a phone restart. Never magic links. Hand-built auth comes with the v1.5 machine tokens and device flow (D-061), written by hand to learn it | 06 §5.4, §9 Q1; 13 §5.1 |
 | A7 | ~~Runtime and compiler~~ | — | **Answered 2026-10-11: Node 24 LTS as the floor (move to 26 once it turns LTS), TypeScript 7.0.x + Biome.** The TypeScript 6 default only mattered for typescript-eslint, which Biome replaces. Import `temporal-polyfill` explicitly regardless (Node 26.9.0 here has no Temporal) | 01 §5.9, 03 Q1, 99 §2.5 |
-| A8 | Query layer | Drizzle 0.45 + `pg` / Kysely / raw SQL; Drizzle 1.0 RC | **Drizzle 0.45 stable + `pg`**, migrations generated and reviewed as SQL, no RC | 02 Q12, 03 Q9, 04 Q10 |
+| A8 | ~~Query layer~~ | — | **Answered 2026-10-12: Drizzle 0.45 stable + `pg`**, migrations generated and reviewed as SQL, no RC | 02 Q12, 03 Q9, 04 Q10 |
 | A9 | ~~Fallback if the skeleton slips~~ | — | **Withdrawn with the deadline.** The skeleton's 18 h cap is now an alarm to stop and find what's fighting you. A local-only PWA on the same `packages/core` is a contingency only if hosting stays blocked | 13 §4, 10-wildcard §16 #13 |
-| A10 | RLS from the first migration? | Yes, forced, with three roles (02) / later (03, critique) | **Later.** Scope every query by `user_id` and add one cross-user test now; RLS and composite FKs before a second real person signs in | 02 Q5, 03 trap 14, 99 §3.3 |
-| A11 | Repo conventions | Merge style; CI database; coverage gate | **`--no-ff` merges; Actions `services:` Postgres + Compose locally; 90% branch coverage on `core/recurrence` only** | 13 Q9–Q11 |
+| A10 | ~~RLS from the first migration?~~ | — | **Answered 2026-10-12: with v0.2's first data tables**, not "before a second user". A non-owner `tasks_app` role, `FORCE ROW LEVEL SECURITY` and one `user_id` policy per calendar table, the user set per transaction (`SET LOCAL`); composite `(user_id, parent_id)` foreign keys; queries still filter by `user_id`. The `auth_*` tables stay without RLS. Built in v0.2 (migration `0002_calendar_rls`) | 02 Q5, 03 trap 14, 99 §3.3 |
+| A11 | ~~Repo conventions~~ | — | **Answered 2026-10-12/13: `--no-ff` merges, never squash; Actions `services:` Postgres in CI, and locally `pnpm test` starts the Compose database itself; 90% branch coverage on `core/recurrence` only** | 13 Q9–Q11 |
 
 ### 2.B Calendar model (blocks v0.1–v0.2)
 
@@ -348,7 +348,7 @@ The critique (`99`) checked every slice against the others. This table puts each
 | Holidays | **02:** per-occurrence override rows with `not_held` + `import_batch_id` | **01's** day layer, extended with `effect` | Critique (C3) |
 | Subject key | **01:** a `recurring_item` layer. **02:** normalised title | **12's** `subject` column | Critique (B8) |
 | API machinery | **03:** generated OpenAPI client, snapshot diff, dependency-cruiser, version headers, idempotency table, from v0 | Defer to v1.5 / v3; zod schemas from `packages/core` are enough while the PWA is the only client | Critique |
-| Database hardening | **02:** forced RLS, three roles, a definer function, composite FKs, UUIDv5 ids, triggers from migration 1 | `user_id` scoping + one cross-user test now; RLS before a second user | Critique (A10). Keep 02's time rules and deletion verbs, which cost nothing |
+| Database hardening | **02:** forced RLS, three roles, a definer function, composite FKs, UUIDv5 ids, triggers from migration 1 | `user_id` scoping + one cross-user test now; RLS before a second user | Critique, then A10 moved RLS, composite FKs and one non-owner role to v0.2 (2026-10-12). Keep 02's time rules and deletion verbs, which cost nothing |
 | Ops stack | **07:** separate worker, staging as yesterday's prod, SOPS, squawk, dead-man switch, ntfy and an `api.` host by v1 | One box, `.env`, one restore drill, an uptime check; worker at v2 | Critique (C7). 07's "clients only talk to `*.ahmedatif.in`" and "never publish the DB port" stay |
 | Hosting assumption | **13:** free managed tiers, ₹0 | 07's VPS (13's dates assumed no ops work) | VPS (A5). Add ~4 h to the skeleton estimate |
 | Sign-in | **07:** magic links via Resend. **13:** GitHub OAuth | **06:** Google + allowlist, no email | 06 (A6) |
@@ -470,7 +470,8 @@ Every entry proposed by any slice is here, numbered after D-010.
 - **Source:** 13 §5.11 · **Status:** proposed
 
 ### D-020 · One JSON format for fixture, import and export (2026-10-06)
-- **Decision:** The JSON that seeds my real timetable (`fixtures/kiit-sem3.json`) and drives the golden tests is also the D-008 import format and the data export format. It describes slots (weekday, start, end, title, room) and holidays, never RRULE strings.
+- **Decision:** One JSON timetable format (`"format": "tasks.timetable"`, versioned) seeds my timetable and is also the D-008 import format and the data export format. It describes slots (weekday, start, end, title, location) and, from v0.3b, holidays; never RRULE strings.
+- **Amended 2026-10-12:** my real timetable stays private (the repo is public). The committed example, `fixtures/sample-timetable.json`, is made up; the real file lives in the git-ignored `private/` folder and reaches only my own database through `pnpm --filter @tasks/api seed:private`, which refuses to run against anything but localhost.
 - **Why:** One format, already validated by tests and two real semesters, before any import UI or LLM prompt exists. LLMs get RRULE wrong often.
 - **Consequence:** "Later: timetable import" shrinks to the validation + preview UI and the prompt text.
 - **Source:** 13 §5.3, 01 §2, 99 §4.2 · **Status:** proposed
@@ -553,7 +554,7 @@ Every entry proposed by any slice is here, numbered after D-010.
 ### 4.4 Data and storage
 
 ### D-034 · Relational Postgres with client-generated UUIDv7 IDs (2026-10-06)
-- **Decision:** A normalised Postgres schema. Every row has a client-generated UUIDv7 `id` and a `user_id`, and every repository function filters by it. Natural keys (one override per series per date) are unique constraints. RLS, composite `(user_id, parent_id)` foreign keys and DB roles are added before a second real person signs in.
+- **Decision:** A normalised Postgres schema. Every row has a client-generated UUIDv7 `id` and a `user_id`, and every repository function filters by it. Natural keys (one override per series per date) are unique constraints. RLS, composite `(user_id, parent_id)` foreign keys and a non-owner DB role arrive with v0.2's first data tables (A10, answered 2026-10-12), not before a second real person signs in.
 - **Why:** Client IDs make offline creation and integration retries idempotent with no ID remapping, and they're globally unique for the future `*.ahmedatif.in` identity. Hardening before there's a second user is a day or two of custom SQL with no benefit yet.
 - **Alternatives considered:** Serial IDs (enumerable, no offline). ULIDs. Forced RLS, roles and composite FKs from migration 1 (02). Deterministic UUIDv5 override ids (natural keys do the same job).
 - **Source:** 02 §5.1, 04, 06, 99 §3.3 · **Status:** proposed, hardening deferred
@@ -1093,7 +1094,7 @@ The design is in `01 §5`. `packages/core/recurrence` has no I/O and no clock, a
 - [ ] **API.** CRUD for groups and series. `GET /api/v1/calendar?from&to` expands on the server (a 400 above 62 days) and returns `Occurrence[]` (D-041). — 3 h
 - [ ] **Series form.** Title, subject (defaults to the title), group, days, start time, duration, start and end dates. — 2 h
 - [ ] **`<TimeGrid>`, render-only.** Day timeline on mobile and Week view on desktop. Interval-partition layout, a fixed colour palette, a "now" line, ±8 weeks of navigation, scroll to `max(now−1h, 07:00)` (D-076). — 4 h
-- [ ] **Your timetable.** Write `fixtures/kiit-sem3.json` (your real timetable, also the first draft of the import format, D-020) and a seed script. — 0.5 h
+- [ ] **Your timetable.** The timetable file format (D-020) with a made-up `fixtures/sample-timetable.json`, your real timetable in git-ignored `private/kiit-sem3.json`, and a seed script that refuses non-local databases. — 0.5 h
 - [ ] **Offline reads.** Persist TanStack Query to IndexedDB, with an "offline · last synced 14:02" badge (D-046). — 1 h
 - [ ] **Cross-user test.** Seed a second user, who must not be able to read your rows. — 0.5 h
 
@@ -1135,4 +1136,4 @@ Starts once cancel/skip is in daily use, so these build on a model that's alread
 
 ### Explicitly not in v0
 
-Tasks, blocks, the timer, the dump, attendance percentages and the evening review, push, quick add, tokens, the git hook, any sync engine, OpenAPI codegen, RLS, staging, PITR, a worker, Sentry, email, LLMs, touch drag, monthly rules, floating time zones and day swaps. Each has a milestone and an entry in §4. If one starts creeping into v0, D-012 is the place to argue with yourself.
+Tasks, blocks, the timer, the dump, attendance percentages and the evening review, push, quick add, tokens, the git hook, any sync engine, OpenAPI codegen, staging, PITR, a worker, Sentry, email, LLMs, touch drag, monthly rules, floating time zones and day swaps. Each has a milestone and an entry in §4. If one starts creeping into v0, D-012 is the place to argue with yourself.
