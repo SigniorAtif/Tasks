@@ -153,6 +153,18 @@ describe('signing in with Google', () => {
     expect(cookie?.attributes.has('secure')).toBe(true);
     expect(cookie?.attributes.has('domain')).toBe(false);
   });
+
+  // The PWA relies on this answer to say "Google sign-in isn't set up".
+  it('answers 404 PROVIDER_NOT_FOUND when no Google client is configured', async () => {
+    const { app, env } = createTestApp(); // no GOOGLE_CLIENT_ID / SECRET
+    const response = await app.request('/api/auth/sign-in/social', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: env.BETTER_AUTH_URL },
+      body: JSON.stringify({ provider: 'google', callbackURL: '/', errorCallbackURL: '/login' }),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: 'PROVIDER_NOT_FOUND' });
+  });
 });
 
 describe('the allowlist', () => {
