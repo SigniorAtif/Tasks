@@ -1,0 +1,11 @@
+/* Tailwind v4: one import pulls in the reset, the theme variables and every
+   utility class the source files actually use (it scans them at build time).
+   Page-wide classes sit on <body> in index.html. This file sticks to plain
+   CSS syntax, because Biome rejects Tailwind-only rules such as @apply unless
+   biome.json opts in. */
+@import "tailwindcss";
+
+html {
+  /* No grey flash on Android when a button is tapped. */
+  -webkit-tap-highlight-color: transparent;
+}
