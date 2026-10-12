@@ -1,9 +1,10 @@
 // Checks the migrations did what the schema says, against real Postgres.
 
 import type { Rule } from '@tasks/core';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDatabase, testDb, testPool } from '../test/database.ts';
+import type { Database } from './client.ts';
 import {
   authAccount,
   authSession,
@@ -116,6 +117,18 @@ function seriesRow(userId: string, groupId: string) {
   };
 }
 
+/**
+ * Runs `fn` the way the API does for calendar data: in a transaction, as the
+ * `tasks_app` role, with `app.user_id` naming one user (null = nobody).
+ */
+async function asUser<T>(userId: string | null, fn: (tx: Database) => Promise<T>): Promise<T> {
+  return testDb.transaction(async (tx) => {
+    if (userId !== null) await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
+    await tx.execute(sql`set local role tasks_app`);
+    return fn(tx as unknown as Database);
+  });
+}
+
 describe('the calendar tables', () => {
   it('refuse a rule the engine cannot run', async () => {
     const alice = await insertUser('alice@example.com');
@@ -181,5 +194,72 @@ describe('the calendar tables', () => {
     await testDb.delete(scheduleGroup).where(eq(scheduleGroup.id, group.id));
     expect(await testDb.select().from(series)).toEqual([]);
     expect(await testDb.select().from(occurrenceOverride)).toEqual([]);
+  });
+});
+
+describe('row-level security on the calendar tables', () => {
+  it('is enabled and forced on all three, and nowhere else', async () => {
+    const { rows } = await testPool.query<{ relname: string; on: boolean; forced: boolean }>(
+      `select relname, relrowsecurity as on, relforcerowsecurity as forced
+         from pg_class join pg_namespace on pg_namespace.oid = relnamespace
+        where nspname = 'public' and relkind = 'r' and relrowsecurity
+        order by relname`,
+    );
+    expect(rows).toEqual([
+      { relname: 'occurrence_override', on: true, forced: true },
+      { relname: 'schedule_group', on: true, forced: true },
+      { relname: 'series', on: true, forced: true },
+    ]);
+  });
+
+  it("shows a query with no WHERE only the current user's rows", async () => {
+    const alice = await insertUser('alice@example.com');
+    const bob = await insertUser('bob@example.com');
+    await insertGroup(alice.id, 'Alice classes');
+    await insertGroup(bob.id, 'Bob classes');
+
+    // A query that "forgot" to filter by user: RLS filters it anyway.
+    const seenByAlice = await asUser(alice.id, (tx) => tx.select().from(scheduleGroup));
+    expect(seenByAlice.map((group) => group.name)).toEqual(['Alice classes']);
+    // Nobody signed in: nothing at all.
+    expect(await asUser(null, (tx) => tx.select().from(scheduleGroup))).toEqual([]);
+    // The owner connection (used by migrations and tests) still sees both.
+    expect(await testDb.select().from(scheduleGroup)).toHaveLength(2);
+  });
+
+  it("can't write, change or delete another user's rows", async () => {
+    const alice = await insertUser('alice@example.com');
+    const bob = await insertUser('bob@example.com');
+    const bobsGroup = await insertGroup(bob.id, 'Bob classes');
+
+    // Inserting a row that claims to be Bob's fails the WITH CHECK. Drizzle wraps
+    // Postgres' error; the original is its `cause`.
+    const refused = await asUser(alice.id, (tx) =>
+      tx.insert(scheduleGroup).values({ userId: bob.id, name: 'x', activeFrom: '2026-07-13' }),
+    ).catch((error: unknown) => error);
+    expect((refused as Error).cause).toMatchObject({
+      code: '42501',
+      message: expect.stringMatching(/violates row-level security policy/),
+    });
+    // Updates and deletes simply don't find Bob's row.
+    const renamed = await asUser(alice.id, (tx) =>
+      tx.update(scheduleGroup).set({ name: 'Mine now' }).returning(),
+    );
+    const deleted = await asUser(alice.id, (tx) => tx.delete(scheduleGroup).returning());
+    expect(renamed).toEqual([]);
+    expect(deleted).toEqual([]);
+    const [still] = await testDb
+      .select()
+      .from(scheduleGroup)
+      .where(eq(scheduleGroup.id, bobsGroup.id));
+    expect(still?.name).toBe('Bob classes');
+  });
+
+  it('forgets the user when the transaction ends', async () => {
+    const alice = await insertUser('alice@example.com');
+    await insertGroup(alice.id);
+    await asUser(alice.id, (tx) => tx.select().from(scheduleGroup));
+    // Same pool, later transaction, no user set: the old setting is gone ('' → nobody).
+    expect(await asUser(null, (tx) => tx.select().from(scheduleGroup))).toEqual([]);
   });
 });
