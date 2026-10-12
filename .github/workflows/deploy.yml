@@ -1,0 +1,137 @@
+# Runs when a commit lands on main: builds the image, pushes it to GitHub's container
+# registry (GHCR), then deploys it to the box and checks the public URL serves it.
+#
+# The deploy job is off until the box exists: it runs only when the repository variable
+# DEPLOY_ENABLED is "true" (deploy/README.md). Until then it shows as skipped, not failed.
+# "Run workflow" on the Actions tab (workflow_dispatch) redeploys main's latest commit.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time, in order. A newer push waits; it never cancels a deploy halfway.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Registry paths must be lowercase.
+  IMAGE: ghcr.io/signioratif/tasks
+
+jobs:
+  image:
+    name: Build and push the image
+    # A manual run on another branch must not push an image tagged :main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push to GHCR with the workflow's own token, no personal token
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The box may be an ARM server (Oracle's Ampere A1) or an x86 VPS, so the image is
+      # built for both. QEMU lets this x86 runner run the few ARM steps (installing the
+      # API's dependencies); the PWA build runs once, natively (see the Dockerfile).
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # Baked into the image; /healthz reports it, which is how a deploy is verified.
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to the box
+    needs: image
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL || 'https://tasks.ahmedatif.in' }}
+    env:
+      PUBLIC_URL: ${{ vars.PUBLIC_URL || 'https://tasks.ahmedatif.in' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy
+
+      # The key and the box's identity come from repository secrets. known_hosts pins the
+      # box's host key, so SSH refuses to talk to an impostor (never StrictHostKeyChecking=no).
+      - name: Set up SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host box
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          EOF
+
+      # Ship this commit's versions of the stack files, then run the deploy script there.
+      - name: Copy the stack files to ~/tasks
+        working-directory: deploy
+        run: scp compose.prod.yaml Caddyfile deploy.sh box:tasks/
+
+      - name: Run deploy.sh on the box
+        run: |
+          # The SHA is filled in here, on the runner, on purpose (it's plain hex).
+          # shellcheck disable=SC2029
+          ssh box ./tasks/deploy.sh "$GITHUB_SHA"
+
+      # The box already checked itself from the inside. This checks the whole public path:
+      # DNS, Cloudflare, Caddy, the API.
+      - name: Check the public URL serves this commit
+        run: |
+          deadline=$((SECONDS + 180))
+          until [[ "$(curl -fsS --max-time 10 "$PUBLIC_URL/healthz" | jq -r .sha)" == "$GITHUB_SHA" ]]; do
+            if ((SECONDS >= deadline)); then
+              echo "::error::$PUBLIC_URL/healthz didn't report $GITHUB_SHA within 3 minutes"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "$PUBLIC_URL is serving $GITHUB_SHA"
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
