@@ -11,8 +11,9 @@
     "moduleResolution": "bundler",
     // React 19's automatic JSX runtime: no `import React` needed in .tsx files.
     "jsx": "react-jsx",
-    // `import.meta.env` and asset imports (vite/client).
-    "types": ["vite/client"]
+    // `import.meta.env` and asset imports (vite/client); the service worker's
+    // `virtual:pwa-register` module (vite-plugin-pwa/client).
+    "types": ["vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["src"]
 }

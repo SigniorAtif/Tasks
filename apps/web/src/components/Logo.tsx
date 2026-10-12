@@ -1,5 +1,6 @@
 /**
- * The app's mark: a calendar with a tick, on an indigo tile.
+ * The app's mark: a calendar with a tick, on an indigo tile. The same drawing
+ * as public/logo.svg, which the home-screen icons are generated from.
  * Decorative: the screen always shows the word "Tasks" next to it.
  */
 export function Logo({ className }: { className?: string }) {
