@@ -9,3 +9,6 @@ ruvector.db
 .DS_Store
 .vscode/
 .idea/
+
+# Personal learning vault (Obsidian), kept local
+vault/
