@@ -4,13 +4,19 @@
 
 import { serve } from '@hono/node-server';
 import { createApp } from './app.ts';
+import { createPool } from './db/pool.ts';
 import { loadEnv } from './env.ts';
 import { createLogger } from './logger.ts';
 
 const env = loadEnv();
 const logger = createLogger(env);
 
-const app = createApp({ env, logger, now: () => new Date() });
+const pool = createPool(env.DATABASE_URL);
+// An idle pooled connection can break (say, Postgres restarts). pg reports it
+// here; without a listener Node would treat it as a crash.
+pool.on('error', (error) => logger.error({ err: error }, 'idle database connection failed'));
+
+const app = createApp({ env, logger, pool, now: () => new Date() });
 
 const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (address) => {
   logger.info(
@@ -20,7 +26,8 @@ const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (
 });
 
 // `docker stop` sends SIGTERM and waits 10 s before killing the process.
-// Stop accepting new connections, let in-flight requests finish, then exit.
+// Stop accepting new connections, let in-flight requests finish, close the
+// database pool, then exit.
 // If something hangs, give up after 8 s so Docker never has to SIGKILL us.
 let stopping = false;
 function shutdown(signal: NodeJS.Signals): void {
@@ -32,8 +39,9 @@ function shutdown(signal: NodeJS.Signals): void {
     process.exit(1);
   }, 8_000).unref();
 
-  server.close((error) => {
+  server.close(async (error) => {
     if (error) logger.error({ err: error }, 'error while closing the HTTP server');
+    await pool.end();
     process.exit(error ? 1 : 0);
   });
 }

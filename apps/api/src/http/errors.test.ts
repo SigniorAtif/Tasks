@@ -1,17 +1,13 @@
 import type { Problem } from '@tasks/core';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createApp } from '../app.ts';
-import { parseEnv } from '../env.ts';
+import { createTestApp } from '../test/app.ts';
 import { captureLogs } from '../test/logs.ts';
 import { AppError } from './errors.ts';
 import { jsonBody } from './json-body.ts';
 
 function buildApp() {
-  const parsed = parseEnv({ NODE_ENV: 'test' });
-  if (!parsed.ok) throw new Error(parsed.problems.join('\n'));
-  const logs = captureLogs();
-  const app = createApp({ env: parsed.env, logger: logs.logger, now: () => new Date() });
+  const { app, logs } = createTestApp();
 
   // Routes that exist only in this test, to trigger each kind of failure.
   app.get('/test/boom', () => {

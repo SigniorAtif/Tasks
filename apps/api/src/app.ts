@@ -6,14 +6,17 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
+import type { Pool } from 'pg';
 import type { Env } from './env.ts';
 import { type AppEnv, requestContext } from './http/context.ts';
 import { onError, onNotFound } from './http/errors.ts';
 import type { Logger } from './logger.ts';
+import { healthzRoute } from './routes/healthz.ts';
 
 export interface AppDeps {
   env: Env;
   logger: Logger;
+  pool: Pool;
   /** The clock. Tests pass a fixed one so responses are predictable. */
   now: () => Date;
 }
@@ -22,7 +25,7 @@ export interface AppDeps {
 const MAX_BODY_BYTES = 256 * 1024;
 
 export function createApp(deps: AppDeps): Hono<AppEnv> {
-  const { logger } = deps;
+  const { env, logger, pool, now } = deps;
   const app = new Hono<AppEnv>();
 
   // Middleware runs top to bottom on the way in and bottom to top on the way
@@ -31,6 +34,8 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   app.use(requestContext(logger));
   app.use(secureHeaders());
   app.use(bodyLimit({ maxSize: MAX_BODY_BYTES }));
+
+  healthzRoute(app, { env, pool, now });
 
   app.notFound(onNotFound);
   app.onError(onError);
