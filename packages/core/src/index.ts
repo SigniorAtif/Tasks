@@ -7,6 +7,7 @@ export {
   type Profile,
   paths,
 } from './api.ts';
+export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {
   type ActiveRange,
   assertValidRule,
@@ -23,4 +24,22 @@ export {
   type SplitPlan,
   splitSeries,
 } from './recurrence/split.ts';
+export {
+  type CalendarQuery,
+  type CreateGroup,
+  type CreateSeries,
+  calendarQuerySchema,
+  colorTokenSchema,
+  createGroupSchema,
+  createSeriesSchema,
+  ianaZoneSchema,
+  isoDateSchema,
+  MAX_CALENDAR_DAYS,
+  ruleSchema,
+  type UpdateGroup,
+  type UpdateSeries,
+  updateGroupSchema,
+  updateSeriesSchema,
+  wallTimeSchema,
+} from './schemas.ts';
 export * from './types.ts';
