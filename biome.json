@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!docs", "!vault", "!**/__snapshots__"]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "Temporal": "Import { Temporal } from 'temporal-polyfill'. Native Temporal is missing in Safari and some Node builds."
+            }
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Temporal": "Import { Temporal } from 'temporal-polyfill'. Native Temporal is missing in Safari and some Node builds.",
+                  "Date": "packages/core is pure: use Temporal from temporal-polyfill, and take `now` as a parameter instead of reading the clock (D-015)."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
