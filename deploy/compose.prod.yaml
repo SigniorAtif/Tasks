@@ -1,0 +1,116 @@
+# The production stack: Caddy in front, the API behind it, Postgres behind that.
+# On the box it lives in ~/tasks next to Caddyfile, deploy.sh and .env (from env.example).
+#
+#   ./deploy.sh <sha>                                  deploy a commit (the normal way)
+#   docker compose -f compose.prod.yaml ps             what's running
+#   docker compose -f compose.prod.yaml logs -f api    follow the API's logs
+#
+# Only Caddy publishes ports. Postgres is never reachable from outside the box (D-064).
+
+# Containers are named tasks-prod-api-1 and so on. Deliberately not "tasks": on a laptop
+# that name would collide with the dev database from the repo's compose.yaml.
+name: tasks-prod
+
+# Rotate each container's log file at 10 MB and keep 3, so logs can't fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+# The app image. TAG is a git commit SHA; deploy.sh sets it.
+x-app-image: &app-image "${IMAGE:-ghcr.io/signioratif/tasks}:${TAG:?TAG is empty. Deploy with ./deploy.sh <sha>, which sets it}"
+
+services:
+  caddy:
+    image: caddy:2.11.7@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp" # HTTP/3 runs over UDP
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-tasks.ahmedatif.in}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and their keys. Losing this volume means asking Let's Encrypt again,
+      # which rate-limits repeated requests for the same name.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    logging: *logging
+
+  api:
+    image: *app-image
+    restart: unless-stopped
+    # A tiny init process runs as PID 1 and passes signals on to Node, so `docker stop`
+    # reaches the API's SIGTERM handler and it shuts down cleanly.
+    init: true
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # The image has no curl, but it has Node, and Node has fetch. 200 means the API
+      # answers and the database replied to `select 1`.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+    # edge: reachable by Caddy and able to reach the internet (Google sign-in).
+    # backend: reachable to the database.
+    networks: [edge, backend]
+    logging: *logging
+
+  # Not started by `up`; deploy.sh runs it once per deploy:
+  #   docker compose -f compose.prod.yaml run --rm migrate
+  migrate:
+    image: *app-image
+    profiles: [tools]
+    command: [node, apps/api/src/db/migrate.ts]
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend]
+    logging: *logging
+
+  db:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tasks
+      POSTGRES_DB: tasks
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      # Postgres 18 keeps its data in /var/lib/postgresql/18/docker, so the volume goes on
+      # the parent folder. Mounting .../data, as older guides say, stops 18 from starting.
+      - pgdata:/var/lib/postgresql
+    shm_size: 256mb
+    # Give Postgres time to finish writing and shut down cleanly instead of being killed.
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD-SHELL, pg_isready --username=tasks --dbname=tasks]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No `ports:` on purpose: only containers on the backend network can reach it.
+    networks: [backend]
+    logging: *logging
+
+networks:
+  edge: {}
+  # internal: containers on it can talk to each other but not to the internet.
+  backend:
+    internal: true
+
+volumes:
+  pgdata: {}
+  caddy_data: {}
+  caddy_config: {}

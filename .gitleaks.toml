@@ -1,0 +1,14 @@
+# Settings for gitleaks, the secret scanner CI runs over the whole git history.
+# Start from its built-in rules and relax exactly one thing.
+[extend]
+useDefault = true
+
+# Tests need values shaped like secrets (a cookie-signing key, a Google client secret),
+# but they are made-up, throwaway values. The broad "generic-api-key" rule guesses from
+# the name and the randomness of a value, so it can't tell those from real ones. It is
+# switched off in test files only; every specific rule (GitHub tokens, private keys,
+# cloud keys and so on) still checks them.
+[[allowlists]]
+description = "Made-up values in test files"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)[^/]+\.test\.tsx?$''']
