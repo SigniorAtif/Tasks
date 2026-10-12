@@ -1,0 +1,49 @@
+# What `docker build` is allowed to see (the "build context"). Anything not allowed here
+# never leaves your machine, so it can't end up in an image. The image may be public,
+# and this folder holds things that must never be: `private/` (the real timetable),
+# `vault/` (study notes) and `.env` files (secrets).
+#
+# Rule 1: deny everything.
+*
+
+# Rule 2: allow back only what the image is built from.
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!apps/
+!packages/
+
+# Rule 3: inside those folders, still never send these. Installed packages and build
+# output are recreated inside the build; tests aren't needed to run the app.
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+**/*.tsbuildinfo
+**/*.log
+**/.env
+**/.env.*
+**/*.test.ts
+**/*.test.tsx
+**/__snapshots__
+
+# Rule 4: named explicitly even though rule 1 already covers them. Later lines win, so
+# these stay out even if someone adds a broader "!" line above by mistake.
+private
+vault
+.env
+.env.*
+.git
+.github
+.claude
+.claude-flow
+.swarm
+.code-review-graph
+ruvector.db
+*.rvf*
+docs
+deploy
+*.txt
+.vscode
+.idea
