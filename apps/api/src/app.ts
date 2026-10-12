@@ -17,6 +17,7 @@ import { type AppEnv, requestContext } from './http/context.ts';
 import { onError, onNotFound } from './http/errors.ts';
 import type { Logger } from './logger.ts';
 import { healthzRoute } from './routes/healthz.ts';
+import { meRoute } from './routes/me.ts';
 
 export interface AppDeps {
   env: Env;
@@ -32,7 +33,7 @@ export interface AppDeps {
 const MAX_BODY_BYTES = 256 * 1024;
 
 export function createApp(deps: AppDeps): Hono<AppEnv> {
-  const { env, logger, pool, auth, now } = deps;
+  const { env, logger, pool, db, auth, now } = deps;
   const app = new Hono<AppEnv>();
 
   // Middleware runs top to bottom on the way in and bottom to top on the way
@@ -54,6 +55,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   // Our own routes refuse form-style POSTs from other sites (CSRF). JSON
   // requests from another site can't happen without CORS, which we never allow.
   app.use(`${paths.apiV1}/*`, csrf({ origin: env.BETTER_AUTH_URL }));
+  meRoute(app, { db, now });
 
   app.notFound(onNotFound);
   app.onError(onError);
