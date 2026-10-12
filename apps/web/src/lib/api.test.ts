@@ -141,6 +141,14 @@ describe('describeError', () => {
     expect(text.small).toBe('Error code: internal_error · request req-1');
   });
 
+  it('says the server is not answering for a bare 502 from the proxy in front of it', () => {
+    expect(describeError(toApiError(502, undefined, null))).toEqual({
+      title: 'The server is not answering',
+      message: 'It may be restarting. Try again in a minute.',
+      small: 'Error code: internal_error · HTTP 502',
+    });
+  });
+
   it('copes with things that are not errors', () => {
     expect(describeError('boom').message).toBe('boom');
   });

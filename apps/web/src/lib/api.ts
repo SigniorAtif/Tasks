@@ -185,6 +185,15 @@ export function describeError(error: unknown): { title: string; message: string;
   if (error instanceof ApiError) {
     const parts = [`Error code: ${error.code}`];
     if (error.requestId !== undefined) parts.push(`request ${error.requestId}`);
+    // 502/503/504 usually come from whatever sits in front of the API (Caddy in
+    // production, Vite in development) when the API itself isn't answering.
+    if (error.status === 502 || error.status === 503 || error.status === 504) {
+      return {
+        title: 'The server is not answering',
+        message: 'It may be restarting. Try again in a minute.',
+        small: [...parts, `HTTP ${error.status}`].join(' · '),
+      };
+    }
     return {
       title: 'Something went wrong',
       message: error.detail ?? error.message,
