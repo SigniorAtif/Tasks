@@ -5,6 +5,8 @@
 // Dates and times are strings so the shapes survive JSON unchanged; the engine
 // parses them into Temporal objects internally.
 
+import type { ColorToken } from './palette.ts';
+
 // ---------------------------------------------------------------------------
 // Time (D-025, D-035)
 // ---------------------------------------------------------------------------
@@ -56,7 +58,8 @@ export type CancelOrigin = 'user' | 'holiday';
 export interface ScheduleGroup {
   id: string;
   name: string;
-  colorToken: string;
+  /** One of the ten palette colours (`palette.ts`). */
+  colorToken: ColorToken;
   /** First active day, inclusive. Nothing in the group occurs before it. */
   activeFrom: ISODate;
   /** Last active day, inclusive. `null` = open-ended. Archiving sets it (D-030). */

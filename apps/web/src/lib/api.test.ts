@@ -68,6 +68,7 @@ describe('toApiError', () => {
   it('falls back to the HTTP status when there is no Problem body', () => {
     expect(toApiError(401, undefined, null).code).toBe('unauthenticated');
     expect(toApiError(404, undefined, null).code).toBe('not_found');
+    expect(toApiError(409, undefined, null).code).toBe('conflict');
     expect(toApiError(502, undefined, null).code).toBe('internal_error');
     expect(toApiError(502, undefined, null).message).toBe('Request failed (HTTP 502)');
   });

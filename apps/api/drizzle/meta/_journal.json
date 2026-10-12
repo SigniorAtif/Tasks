@@ -8,6 +8,20 @@
       "when": 1791804734085,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791839071275,
+      "tag": "0001_calendar_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791839079583,
+      "tag": "0002_calendar_rls",
+      "breakpoints": true
     }
   ]
 }
