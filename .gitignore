@@ -9,3 +9,17 @@ ruvector.db
 .DS_Store
 .vscode/
 .idea/
+
+# Personal learning vault (Obsidian), kept local
+vault/
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local environment (secrets never get committed)
+.env
+.env.*
+!.env.example

@@ -1,0 +1,26 @@
+{
+  "name": "@tasks/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:tz": "TZ=UTC vitest run && TZ=Asia/Kolkata vitest run && TZ=America/New_York vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "temporal-polyfill": "1.0.5"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "5.0.3",
+    "fast-check": "4.10.2",
+    "rrule-temporal": "2.2.8",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

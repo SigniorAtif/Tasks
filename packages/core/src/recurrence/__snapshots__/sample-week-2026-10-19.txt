@@ -1,0 +1,36 @@
+SAMPLE timetable, not the real one yet. Week of 2026-10-19, times in Asia/Kolkata.
+
+Mon 2026-10-19
+  08:00–09:00  Data Structures       C-301
+  15:00–17:00  Data Structures Lab   Lab 3   moved (originally 2026-10-19)
+  18:00–18:45  Evening run
+
+Tue 2026-10-20
+  09:00–10:00  Discrete Mathematics  C-301   cancelled · not_held · Holiday (example)
+  10:00–11:00  OOP (Java)            C-204   cancelled · not_held · Holiday (example)
+  12:00–13:00  Economics             C-105   cancelled · not_held · Holiday (example); note: Essay still due today
+  18:00–18:45  Evening run
+
+Wed 2026-10-21
+  08:00–09:00  Data Structures       C-301
+  11:00–12:00  Digital Systems       C-204
+  18:00–18:45  Evening run
+
+Thu 2026-10-22
+  09:00–10:00  Discrete Mathematics  C-301
+  10:00–11:00  OOP (Java)            C-204   cancelled · skipped
+  14:00–16:00  Digital Systems Lab   Lab 5
+  18:00–18:45  Evening run
+
+Fri 2026-10-23
+  08:00–09:00  Data Structures       C-301
+  11:00–12:00  Digital Systems       C-204
+  18:00–18:45  Evening run
+
+Sat 2026-10-24
+  10:00–11:00  Discrete Mathematics  C-301   moved (originally 2026-10-19)
+  12:00–13:00  OOP (Java)            C-204   extra
+  18:00–18:45  Evening run
+
+Sun 2026-10-25
+  18:00–18:45  Evening run
