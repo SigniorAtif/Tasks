@@ -18,6 +18,7 @@ import { onError, onNotFound } from './http/errors.ts';
 import type { Logger } from './logger.ts';
 import { healthzRoute } from './routes/healthz.ts';
 import { meRoute } from './routes/me.ts';
+import { staticSite } from './static-site.ts';
 
 export interface AppDeps {
   env: Env;
@@ -56,6 +57,9 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   // requests from another site can't happen without CORS, which we never allow.
   app.use(`${paths.apiV1}/*`, csrf({ origin: env.BETTER_AUTH_URL }));
   meRoute(app, { db, now });
+
+  // The built PWA, in production (STATIC_DIR). Last, so it never shadows the API.
+  if (env.STATIC_DIR) staticSite(app, env.STATIC_DIR, logger);
 
   app.notFound(onNotFound);
   app.onError(onError);
