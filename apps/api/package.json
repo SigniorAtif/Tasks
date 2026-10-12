@@ -1,0 +1,35 @@
+{
+  "name": "@tasks/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env src/db/migrate.ts && node --env-file-if-exists=../../.env --watch src/main.ts",
+    "start": "node --env-file-if-exists=../../.env src/main.ts",
+    "db:migrate": "node --env-file-if-exists=../../.env src/db/migrate.ts",
+    "db:generate": "drizzle-kit generate",
+    "dev:session": "node --env-file-if-exists=../../.env src/scripts/dev-session.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.4",
+    "@tasks/core": "workspace:*",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
+    "pg": "8.23.1",
+    "pino": "10.4.0",
+    "uuid": "14.0.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
+    "pino-pretty": "13.2.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
