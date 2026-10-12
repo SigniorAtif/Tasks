@@ -1,5 +1,5 @@
-import { type ErrorComponentProps, useRouter } from '@tanstack/react-router';
-import { describeError } from '../lib/api.ts';
+import { type ErrorComponentProps, Navigate, useRouter } from '@tanstack/react-router';
+import { describeError, isUnauthenticated } from '../lib/api.ts';
 
 /**
  * What a route shows when loading it failed: offline, a server error, a bug.
@@ -7,6 +7,10 @@ import { describeError } from '../lib/api.ts';
  */
 export function ErrorScreen({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
+
+  // Safety net: a lapsed session anywhere means "sign in again", not an error.
+  if (isUnauthenticated(error)) return <Navigate to="/login" />;
+
   const { title, message, small } = describeError(error);
   return (
     <div

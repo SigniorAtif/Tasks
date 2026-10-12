@@ -15,6 +15,7 @@
     "@tanstack/react-query": "5.104.1",
     "@tanstack/react-router": "1.170.42",
     "@tasks/core": "workspace:*",
+    "better-auth": "1.7.7",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
