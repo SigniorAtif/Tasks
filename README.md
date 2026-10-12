@@ -47,7 +47,7 @@ pnpm dev         # Postgres + API + web, with reload on save
 pnpm build       # build the PWA into apps/web/dist
 pnpm start       # the API the production way (serves STATIC_DIR if set)
 pnpm db:migrate  # apply database migrations
-pnpm test        # every package's tests (the API's need Postgres running: docker compose up -d --wait db)
+pnpm test        # every package's tests; starts the local Postgres first if it isn't running
 pnpm test:tz     # time-sensitive tests under UTC, Asia/Kolkata and America/New_York
 pnpm coverage    # branch coverage, gated at 90% on the recurrence engine
 pnpm typecheck
