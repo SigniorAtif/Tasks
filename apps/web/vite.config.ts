@@ -1,4 +1,5 @@
 import tailwindcss from '@tailwindcss/vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
@@ -18,7 +19,18 @@ const proxy = {
 };
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    // Reads src/routes/ and writes src/routeTree.gen.ts on every dev start,
+    // file change and build. It must run before the React plugin.
+    tanstackRouter({
+      target: 'react',
+      // Match the repo's import style: name the file with its extension.
+      addExtensions: true,
+      quoteStyle: 'single',
+    }),
+    react(),
+    tailwindcss(),
+  ],
   server: {
     port: 5173,
     // Fail loudly if 5173 is taken instead of quietly moving to 5174: the
