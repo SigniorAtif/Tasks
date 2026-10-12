@@ -1,6 +1,8 @@
 import type { Healthz } from '@tasks/core';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.ts';
+import { createAuth } from '../auth/auth.ts';
+import { createDb } from '../db/client.ts';
 import { createPool } from '../db/pool.ts';
 import { createTestApp, TEST_NOW } from '../test/app.ts';
 import { testEnv } from '../test/env.ts';
@@ -25,12 +27,11 @@ describe('GET /healthz', () => {
     afterAll(() => deadPool.end());
 
     it('answers 503 with the same shape', async () => {
-      const app = createApp({
-        env: testEnv(),
-        logger: captureLogs().logger,
-        pool: deadPool,
-        now: () => TEST_NOW,
-      });
+      const env = testEnv();
+      const { logger } = captureLogs();
+      const db = createDb(deadPool);
+      const auth = createAuth({ env, db, logger });
+      const app = createApp({ env, logger, pool: deadPool, db, auth, now: () => TEST_NOW });
       const response = await app.request('/healthz');
       expect(response.status).toBe(503);
       expect((await response.json()) as Healthz).toEqual({

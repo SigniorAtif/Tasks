@@ -4,6 +4,8 @@
 
 import { serve } from '@hono/node-server';
 import { createApp } from './app.ts';
+import { createAuth } from './auth/auth.ts';
+import { createDb } from './db/client.ts';
 import { createPool } from './db/pool.ts';
 import { loadEnv } from './env.ts';
 import { createLogger } from './logger.ts';
@@ -16,7 +18,15 @@ const pool = createPool(env.DATABASE_URL);
 // here; without a listener Node would treat it as a crash.
 pool.on('error', (error) => logger.error({ err: error }, 'idle database connection failed'));
 
-const app = createApp({ env, logger, pool, now: () => new Date() });
+const db = createDb(pool);
+const auth = createAuth({ env, db, logger });
+if (!env.GOOGLE_CLIENT_ID) {
+  logger.warn(
+    'GOOGLE_CLIENT_ID is not set: Google sign-in is off (use `pnpm dev:session` locally)',
+  );
+}
+
+const app = createApp({ env, logger, pool, db, auth, now: () => new Date() });
 
 const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (address) => {
   logger.info(

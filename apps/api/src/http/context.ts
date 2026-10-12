@@ -6,12 +6,22 @@ import { randomUUID } from 'node:crypto';
 import type { MiddlewareHandler } from 'hono';
 import type { Logger } from '../logger.ts';
 
+/** The signed-in user, as `requireSession` leaves it for route handlers. */
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  image: string | null;
+}
+
 /** Hono's typed "context variables": `c.get('requestId')` and friends. */
 export interface AppEnv {
   Variables: {
     requestId: string;
     /** A child logger: every line it writes includes this request's id. */
     log: Logger;
+    /** Set by `requireSession`; only routes behind it may read it. */
+    user: SessionUser;
   };
 }
 
