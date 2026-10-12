@@ -1,11 +1,14 @@
 export {
+  type CalendarResponse,
   DEFAULT_PROFILE,
   type ErrorCode,
+  type GroupList,
   type Healthz,
   type Me,
   type Problem,
   type Profile,
   paths,
+  type SeriesList,
 } from './api.ts';
 export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {

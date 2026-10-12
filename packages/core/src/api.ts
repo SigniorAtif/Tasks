@@ -6,7 +6,15 @@
 // new codes). Clients ignore fields they don't know and treat an unknown error
 // code like `internal_error`.
 
-import type { IanaZone, Instant, WallTime } from './types.ts';
+import type {
+  IanaZone,
+  Instant,
+  ISODate,
+  Occurrence,
+  ScheduleGroup,
+  Series,
+  WallTime,
+} from './types.ts';
 
 /** URL paths that more than one package needs: the API, the PWA, the deploy smoke test. */
 export const paths = {
@@ -17,6 +25,12 @@ export const paths = {
   /** Everything else is versioned under this prefix and needs a session. */
   apiV1: '/api/v1',
   me: '/api/v1/me',
+  /** `GET` lists, `POST` creates; `/api/v1/groups/:id` for `GET`, `PATCH`, `DELETE`. */
+  groups: '/api/v1/groups',
+  /** Same shape as `groups`. */
+  series: '/api/v1/series',
+  /** `GET ?from=YYYY-MM-DD&to=YYYY-MM-DD`: the expanded occurrences (B6). */
+  calendar: '/api/v1/calendar',
 } as const;
 
 /**
@@ -57,6 +71,37 @@ export interface Me {
   serverTime: Instant;
 }
 
+// ---------------------------------------------------------------------------
+// The calendar routes (v0.2). Request bodies are the zod schemas in schemas.ts.
+//
+// - `POST` creates and answers 201 with the new row. Sending the same `id` again
+//   answers 200 with the row as it is now and changes nothing (D-042).
+// - `GET`/`PATCH` on `/:id` answer with the row; `DELETE` answers 204 with no body.
+//   Deleting a group deletes its series and their overrides too.
+// - A row that doesn't exist and a row that belongs to someone else look the same:
+//   404 `not_found`. Nobody can learn which ids other people use.
+// ---------------------------------------------------------------------------
+
+/** `GET /api/v1/groups`: every group, archived ones too, oldest `activeFrom` first. */
+export interface GroupList {
+  groups: ScheduleGroup[];
+}
+
+/** `GET /api/v1/series`: every series in every group, by title. */
+export interface SeriesList {
+  series: Series[];
+}
+
+/**
+ * `GET /api/v1/calendar?from&to`: what the engine computed for that window, sorted by
+ * start (B6). At most 62 days, both ends included (B7); wider is a 422 on `to`.
+ */
+export interface CalendarResponse {
+  from: ISODate;
+  to: ISODate;
+  occurrences: Occurrence[];
+}
+
 /** Stable, machine-readable error codes. Clients branch on these, never on `title` or `detail`. */
 export type ErrorCode =
   /** No session, or it expired. HTTP 401. */
@@ -67,6 +112,8 @@ export type ErrorCode =
   | 'not_found'
   /** The body isn't valid JSON. HTTP 400. */
   | 'malformed_request'
+  /** The client-generated id is already used by a row this user can't see. HTTP 409. */
+  | 'conflict'
   /** Valid JSON with the wrong shape or values; see `errors`. HTTP 422. */
   | 'validation_failed'
   /** A bug or an outage. The details are in the server log under `requestId`. HTTP 500. */
