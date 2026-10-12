@@ -15,6 +15,7 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<ErrorCode>([
   'unauthenticated',
   'forbidden',
   'not_found',
+  'conflict',
   'malformed_request',
   'validation_failed',
   'internal_error',
@@ -79,6 +80,8 @@ function errorCode(sentCode: unknown, status: number): ErrorCode {
       return 'forbidden';
     case 404:
       return 'not_found';
+    case 409:
+      return 'conflict';
     case 422:
       return 'validation_failed';
     default:

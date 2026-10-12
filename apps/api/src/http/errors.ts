@@ -16,6 +16,7 @@ const CODES: Record<ErrorCode, { status: ContentfulStatusCode; title: string }> 
   unauthenticated: { status: 401, title: 'Not signed in' },
   forbidden: { status: 403, title: 'Not allowed' },
   not_found: { status: 404, title: 'Not found' },
+  conflict: { status: 409, title: 'Conflict' },
   validation_failed: { status: 422, title: 'Validation failed' },
   internal_error: { status: 500, title: 'Something went wrong' },
 };
@@ -63,6 +64,7 @@ function fromHttpException(error: HTTPException): AppError {
   if (status === 401) return new AppError('unauthenticated');
   if (status === 403) return new AppError('forbidden', { detail: error.message || undefined });
   if (status === 404) return new AppError('not_found');
+  if (status === 409) return new AppError('conflict');
   if (status === 413) {
     return new AppError('malformed_request', {
       status,
