@@ -23,3 +23,6 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Personal data (the real timetable, seeds): never committed, the repo is public
+private/
