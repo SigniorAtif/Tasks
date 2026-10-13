@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   apiGet,
+  apiSend,
   describeError,
   isUnauthenticated,
   NetworkError,
@@ -68,6 +69,7 @@ describe('toApiError', () => {
   it('falls back to the HTTP status when there is no Problem body', () => {
     expect(toApiError(401, undefined, null).code).toBe('unauthenticated');
     expect(toApiError(404, undefined, null).code).toBe('not_found');
+    expect(toApiError(409, undefined, null).code).toBe('conflict');
     expect(toApiError(502, undefined, null).code).toBe('internal_error');
     expect(toApiError(502, undefined, null).message).toBe('Request failed (HTTP 502)');
   });
@@ -82,6 +84,29 @@ describe('toApiError', () => {
     expect(error.code).toBe('internal_error');
     expect(error.message).toBe('Request failed (HTTP 500)');
     expect(error.detail).toBeUndefined();
+    expect(error.errors).toEqual([]);
+  });
+
+  it('keeps the field errors of a 422, dropping malformed entries', () => {
+    const error = toApiError(
+      422,
+      {
+        ...problem401,
+        status: 422,
+        code: 'validation_failed',
+        errors: [
+          { path: 'rule.byDay', message: 'pick at least one day' },
+          { path: 'title' },
+          'oops',
+          { path: 'untilDate', message: 'must be on or after startDate' },
+        ],
+      },
+      null,
+    );
+    expect(error.errors).toEqual([
+      { path: 'rule.byDay', message: 'pick at least one day' },
+      { path: 'untilDate', message: 'must be on or after startDate' },
+    ]);
   });
 });
 
@@ -128,6 +153,75 @@ describe('apiGet', () => {
   it('rejects a 200 that is not JSON (the request missed the API)', async () => {
     nextFetch(new Response('<!doctype html>', { headers: { 'Content-Type': 'text/html' } }));
     await expect(apiGet('/api/v1/me')).rejects.toThrow('Expected JSON from /api/v1/me');
+  });
+});
+
+describe('apiSend', () => {
+  const group = { id: '01890a5d-ac96-774b-bcce-b302099a8057', name: 'Classes · Sem 3 (sample)' };
+
+  it('sends the body as JSON with the session cookie and returns the answer', async () => {
+    const fetchMock = nextFetch(json(201, group));
+    await expect(apiSend('POST', '/api/v1/groups', group)).resolves.toEqual(group);
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/groups', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(group),
+    });
+  });
+
+  it('sends no body and no Content-Type when there is nothing to send', async () => {
+    const fetchMock = nextFetch(new Response(null, { status: 204 }));
+    await apiSend('DELETE', `/api/v1/series/${group.id}`);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/series/${group.id}`,
+      expect.objectContaining({
+        method: 'DELETE',
+        body: null,
+        headers: { Accept: 'application/json' },
+      }),
+    );
+  });
+
+  it('returns undefined for 204 No Content', async () => {
+    nextFetch(new Response(null, { status: 204 }));
+    await expect(apiSend('DELETE', `/api/v1/series/${group.id}`)).resolves.toBeUndefined();
+  });
+
+  it('throws an ApiError that keeps the field errors of a 422', async () => {
+    nextFetch(
+      json(
+        422,
+        {
+          ...problem401,
+          status: 422,
+          code: 'validation_failed',
+          errors: [{ path: 'title', message: 'must not be empty' }],
+        },
+        'application/problem+json',
+      ),
+    );
+    const error = await apiSend('POST', '/api/v1/series', {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({
+      status: 422,
+      code: 'validation_failed',
+      errors: [{ path: 'title', message: 'must not be empty' }],
+    });
+  });
+
+  it('throws a NetworkError when fetch itself fails', async () => {
+    nextFetch(new TypeError('Failed to fetch'));
+    await expect(apiSend('PATCH', '/api/v1/series/x', { title: 'DS' })).rejects.toBeInstanceOf(
+      NetworkError,
+    );
+  });
+
+  it('rejects a 2xx with a body that is not JSON (the request missed the API)', async () => {
+    nextFetch(new Response('<!doctype html>', { headers: { 'Content-Type': 'text/html' } }));
+    await expect(apiSend('POST', '/api/v1/groups', group)).rejects.toThrow(
+      'Expected JSON from /api/v1/groups',
+    );
   });
 });
 

@@ -9,6 +9,9 @@
     "db:migrate": "node --env-file-if-exists=../../.env src/db/migrate.ts",
     "db:generate": "drizzle-kit generate",
     "dev:session": "node --env-file-if-exists=../../.env src/scripts/dev-session.ts",
+    "seed": "node --env-file-if-exists=../../.env src/scripts/seed.ts",
+    "seed:sample": "node --env-file-if-exists=../../.env src/scripts/seed.ts fixtures/sample-timetable.json",
+    "seed:private": "node --env-file-if-exists=../../.env src/scripts/seed.ts private/kiit-sem3.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -22,7 +25,7 @@
     "pg": "8.23.1",
     "pino": "10.4.0",
     "uuid": "14.0.3",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

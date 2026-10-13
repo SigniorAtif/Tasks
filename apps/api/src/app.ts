@@ -15,9 +15,13 @@ import type { Database } from './db/client.ts';
 import type { Env } from './env.ts';
 import { type AppEnv, requestContext } from './http/context.ts';
 import { onError, onNotFound } from './http/errors.ts';
+import { userScope } from './http/user-scope.ts';
 import type { Logger } from './logger.ts';
+import { calendarRoute } from './routes/calendar.ts';
+import { groupsRoutes } from './routes/groups.ts';
 import { healthzRoute } from './routes/healthz.ts';
 import { meRoute } from './routes/me.ts';
+import { seriesRoutes } from './routes/series.ts';
 import { staticSite } from './static-site.ts';
 
 export interface AppDeps {
@@ -57,6 +61,17 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   // requests from another site can't happen without CORS, which we never allow.
   app.use(`${paths.apiV1}/*`, csrf({ origin: env.BETTER_AUTH_URL }));
   meRoute(app, { db, now });
+
+  // The calendar (v0.2). Its tables have row-level security, so its routes get
+  // `c.var.asUser` (one transaction as the signed-in user) from `userScope`.
+  // `/x/*` covers `/x` itself too.
+  const scoped = userScope(db);
+  for (const prefix of [paths.groups, paths.series, paths.calendar]) {
+    app.use(`${prefix}/*`, scoped);
+  }
+  groupsRoutes(app);
+  seriesRoutes(app, { db });
+  calendarRoute(app);
 
   // The built PWA, in production (STATIC_DIR). Last, so it never shadows the API.
   if (env.STATIC_DIR) staticSite(app, env.STATIC_DIR, logger);

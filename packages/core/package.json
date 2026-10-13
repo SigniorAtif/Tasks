@@ -14,7 +14,8 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "temporal-polyfill": "1.0.5"
+    "temporal-polyfill": "1.0.5",
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "5.0.3",

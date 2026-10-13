@@ -1,0 +1,286 @@
+/* The time grid (TimeGrid.tsx, OccurrenceBlock.tsx).
+
+   Geometry comes from CSS variables the components set, not from pixel
+   numbers computed in React: `--px-per-min` on the grid, and on each block
+   `--start` and `--len` (minutes), `--col`, `--cols` and `--span` (its columns,
+   from model/layout.ts) and `--c` (its group colour). So `top` is "start
+   minute × pixels per minute", and changing the zoom is one variable.
+
+   Colours are the `--grid-*` and `--palette-*` variables in src/index.css,
+   which already switch for dark mode. Plain CSS rather than Tailwind classes
+   because almost every rule here is a calculation on those variables. */
+
+.tg {
+  --axis-width: 3.25rem;
+  /* One hour's height. */
+  --hour: calc(60px * var(--px-per-min));
+  position: relative;
+  overflow-y: auto;
+  /* Scrolling to the end of the grid never scrolls the page or pulls to refresh. */
+  overscroll-behavior: contain;
+  background: var(--grid-surface);
+  color: var(--grid-text);
+}
+
+/* The day names, stuck to the top while the hours scroll under them. */
+.tg-head,
+.tg-body {
+  display: grid;
+  grid-template-columns: var(--axis-width) repeat(var(--days), minmax(0, 1fr));
+}
+
+.tg-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--grid-surface);
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.tg-day-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 0 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--grid-text-muted);
+}
+
+.tg-day-head .tg-date {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--grid-text);
+}
+
+.tg-day-head[data-today] {
+  color: var(--grid-today);
+  font-weight: 600;
+}
+
+.tg-day-head[data-today] .tg-date {
+  background: var(--grid-today);
+  /* The surface colour reads well on the accent in both themes. */
+  color: var(--grid-surface);
+}
+
+/* The hours down the left. */
+.tg-axis {
+  position: relative;
+  height: calc(24 * var(--hour));
+}
+
+.tg-hour-label {
+  position: absolute;
+  top: calc(var(--h) * var(--hour));
+  right: 0.375rem;
+  /* Centred on its hour line. */
+  transform: translateY(-50%);
+  font-size: 0.6875rem;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--grid-text-muted);
+}
+
+/* One day: blocks are positioned inside it. The hour lines are a background
+   image repeated every hour, cheaper than 24 elements per day. */
+.tg-day {
+  position: relative;
+  height: calc(24 * var(--hour));
+  border-left: 1px solid var(--grid-line);
+  background-image: linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 100% var(--hour);
+}
+
+.tg-day[data-today] {
+  background-color: color-mix(in oklab, var(--grid-today) 4%, var(--grid-surface));
+}
+
+/* A block. Its width is its share of the columns in its cluster. `--lane` is
+   the share of the day the cluster may use: all of it, or 85% when the
+   cluster sits over a cancelled block, so the stripes stay visible (D-077). */
+.tg-block {
+  --lane: 100%;
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--start) * var(--px-per-min) * 1px);
+  /* At least 22 px, so even a 15-minute block can be read and tapped. */
+  height: max(22px, calc(var(--len) * var(--px-per-min) * 1px - 2px));
+  left: calc(var(--col) / var(--cols) * var(--lane));
+  width: calc(var(--span) / var(--cols) * var(--lane) - 3px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow: hidden;
+  padding: 2px 4px 2px 5px;
+  border: 0;
+  border-left: 3px solid var(--c);
+  border-radius: 6px;
+  /* Mixing in oklab, not oklch: oklch would also blend the hue, and an
+     orange mixed into the bluish dark surface would come out purple. */
+  background: color-mix(in oklab, var(--c) 20%, var(--grid-surface));
+  color: var(--grid-text);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tg-block:hover {
+  background-color: color-mix(in oklab, var(--c) 28%, var(--grid-surface));
+}
+
+/* A visible ring outside the block, so stripes never hide it. */
+.tg-block:focus-visible {
+  z-index: 5;
+  outline: 2px solid var(--grid-today);
+  outline-offset: 2px;
+}
+
+/* A short block puts its title and time on one line. */
+.tg-block[data-short] {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+/* Cut at midnight: square corners where it continues on the next column. */
+.tg-block[data-cut-before] {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.tg-block[data-cut-after] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.tg-block[data-over-cancelled] {
+  --lane: 85%;
+}
+
+/* Cancelled blocks sit behind the rest at full width and never take a column. */
+.tg-block[data-layer="background"] {
+  z-index: 0;
+  left: 0;
+  width: calc(100% - 3px);
+}
+
+.tg-title,
+.tg-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-title {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.tg-block[data-short] .tg-title {
+  flex-shrink: 1;
+}
+
+.tg-meta {
+  color: var(--grid-text-muted);
+}
+
+/* "Moved", "Extra": a small word, not just a colour. */
+.tg-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--grid-text-muted);
+}
+
+/* Not held (a holiday, or the prof cancelled): grey stripes, a faded edge,
+   the title struck through and a "Cancelled" pill. States differ by pattern,
+   border and words, never by colour alone. Whole-pixel stripe widths avoid
+   shimmering on phones with fractional pixel ratios. */
+.tg-block[data-status="cancelled"] {
+  background-color: var(--grid-surface-muted);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--grid-stripe) 0 2px,
+    transparent 2px 9px
+  );
+  border-left-color: color-mix(in oklab, var(--c) 35%, var(--grid-surface-muted));
+  color: var(--grid-text-muted);
+}
+
+.tg-block[data-status="cancelled"] .tg-title {
+  text-decoration: line-through;
+}
+
+/* Skipped (my choice): stripes in the group's colour and a dashed edge. */
+.tg-block[data-reason="skipped"] {
+  background-color: color-mix(in oklab, var(--c) 8%, var(--grid-surface-muted));
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklab, var(--c) 35%, transparent) 0 2px,
+    transparent 2px 9px
+  );
+  border-left-style: dashed;
+  border-left-color: var(--c);
+}
+
+/* The state word sits on a solid pill, so the stripes never run under text. */
+.tg-pill {
+  margin-top: 1px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--grid-surface);
+  color: var(--grid-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
+/* The current time, across today's column. */
+.tg-now {
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--now) * var(--px-per-min) * 1px);
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--grid-now);
+  pointer-events: none;
+}
+
+.tg-now::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--grid-now);
+}
+
+/* Windows high-contrast mode drops backgrounds: keep the states apart by border. */
+@media (forced-colors: active) {
+  .tg-block {
+    border: 1px solid CanvasText;
+  }
+
+  .tg-block[data-status="cancelled"] {
+    border-style: dashed;
+  }
+
+  .tg-now,
+  .tg-now::before {
+    background: Highlight;
+  }
+}

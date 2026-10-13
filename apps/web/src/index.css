@@ -9,3 +9,73 @@ html {
   /* No grey flash on Android when a button is tapped. */
   -webkit-tap-highlight-color: transparent;
 }
+
+/* The account panel (src/components/AccountMenu.tsx) is a popover, which the
+   browser centres on the screen by default. Put it under the avatar instead:
+   below the title bar, at the right edge of the app's column (72rem wide at
+   most, centred, see src/routes/__root.tsx). */
+.account-menu {
+  inset: auto;
+  top: calc(env(safe-area-inset-top) + 3.25rem);
+  right: max(calc(env(safe-area-inset-right) + 0.75rem), calc(50vw - 36rem + 0.75rem));
+  margin: 0;
+}
+
+/* The calendar's colours, as CSS variables, with one value for light mode and
+   one for dark. Most values are Tailwind's own shades (named in comments), so
+   the grid matches the rest of the app.
+
+   Group colours: one `--palette-<token>` per token in @tasks/core's
+   COLOR_TOKENS, read by src/calendar/model/palette.ts. A token added to the
+   core needs a line in both blocks below. Each was checked to be at least 3.5:1 against the grid's
+   surface, so a block's 3 px coloured edge stays visible (WCAG asks 3:1 for
+   shapes that carry meaning), and the text colour on the 20% tint behind a
+   block is at least 12:1. Light mode uses darker shades (600, or 700 where
+   the 600 was too pale), dark mode lighter ones (400). */
+:root {
+  --grid-surface: oklch(100% 0 0); /* white */
+  --grid-surface-muted: oklch(96.8% 0.007 247.896); /* slate-100, behind cancelled blocks */
+  --grid-line: oklch(92.9% 0.013 255.508); /* slate-200, the hour lines */
+  --grid-text: oklch(20.8% 0.042 265.755); /* slate-900 */
+  --grid-text-muted: oklch(44.6% 0.043 257.281); /* slate-600 */
+  --grid-stripe: oklch(0% 0 0 / 0.12); /* the grey of "cancelled" stripes */
+  --grid-now: oklch(57.7% 0.245 27.325); /* red-600, the now line */
+  --grid-today: oklch(51.1% 0.262 276.966); /* indigo-600, today's date */
+
+  --palette-blue: oklch(54.6% 0.245 262.881); /* blue-600 */
+  --palette-sky: oklch(58.8% 0.158 241.966); /* sky-600 */
+  --palette-teal: oklch(60% 0.118 184.704); /* teal-600 */
+  --palette-green: oklch(52.7% 0.154 150.069); /* green-700 */
+  --palette-lime: oklch(53.2% 0.157 131.589); /* lime-700 */
+  --palette-amber: oklch(55.5% 0.163 48.998); /* amber-700 */
+  --palette-orange: oklch(64.6% 0.222 41.116); /* orange-600 */
+  --palette-red: oklch(57.7% 0.245 27.325); /* red-600 */
+  --palette-pink: oklch(59.2% 0.249 0.584); /* pink-600 */
+  --palette-violet: oklch(54.1% 0.281 293.009); /* violet-600 */
+  --palette-neutral: oklch(55.4% 0.046 257.417); /* slate-500, for an unknown token */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grid-surface: oklch(20.8% 0.042 265.755); /* slate-900 */
+    --grid-surface-muted: oklch(27.9% 0.041 260.031); /* slate-800 */
+    --grid-line: oklch(27.9% 0.041 260.031); /* slate-800 */
+    --grid-text: oklch(96.8% 0.007 247.896); /* slate-100 */
+    --grid-text-muted: oklch(70.4% 0.04 256.788); /* slate-400 */
+    --grid-stripe: oklch(100% 0 0 / 0.1);
+    --grid-now: oklch(70.4% 0.191 22.216); /* red-400 */
+    --grid-today: oklch(67.3% 0.182 276.935); /* indigo-400 */
+
+    --palette-blue: oklch(70.7% 0.165 254.624); /* blue-400 */
+    --palette-sky: oklch(74.6% 0.16 232.661); /* sky-400 */
+    --palette-teal: oklch(77.7% 0.152 181.912); /* teal-400 */
+    --palette-green: oklch(79.2% 0.209 151.711); /* green-400 */
+    --palette-lime: oklch(84.1% 0.238 128.85); /* lime-400 */
+    --palette-amber: oklch(82.8% 0.189 84.429); /* amber-400 */
+    --palette-orange: oklch(75% 0.183 55.934); /* orange-400 */
+    --palette-red: oklch(70.4% 0.191 22.216); /* red-400 */
+    --palette-pink: oklch(71.8% 0.202 349.761); /* pink-400 */
+    --palette-violet: oklch(70.2% 0.183 293.541); /* violet-400 */
+    --palette-neutral: oklch(70.4% 0.04 256.788); /* slate-400 */
+  }
+}
