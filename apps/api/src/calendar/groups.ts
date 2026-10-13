@@ -3,7 +3,7 @@
 // `scope.userId` itself (D-034: one forgotten filter is never a leak).
 
 import type { createGroupSchema, ScheduleGroup, updateGroupSchema } from '@tasks/core';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { z } from 'zod';
 import { scheduleGroup } from '../db/schema.ts';
 import type { UserScope } from '../db/user-scope.ts';
@@ -72,4 +72,20 @@ export async function deleteGroup(scope: UserScope, id: string): Promise<boolean
     .where(mine(scope, id))
     .returning({ id: scheduleGroup.id });
   return deleted.length > 0;
+}
+
+/**
+ * Deletes this user's groups with any of these names, and their series: how
+ * the seed script replaces a timetable it wrote before. Returns how many went.
+ */
+export async function deleteGroupsNamed(
+  scope: UserScope,
+  names: readonly string[],
+): Promise<number> {
+  if (names.length === 0) return 0;
+  const deleted = await scope.tx
+    .delete(scheduleGroup)
+    .where(and(eq(scheduleGroup.userId, scope.userId), inArray(scheduleGroup.name, [...names])))
+    .returning({ id: scheduleGroup.id });
+  return deleted.length;
 }
