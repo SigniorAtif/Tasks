@@ -98,6 +98,26 @@ Format: what was decided → why → alternatives considered.
   - a local production deploy takes 12 s.
 - **Status:** built and tested locally; not deployed yet. The four open defaults were confirmed on 2026-10-12: A6 (Google + allowlist; hand-built auth waits for the v1.5 machine tokens), A8 (Drizzle 0.45 + `pg`), A10 (RLS arrives with v0.2's first data tables, earlier than planned) and A11 (`--no-ff` merges, CI Postgres via `services:`, coverage gate on recurrence only).
 
+### ADR v0.2 · The readable calendar (2026-10-14)
+- **Decision:** my timetable on the home screen, built on v0.0 and v0.1 with these choices:
+  - **Server-side expansion (B6).** `GET /api/v1/calendar?from&to` runs the recurrence engine and returns finished occurrences. The engine stays in shared code, so the PWA could run it later without a rewrite.
+  - **A 62-day window (B7), answered with 422.** A too-wide window is readable but wrong, which is what `validation_failed` (422) means in our contract; 400 stays "couldn't even parse it". No new error code.
+  - **Row-level security (A10).** The three calendar tables force a `user_id` policy. Each request runs in a transaction that names the user (`set_config('app.user_id', …, true)`) and switches to a non-owner `tasks_app` role. Composite `(user_id, parent_id)` foreign keys guard links between rows, since foreign-key checks ignore RLS. Queries still filter by `user_id` too.
+  - **Client-made UUIDv7 ids (D-034, D-042).** A retried create with the same id returns the existing row (200), so flaky Wi-Fi can't make duplicates; an id someone else holds is a new `conflict` code (409).
+  - **One rulebook (D-041).** zod schemas in `packages/core` validate request bodies on the server and the class form in the browser.
+  - **A custom render-only grid (B10, D-076, D-077).** Interval-partitioning layout, cancelled occurrences on a background layer, a fixed 10-colour palette, 12-hour times, weeks from Monday, the full 24 hours scrolled to `max(now − 1 h, 07:00)`, a day view under 768 px and a week view above, ±8 weeks of navigation (B11).
+  - **Offline reads (D-046).** TanStack Query's cache is saved to IndexedDB and restored before the first screen draws; a badge says "offline · last synced 2:02 PM". Writes stay online-only until v0.3 (D-048).
+  - **A public timetable file format, private data (D-020, amended).** `fixtures/sample-timetable.json` is made up; my real timetable lives in git-ignored `private/` and reaches only my local database through a seed script that refuses anything but `localhost`.
+- **Why:** the smallest version that shows my real week correctly on a phone, keeps other people's data out of reach even when a query forgets its filter, and opens on campus without signal.
+- **Alternatives considered:** FullCalendar v7 behind the same `TimeGridProps` adapter (kept as the fallback); client-side expansion; app-only `user_id` filtering (what v0.0 did); caching `/api` in the service worker; an `Idempotency-Key` table.
+- **Numbers at the end of v0.2:**
+  - 438 tests (core 132, API 157 against real Postgres, web 149);
+  - recurrence branch coverage 98.1%;
+  - my real timetable checked against the hand-made golden weeks: 5 weeks, 105 classes, 0 differences, through the API, the phone day view and the laptop week view;
+  - a cold open on a simulated slow 4G link (1.6 Mbps, 150 ms) draws the first class in about 3.0 s, and a warm open in about 0.4 s. This was measured on the laptop through a local Caddy, so it's an estimate; the phone measurement waits for the server;
+  - the web bundle is 558 KB (176 KB compressed), mostly the Temporal polyfill.
+- **Status:** built and tested locally, in a PR stacked on v0.0's. The B6, B7, B10 and B11 defaults are mine to confirm.
+
 ---
 
 ## 4. Debates & pushback (how I handled feedback)
@@ -124,6 +144,7 @@ Format: what was decided → why → alternatives considered.
 | No free LLM via ChatGPT | Addressed | Algorithmic-first; provider interface; free-tier / BYO-key options |
 | Mobile capture speed (widgets, share sheet are native-only) | **Open** | PWA first; native wrapper later if needed |
 | Timetable formats vary wildly | Parked | Support KIIT format first if built |
+| The API's database login is a superuser, so RLS stops forgotten filters but not arbitrary SQL | **Open** | A separate non-superuser login for the API before a second real person signs in |
 
 ---
 
@@ -198,3 +219,11 @@ Format: what was decided → why → alternatives considered.
 - Still to do before the v0.0 demo ("merge a PR, and 3 minutes later the phone shows the new SHA"): the Google OAuth client, the server, Cloudflare DNS, the GitHub secrets and branch protection, the first deploy, and installing the app on my phone.
 
 ![The /me screen of the production image on localhost, signed in as a made-up test user](docs/journey/v0.0-me-phone.png)
+
+### 2026-10-13 · v0.2 readable calendar, built locally
+- Settled the contracts first again (request schemas, the palette, three tables and the row-level security migration), then built the API, the calendar grid, and the class form with offline reads in parallel against them.
+- Loaded my real timetable into the local database only, and checked five weeks of it against my hand-checked golden weeks, at phone and laptop size.
+- Checked the production image on the laptop: the right commit on `/healthz`, and with the network cut, the app still opens from the saved copy, with the offline badge.
+- Two bugs found on the way: an impossible date (`2026-02-30`) crashed the calendar window check, and the offline badge pushed the buttons off a phone's title bar.
+
+![The week view with the made-up sample timetable](docs/journey/v0.2-calendar-sample.png)
