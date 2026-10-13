@@ -208,8 +208,8 @@ describe('GET /api/v1/calendar', () => {
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     const problem = await json<Problem>(response);
     expect(problem.code).toBe('validation_failed');
-    // The fields named (a badly formatted date currently gets two messages from core).
-    expect([...new Set(problem.errors?.map((error) => error.path))]).toEqual(paths);
+    // Exactly one error per field named: a bad date gets one message, not two.
+    expect(problem.errors?.map((error) => error.path)).toEqual(paths);
   });
 
   it('needs a session', async () => {
