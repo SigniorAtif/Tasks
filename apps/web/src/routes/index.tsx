@@ -49,20 +49,27 @@ function HomeScreen() {
           </span>
         }
         trailing={
-          <span className="flex shrink-0 items-center gap-2">
-            <SyncBadge />
-            <Link
-              to="/series/new"
-              aria-label="Add a class"
-              className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-            >
-              <span aria-hidden="true" className="text-base leading-none">
-                +
-              </span>
-              <span className="hidden sm:inline">Add class</span>
-            </Link>
-            <AccountMenu user={me.data.user} />
-          </span>
+          <>
+            {/* On a phone the title bar has no room for it, so it gets a line of its
+                own under the buttons; from 1024 px it stays here, before them. Empty
+                (zero height) while online and up to date. */}
+            <div className="order-last basis-full lg:order-none lg:basis-auto">
+              <SyncBadge />
+            </div>
+            <span className="flex shrink-0 items-center gap-2">
+              <Link
+                to="/series/new"
+                aria-label="Add a class"
+                className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+              >
+                <span aria-hidden="true" className="text-base leading-none">
+                  +
+                </span>
+                <span className="hidden sm:inline">Add class</span>
+              </Link>
+              <AccountMenu user={me.data.user} />
+            </span>
+          </>
         }
       />
     </main>
