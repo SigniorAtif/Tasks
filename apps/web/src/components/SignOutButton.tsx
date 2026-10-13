@@ -2,8 +2,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useState } from 'react';
 import { authClient } from '../lib/auth-client.ts';
+import { forgetCachedData } from '../lib/persist.ts';
 
-/** Ends the session on the server, forgets the cache, and goes to the login screen. */
+/**
+ * Ends the session on the server, forgets the cache (in memory and the copy
+ * saved on the device), and goes to the login screen.
+ */
 export function SignOutButton() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -23,8 +27,9 @@ export function SignOutButton() {
       setBusy(false);
       return;
     }
-    // Forget everything cached for this user, then show the login screen.
-    queryClient.clear();
+    // Forget everything cached for this user, on the device too, so nothing of
+    // theirs is left for whoever uses the phone next. Then show the login screen.
+    await forgetCachedData(queryClient);
     await router.navigate({ to: '/login', replace: true });
   }
 
