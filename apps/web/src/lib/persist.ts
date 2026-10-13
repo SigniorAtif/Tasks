@@ -1,16 +1,21 @@
 // Keeping the query cache on the phone, so the app opens offline (D-046, D-048).
 //
 // TanStack Query's cache lives in memory and is gone when the app closes. Here
-// a "persister" writes a copy of it to IndexedDB, the browser's database
-// on the device, about a second after every change, and puts it back into memory when the app starts.
-// So on a train with no signal, the app still opens with your name and the weeks
-// you looked at recently, and a badge says when they were last fetched.
+// a "persister" writes a copy of it to IndexedDB (the browser's database on the
+// device) about a second after every change, and puts it back into memory when
+// the app starts. So on a train with no signal, the app still opens with your
+// name and the weeks you looked at recently, and a badge says when they were
+// last fetched.
 //
 // The service worker still never caches /api: this copy is the only one (D-046).
 
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import type { Query, QueryClient } from '@tanstack/react-query';
-import { type AsyncStorage, persistQueryClient } from '@tanstack/react-query-persist-client';
+import {
+  type AsyncStorage,
+  type PersistedClient,
+  persistQueryClient,
+} from '@tanstack/react-query-persist-client';
 import { del, get, set } from 'idb-keyval';
 
 /**
@@ -37,18 +42,22 @@ const PERSISTED_KEYS: ReadonlySet<unknown> = new Set(['me', 'groups', 'series', 
 const STORAGE_KEY = 'tasks-query-cache';
 
 /**
- * Whether one cached query goes into the saved copy. Only answers that worked
- * (a failure has nothing worth showing later), only the keys above (never
- * `healthz`), and only ones fetched in the last `CACHE_MAX_AGE_MS`, so weeks you
- * stopped looking at fall out instead of piling up forever.
+ * Whether one cached query goes into the saved copy. Only the keys above (never
+ * `healthz`); only queries holding an answer (one that never worked has nothing
+ * to show later); and only answers from the last `CACHE_MAX_AGE_MS`, so weeks
+ * you stopped looking at fall out instead of piling up forever.
+ *
+ * Not "only successful ones", TanStack Query's default: a refetch that fails
+ * offline marks the query `error` but keeps its answer. Dropping it then would
+ * delete the very copy the next offline open needs.
  */
 export function shouldPersistQuery(
   query: Pick<Query, 'queryKey' | 'state'>,
   now: number = Date.now(),
 ): boolean {
   return (
-    query.state.status === 'success' &&
     PERSISTED_KEYS.has(query.queryKey[0]) &&
+    query.state.data !== undefined &&
     now - query.state.dataUpdatedAt <= CACHE_MAX_AGE_MS
   );
 }
@@ -59,6 +68,30 @@ export const dehydrateOptions = {
   // Writes are online-only in v0.2 (D-048): no queued mutation is ever saved.
   shouldDehydrateMutation: () => false,
 };
+
+/**
+ * Saves each query as its last good answer: a query whose latest refetch failed
+ * is stored as a plain success with that answer, without the failure. The
+ * failure belongs to that moment (and an error object doesn't survive JSON
+ * anyway); restored, the answer is shown and fetched again as usual.
+ */
+export function lastGoodAnswers(client: PersistedClient): PersistedClient {
+  const queries = client.clientState.queries.map((query) =>
+    query.state.status === 'error'
+      ? {
+          ...query,
+          state: {
+            ...query.state,
+            status: 'success' as const,
+            error: null,
+            fetchFailureCount: 0,
+            fetchFailureReason: null,
+          },
+        }
+      : query,
+  );
+  return { ...client, clientState: { ...client.clientState, queries } };
+}
 
 /** The three `idb-keyval` functions the persister needs. Tests pass an in-memory map instead. */
 export interface KeyValueStore {
@@ -76,15 +109,22 @@ export function toAsyncStorage(store: KeyValueStore): AsyncStorage<string> {
   };
 }
 
-/** `idb-keyval`'s default database (`keyval-store`), opened the first time it's used. */
-const indexedDbStore: KeyValueStore = { get, set, del };
+/**
+ * The persister: saves the whole cache as one JSON string under one key.
+ * `throttleTime`: save at most once per that many ms, so a refetch of every
+ * query on screen is one write, not ten.
+ */
+export function createPersister(store: KeyValueStore, throttleTime = 1_000) {
+  return createAsyncStoragePersister({
+    storage: toAsyncStorage(store),
+    key: STORAGE_KEY,
+    throttleTime,
+    serialize: (client) => JSON.stringify(lastGoodAnswers(client)),
+  });
+}
 
-const persister = createAsyncStoragePersister({
-  storage: toAsyncStorage(indexedDbStore),
-  key: STORAGE_KEY,
-  // Save at most once a second: a refetch of every query on screen is one write, not ten.
-  throttleTime: 1_000,
-});
+/** `idb-keyval`'s default database (`keyval-store`), opened the first time it's used. */
+const persister = createPersister({ get, set, del });
 
 /**
  * Puts the saved copy back into `queryClient`, then keeps saving it after every
