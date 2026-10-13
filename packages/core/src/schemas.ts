@@ -35,10 +35,13 @@ function isRealDate(value: string): boolean {
   }
 }
 
-/** `YYYY-MM-DD`, and a day that exists (`2026-02-30` doesn't). */
+/**
+ * `YYYY-MM-DD`, and a day that exists (`2026-02-30` doesn't). The format check
+ * aborts, so `13/10/2026` gets one message, not a second "not a real date".
+ */
 export const isoDateSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date like 2026-10-13')
+  .regex(/^\d{4}-\d{2}-\d{2}$/, { error: 'must be a date like 2026-10-13', abort: true })
   .refine(isRealDate, 'is not a real date');
 
 /** `HH:MM` on a 24-hour clock. Seconds aren't accepted: the calendar works in minutes. */
@@ -221,6 +224,10 @@ export const updateSeriesSchema = z
 export const calendarQuerySchema = z
   .object({ from: isoDateSchema, to: isoDateSchema })
   .superRefine(({ from, to }, ctx) => {
+    // zod runs this even when a date above already failed its own check (only
+    // type errors stop it), and counting the days of `2026-02-30` would throw.
+    // Those dates already have their error; there's nothing more to say.
+    if (!isRealDate(from) || !isRealDate(to)) return;
     if (to < from) {
       ctx.addIssue({ code: 'custom', path: ['to'], message: 'must be on or after from' });
     } else if (daysInclusive(from, to) > MAX_CALENDAR_DAYS) {

@@ -184,4 +184,13 @@ describe('the calendar window', () => {
     ]);
     expect(failedPaths(calendarQuerySchema, { from: '2026-10-18' })).toEqual(['to']);
   });
+
+  it('names a date that does not exist instead of throwing', () => {
+    expect(failedPaths(calendarQuerySchema, { from: '2026-02-30', to: '2026-03-01' })).toEqual([
+      'from',
+    ]);
+    expect(failedPaths(calendarQuerySchema, { from: '13/10/2026', to: '2026-10-20' })).toEqual([
+      'from',
+    ]);
+  });
 });
