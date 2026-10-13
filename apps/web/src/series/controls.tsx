@@ -9,6 +9,7 @@
 
 import { COLOR_TOKENS, type ColorToken, type Weekday } from '@tasks/core';
 import type { ReactNode, Ref } from 'react';
+import { groupColor } from '../calendar/model/palette.ts';
 import { WEEKDAYS } from './form-values.ts';
 
 /** The look of every text, date, time, number and select input. 16px text: iOS zooms in on less. */
@@ -133,22 +134,6 @@ export function DayToggles({
   );
 }
 
-// Tailwind only ships classes it finds written out in full, so each colour's
-// class is spelled here rather than built as `bg-${token}-500`. The token names
-// were chosen to match Tailwind's palette names.
-const SWATCH_CLASS: Record<ColorToken, string> = {
-  blue: 'bg-blue-500',
-  sky: 'bg-sky-500',
-  teal: 'bg-teal-500',
-  green: 'bg-green-500',
-  lime: 'bg-lime-500',
-  amber: 'bg-amber-500',
-  orange: 'bg-orange-500',
-  red: 'bg-red-500',
-  pink: 'bg-pink-500',
-  violet: 'bg-violet-500',
-};
-
 /** "violet" → "Violet": the name a screen reader says for a swatch. */
 const colorName = (token: ColorToken) => token.charAt(0).toUpperCase() + token.slice(1);
 
@@ -193,7 +178,10 @@ export function ColorSwatches({
             />
             <span
               aria-hidden="true"
-              className={`block size-9 rounded-full ${SWATCH_CLASS[token]} ring-offset-2 ring-offset-white peer-checked:ring-2 peer-checked:ring-slate-900 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-indigo-600 dark:ring-offset-slate-950 dark:peer-checked:ring-white`}
+              // The calendar's own palette variables (src/index.css), so a swatch
+              // is exactly the colour the group's blocks get, in either theme.
+              style={{ backgroundColor: groupColor(token) }}
+              className={`block size-9 rounded-full ring-offset-2 ring-offset-white peer-checked:ring-2 peer-checked:ring-slate-900 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-indigo-600 dark:ring-offset-slate-950 dark:peer-checked:ring-white`}
             />
             <span className="sr-only">{colorName(token)}</span>
           </label>
