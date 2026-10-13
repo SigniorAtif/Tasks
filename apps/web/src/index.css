@@ -10,6 +10,17 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* The account panel (src/components/AccountMenu.tsx) is a popover, which the
+   browser centres on the screen by default. Put it under the avatar instead:
+   below the title bar, at the right edge of the app's column (72rem wide at
+   most, centred, see src/routes/__root.tsx). */
+.account-menu {
+  inset: auto;
+  top: calc(env(safe-area-inset-top) + 3.25rem);
+  right: max(calc(env(safe-area-inset-right) + 0.75rem), calc(50vw - 36rem + 0.75rem));
+  margin: 0;
+}
+
 /* The calendar's colours, as CSS variables, with one value for light mode and
    one for dark. Most values are Tailwind's own shades (named in comments), so
    the grid matches the rest of the app.
