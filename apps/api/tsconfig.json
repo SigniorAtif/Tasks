@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The API runs on Node, so it may use Node's built-in modules and globals.
+    "types": ["node"]
+  },
+  "include": ["src", "vitest.config.ts", "drizzle.config.ts"]
+}

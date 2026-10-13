@@ -1,0 +1,9 @@
+{
+  // Checks the config files that Node runs at build time (not shipped to the
+  // browser). They may use Node's `process`, but not the DOM.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts", "vitest.config.ts", "pwa-assets.config.ts"]
+}

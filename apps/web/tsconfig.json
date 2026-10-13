@@ -1,0 +1,19 @@
+{
+  // Checks the code that runs in the browser (src/). Config files that run in
+  // Node (vite.config.ts and friends) are checked by tsconfig.node.json instead,
+  // so browser code can't accidentally use Node globals like `process`.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The browser has the DOM (document, fetch, Intl) on top of plain JavaScript.
+    "lib": ["es2024", "dom", "dom.iterable"],
+    // Vite bundles the imports, so resolve them the way a bundler does.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    // React 19's automatic JSX runtime: no `import React` needed in .tsx files.
+    "jsx": "react-jsx",
+    // `import.meta.env` and asset imports (vite/client); the service worker's
+    // `virtual:pwa-register` module (vite-plugin-pwa/client).
+    "types": ["vite/client", "vite-plugin-pwa/client"]
+  },
+  "include": ["src"]
+}

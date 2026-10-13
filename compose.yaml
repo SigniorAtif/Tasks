@@ -1,0 +1,33 @@
+# Local development database only. Production has its own compose file.
+#   Start:  docker compose up -d --wait db   (`pnpm dev` does this for you)
+#   Stop:   docker compose down               (add -v to also delete the data)
+
+# A fixed project name, so every checkout of the repo (and every git worktree)
+# shares one database and one volume instead of one per folder name.
+name: tasks-dev
+
+services:
+  db:
+    # Pinned to the exact minor version; bump it on purpose, not by accident.
+    image: postgres:18.6
+    environment:
+      POSTGRES_USER: tasks
+      POSTGRES_PASSWORD: tasks
+      POSTGRES_DB: tasks
+    ports:
+      # 127.0.0.1 only: reachable from this machine, not from the rest of the network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Postgres 18 images keep their data under /var/lib/postgresql/18/docker,
+      # so the volume goes on the parent folder (mounting .../data is rejected).
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # Over TCP on purpose: during first-time setup Postgres runs briefly on a
+      # Unix socket only, and a socket check would call it "ready" too early.
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--username=tasks", "--dbname=tasks"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  db-data:

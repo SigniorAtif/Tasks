@@ -1,0 +1,190 @@
+# Checks every pull request (and every push to a release branch). Branch protection on
+# main requires these jobs to pass, so a PR with a type error, a failing test or a leaked
+# secret can't be merged. The five jobs run side by side; the slowest takes ~3 minutes.
+#
+# Third-party actions are pinned to a full commit SHA (the comment says which release):
+# a tag like v7 can be moved to different code later, a commit SHA can't.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ["release/**"]
+
+# The token CI gets can read the code and nothing else.
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the run for the push before it.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Naming bash explicitly also turns on pipefail: a failure anywhere in `a | b` fails the step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Lint, typecheck and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installs the pnpm version named in package.json's packageManager.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          # Keeps pnpm's download cache between runs, keyed on pnpm-lock.yaml.
+          cache: pnpm
+      - id: install
+        run: pnpm install --frozen-lockfile
+      - name: Lint and format (Biome)
+        run: pnpm check
+      # The next steps run even if an earlier check failed, so one run shows every problem.
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm typecheck
+      - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm build
+
+  test-apps:
+    name: Test API and web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # A real Postgres for the API's integration tests, started before the steps run.
+    services:
+      postgres:
+        image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+        env:
+          POSTGRES_USER: tasks
+          POSTGRES_PASSWORD: tasks
+          POSTGRES_DB: tasks_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready --username=tasks --dbname=tasks_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://tasks:tasks@localhost:5432/tasks_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Every package under apps/; core has its own job below.
+      - name: API and web tests
+        run: pnpm --filter "./apps/*" run test
+
+  test-core:
+    name: Test core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The engine must give the same answers whatever the machine's own time zone is.
+      - name: Core tests under UTC, Asia/Kolkata and America/New_York
+        run: pnpm --filter @tasks/core run test:tz
+      - name: Coverage gate (90% of the recurrence engine's branches)
+        run: pnpm --filter @tasks/core run coverage
+
+  secrets:
+    name: Scan for secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: a secret deleted in a later commit is still in the old one.
+          fetch-depth: 0
+          persist-credentials: false
+      # The same pinned image you can run locally (deploy/README.md), so CI and your
+      # machine apply the same rules. It reads .gitleaks.toml if the repo has one.
+      - name: gitleaks
+        run: >-
+          docker run --rm -v "$PWD:/repo"
+          zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          git /repo --redact --verbose --no-banner
+
+  image:
+    name: Build and boot the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+        env:
+          POSTGRES_USER: tasks
+          POSTGRES_PASSWORD: tasks
+          POSTGRES_DB: tasks
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready --username=tasks --dbname=tasks"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # x86 only here, and not pushed anywhere: this proves the Dockerfile still works.
+      # Layers are cached in GitHub's cache, shared with the deploy workflow.
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: tasks:ci
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Run the image the way the box does (migrate, then serve) against the Postgres
+      # above, and check /healthz answers with this commit. Catches what a build alone
+      # can't: a file missing from the image, or TypeScript Node refuses to run.
+      - name: Boot it against Postgres
+        # The image itself sets NODE_ENV=production, so these are production-mode settings
+        # with throwaway values.
+        env:
+          DATABASE_URL: postgres://tasks:tasks@127.0.0.1:5432/tasks
+          BETTER_AUTH_URL: http://localhost:3000
+          GOOGLE_CLIENT_ID: ci-placeholder
+          GOOGLE_CLIENT_SECRET: ci-placeholder
+          AUTH_ALLOWED_EMAILS: you@example.com
+        run: |
+          # A fresh random value each run, so no secret-looking string lives in the repo.
+          BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
+          export BETTER_AUTH_SECRET
+          vars=(-e DATABASE_URL -e BETTER_AUTH_URL -e BETTER_AUTH_SECRET -e GOOGLE_CLIENT_ID
+                -e GOOGLE_CLIENT_SECRET -e AUTH_ALLOWED_EMAILS)
+          docker run --rm --network host "${vars[@]}" tasks:ci node apps/api/src/db/migrate.ts
+          docker run -d --name api --network host "${vars[@]}" tasks:ci
+          sha=""
+          for _ in $(seq 30); do
+            if body="$(curl -fsS http://127.0.0.1:3000/healthz)"; then
+              sha="$(jq -r .sha <<< "$body")"
+              break
+            fi
+            sleep 1
+          done
+          docker logs api
+          docker rm -f api > /dev/null
+          echo "/healthz reports: ${sha:-no answer}"
+          test "$sha" = "$GITHUB_SHA"

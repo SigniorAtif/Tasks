@@ -79,6 +79,25 @@ Format: what was decided → why → alternatives considered.
 - **Problem:** with default-attended, a skip that's never marked inflates attendance.
 - **Decision:** The evening shutdown shows today's classes pre-ticked as "went"; one tap flips one to "skipped." Classes not yet reviewed count as *unconfirmed*, and attendance shows as a range until they're confirmed.
 
+### ADR v0.0 · The walking-skeleton stack (2026-10-12)
+- **Decision:** v0.0 is built on this stack, the minimal one from `docs/brainstorm/00-overview.md` §1:
+  - **Repo:** one pnpm monorepo (`apps/api`, `apps/web`, `packages/core`), TypeScript 7 strict, Biome, Vitest, Node 24 as the floor.
+  - **API:** one Hono process on Node 24, which runs the TypeScript source directly (no build step). Settings checked with zod at start-up, pino logs, and one RFC 9457 error shape with stable codes (D-043).
+  - **Data:** Postgres 18 through Drizzle 0.45 + `pg`, with the generated SQL migration reviewed and committed (D-038). UUIDv7 ids. Auth tables are prefixed `auth_` (`auth_user`, `auth_session`, …) so `user` never clashes with the SQL keyword and `session` never clashes with v1's work sessions.
+  - **Auth:** Better Auth 1.7.7 inside the API, Google sign-in only, an allowlist of one checked before a user row exists, and a database-backed, host-only, 30-day sliding cookie (D-058–D-060). Every query is scoped by `user_id`; no row-level security yet, with one cross-user test.
+  - **Web:** React 19 + Vite 8, TanStack Router and Query, Tailwind 4, `vite-plugin-pwa` 2.0.0 (D-075). The service worker caches the app shell only, never `/api` (D-046).
+  - **One origin:** the API serves the built PWA, `/api/v1` and `/api/auth` (D-045). In development, Vite forwards `/api` to the API for the same effect.
+  - **Box and pipeline:** one Docker image (`node:24-alpine`), Compose with Caddy in front and Postgres on a private network (D-064). CI on every PR: Biome, typecheck, tests against a real Postgres, the time-zone matrix, the coverage gate, gitleaks, and an image build that boots. On `main`: a multi-arch image to GHCR, then `deploy.sh` (pre-deploy dump, migrate, health check on the commit SHA, rollback on failure) (D-066).
+- **Why:** it's the smallest stack that keeps every later door open. There's one language end to end, one process, one database and one box, and every piece can be explained line by line.
+- **Alternatives considered:** in the D-entries the overview proposes (§4: D-038, D-040, D-045, D-058–D-060, D-064, D-066, D-075). Not repeated here.
+- **Numbers at the end of v0.0:**
+  - 213 tests (core 102, API 77 against real Postgres, web 34);
+  - recurrence branch coverage 98.1%;
+  - a fresh clone runs with `pnpm i && pnpm dev` in about 36 s, or 7 s with a warm package store;
+  - the image is 379 MB unpacked;
+  - a local production deploy takes 12 s.
+- **Status:** built and tested locally; not deployed yet. Four defaults are still mine to confirm: A6 (Google + allowlist), A8 (Drizzle 0.45 + `pg`), A10 (no RLS yet) and A11 (`--no-ff` merges, CI Postgres via `services:`, coverage gate on recurrence only).
+
 ---
 
 ## 4. Debates & pushback (how I handled feedback)
@@ -169,3 +188,13 @@ Format: what was decided → why → alternatives considered.
 - PWA first, native app later for widgets (D-007).
 - Found a hole in the attendance design (unmarked skips) and fixed it (D-010).
 - Realised the estimation multiplier update is like a learning-rate step on the error, the same idea as training a model.
+
+### 2026-10-12 · v0.0 walking skeleton, built locally
+- Settled the shared contracts first (package names, ports, env names, the `/healthz` and `/api/v1/me` shapes). Then the API, the web app and the deploy pipeline were built in parallel against them and merged.
+- Checked end to end on this laptop:
+  - the dev stack through Vite;
+  - the production image through the production Compose file and Caddy on `localhost`;
+  - `/healthz` reports the image's commit, and Chrome reports the PWA as installable.
+- Still to do before the v0.0 demo ("merge a PR, and 3 minutes later the phone shows the new SHA"): the Google OAuth client, the server, Cloudflare DNS, the GitHub secrets and branch protection, the first deploy, and installing the app on my phone.
+
+![The /me screen of the production image on localhost, signed in as a made-up test user](docs/journey/v0.0-me-phone.png)

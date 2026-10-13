@@ -1,0 +1,4 @@
+# What deploy.sh creates when it runs from this folder (on a laptop, for a local test).
+backups/
+deploy-history.log
+.deploy.lock
