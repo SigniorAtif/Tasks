@@ -2,7 +2,12 @@
 
 A calendar and tasks hybrid for students and builders. Your fixed week stays visible, tasks and projects sit beside it, and you drag them onto free time.
 
-Status: pre-release (`0.x.x`). v0.0, the walking skeleton, is built: sign-in, a database, the installable PWA shell, the production image, CI and the deploy pipeline. Design docs live in `docs/brainstorm/`.
+Status: pre-release (`0.x.x`). Built so far:
+- v0.0, the walking skeleton: sign-in, a database, the installable PWA shell, the production image, CI and the deploy pipeline;
+- v0.1, the recurrence engine;
+- v0.2, the readable calendar: your timetable as a day view on a phone and a week view on a laptop, a form to add and edit classes, and offline reads.
+
+Design docs live in `docs/brainstorm/`.
 
 ## Quick start
 
@@ -38,6 +43,16 @@ pnpm --filter @tasks/api dev:session you@example.com
 
 It only runs when the app's origin is `localhost`.
 
+### Putting a timetable in
+
+A timetable is a small JSON file: one line per class, with its day, start, end, title and room. `fixtures/sample-timetable.json` is a made-up example of the format (`packages/core/src/timetable.ts` defines it). To load it into your local database for a user who has signed in once (or has a `dev:session`):
+
+```sh
+pnpm --filter @tasks/api seed:sample you@example.com
+```
+
+`seed:private` does the same with `private/kiit-sem3.json`, a git-ignored folder for a real timetable that must never be committed. Running a seed again replaces the groups with the same names. Both refuse to run unless the database and the app are on `localhost`.
+
 ## Commands
 
 Run from the repo root. `pnpm -r` means "in every package that has this script".
@@ -54,15 +69,18 @@ pnpm typecheck
 pnpm check       # Biome: lint and format (pnpm check:fix to apply fixes)
 ```
 
+In the API package: `pnpm --filter @tasks/api seed <file.json> [email]` (and `seed:sample`, `seed:private`) loads a timetable file into the local database.
+
 To try the installable PWA (the service worker only runs in a production build), use `pnpm build` and then `pnpm --filter @tasks/web preview`. After changing `apps/web/public/logo.svg`, regenerate the icons with `pnpm --filter @tasks/web generate-pwa-assets`.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `packages/core` | Pure TypeScript shared by every app: the shared types (`src/types.ts`), the HTTP contract (`src/api.ts`) and the recurrence engine (`src/recurrence/`). No I/O, no clock. |
-| `apps/api` | The Hono API: env validation, logging, errors, `/healthz`, Better Auth (Google + an allowlist), `/api/v1/me`, Drizzle migrations in `drizzle/`. Node runs its TypeScript directly; there is no build step. |
-| `apps/web` | The React PWA: Vite, TanStack Router and Query, Tailwind, `vite-plugin-pwa`. |
+| `packages/core` | Pure TypeScript shared by every app: the shared types (`src/types.ts`), the HTTP contract (`src/api.ts`), the request schemas both sides validate with (`src/schemas.ts`), the timetable file format (`src/timetable.ts`), the group palette and the recurrence engine (`src/recurrence/`). No I/O, no clock. |
+| `apps/api` | The Hono API: env validation, logging, errors, `/healthz`, Better Auth (Google + an allowlist), `/api/v1/me`, the calendar routes (`/api/v1/groups`, `/series`, `/calendar`), the seed script, and Drizzle migrations in `drizzle/`. The calendar tables use Postgres row-level security: each request runs as the signed-in user. Node runs its TypeScript directly; there is no build step. |
+| `apps/web` | The React PWA: Vite, TanStack Router and Query, Tailwind, `vite-plugin-pwa`. The calendar grid is in `src/calendar/`, the class form in `src/series/`; the query cache is kept in IndexedDB so recent weeks open offline. |
+| `fixtures/` | Made-up example files, such as a sample timetable. |
 | `compose.yaml` | The local development database. |
 | `Dockerfile`, `deploy/` | The production image, the production Compose stack (Caddy, API, Postgres), the deploy script and the runbook for the one-time server setup (`deploy/README.md`). |
 | `.github/workflows/` | CI on every pull request; build, push and deploy on `main`. |
