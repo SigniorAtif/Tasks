@@ -19,10 +19,13 @@ export function Avatar({
   name,
   email,
   image,
+  className = 'size-14 text-lg',
 }: {
   name: string;
   email: string;
   image: string | null;
+  /** Its size, and the initials' text size, as Tailwind classes. */
+  className?: string;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -34,14 +37,14 @@ export function Avatar({
         // Google's image server sometimes refuses requests that carry a Referer.
         referrerPolicy="no-referrer"
         onError={() => setFailed(true)}
-        className="size-14 shrink-0 rounded-full object-cover"
+        className={`${className} shrink-0 rounded-full object-cover`}
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="flex size-14 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-lg font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+      className={`${className} flex shrink-0 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300`}
     >
       {initials(name, email)}
     </span>
