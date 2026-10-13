@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root.tsx'
 import { Route as IndexRouteImport } from './routes/index.tsx'
 import { Route as LoginRouteImport } from './routes/login.tsx'
+import { Route as SeriesSeriesIdRouteImport } from './routes/series.$seriesId.tsx'
+import { Route as SeriesNewRouteImport } from './routes/series.new.tsx'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +24,49 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SeriesSeriesIdRoute = SeriesSeriesIdRouteImport.update({
+  id: '/series/$seriesId',
+  path: '/series/$seriesId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SeriesNewRoute = SeriesNewRouteImport.update({
+  id: '/series/new',
+  path: '/series/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/series/$seriesId': typeof SeriesSeriesIdRoute
+  '/series/new': typeof SeriesNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/series/$seriesId': typeof SeriesSeriesIdRoute
+  '/series/new': typeof SeriesNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/series/$seriesId': typeof SeriesSeriesIdRoute
+  '/series/new': typeof SeriesNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths: '/' | '/login' | '/series/$seriesId' | '/series/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login'
-  id: '__root__' | '/' | '/login'
+  to: '/' | '/login' | '/series/$seriesId' | '/series/new'
+  id: '__root__' | '/' | '/login' | '/series/$seriesId' | '/series/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  SeriesSeriesIdRoute: typeof SeriesSeriesIdRoute
+  SeriesNewRoute: typeof SeriesNewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +85,28 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/series/$seriesId': {
+      id: '/series/$seriesId'
+      path: '/series/$seriesId'
+      fullPath: '/series/$seriesId'
+      preLoaderRoute: typeof SeriesSeriesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/series/new': {
+      id: '/series/new'
+      path: '/series/new'
+      fullPath: '/series/new'
+      preLoaderRoute: typeof SeriesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  SeriesSeriesIdRoute: SeriesSeriesIdRoute,
+  SeriesNewRoute: SeriesNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
