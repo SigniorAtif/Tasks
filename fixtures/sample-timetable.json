@@ -1,0 +1,124 @@
+{
+  "format": "tasks.timetable",
+  "version": 1,
+  "tzid": "Asia/Kolkata",
+  "groups": [
+    {
+      "name": "Classes · Sem 3 (sample)",
+      "colorToken": "blue",
+      "activeFrom": "2026-07-13",
+      "activeTo": "2026-11-27",
+      "classes": [
+        {
+          "title": "Data Structures",
+          "location": "C-301",
+          "day": "MO",
+          "start": "08:00",
+          "end": "09:00"
+        },
+        {
+          "title": "Discrete Mathematics",
+          "location": "C-301",
+          "day": "MO",
+          "start": "09:00",
+          "end": "10:00"
+        },
+        {
+          "title": "Data Structures Lab",
+          "location": "Lab 3",
+          "day": "MO",
+          "start": "14:00",
+          "end": "16:00"
+        },
+        {
+          "title": "Discrete Mathematics",
+          "location": "C-301",
+          "day": "TU",
+          "start": "09:00",
+          "end": "10:00"
+        },
+        {
+          "title": "OOP (Java)",
+          "location": "C-204",
+          "day": "TU",
+          "start": "10:00",
+          "end": "11:00"
+        },
+        {
+          "title": "Economics",
+          "location": "C-105",
+          "day": "TU",
+          "start": "12:00",
+          "end": "13:00"
+        },
+        {
+          "title": "Data Structures",
+          "location": "C-301",
+          "day": "WE",
+          "start": "08:00",
+          "end": "09:00"
+        },
+        {
+          "title": "Digital Systems",
+          "location": "C-204",
+          "day": "WE",
+          "start": "11:00",
+          "end": "12:00"
+        },
+        {
+          "title": "Discrete Mathematics",
+          "location": "C-301",
+          "day": "TH",
+          "start": "09:00",
+          "end": "10:00"
+        },
+        {
+          "title": "OOP (Java)",
+          "location": "C-204",
+          "day": "TH",
+          "start": "10:00",
+          "end": "11:00"
+        },
+        {
+          "title": "Digital Systems Lab",
+          "location": "Lab 5",
+          "day": "TH",
+          "start": "14:00",
+          "end": "16:00",
+          "everyWeeks": 2,
+          "from": "2026-07-16"
+        },
+        {
+          "title": "Data Structures",
+          "location": "C-301",
+          "day": "FR",
+          "start": "08:00",
+          "end": "09:00"
+        },
+        {
+          "title": "Digital Systems",
+          "location": "C-204",
+          "day": "FR",
+          "start": "11:00",
+          "end": "12:00"
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "colorToken": "green",
+      "activeFrom": "2026-07-01",
+      "observesHolidays": false,
+      "attendance": false,
+      "classes": [
+        { "title": "Evening run", "day": "MO", "start": "18:00", "end": "18:45" },
+        { "title": "Evening run", "day": "TU", "start": "18:00", "end": "18:45" },
+        { "title": "Evening run", "day": "WE", "start": "18:00", "end": "18:45" },
+        { "title": "Evening run", "day": "TH", "start": "18:00", "end": "18:45" },
+        { "title": "Evening run", "day": "FR", "start": "18:00", "end": "18:45" },
+        { "title": "Evening run", "day": "SA", "start": "18:00", "end": "18:45" },
+        { "title": "Evening run", "day": "SU", "start": "18:00", "end": "18:45" }
+      ]
+    }
+  ]
+}

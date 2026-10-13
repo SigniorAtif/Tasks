@@ -45,4 +45,11 @@ export {
   updateSeriesSchema,
   wallTimeSchema,
 } from './schemas.ts';
+export {
+  TIMETABLE_FORMAT,
+  type TimetableFile,
+  type TimetableFileInput,
+  timetableFileSchema,
+  timetableToRows,
+} from './timetable.ts';
 export * from './types.ts';

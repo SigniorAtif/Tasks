@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { MiddlewareHandler } from 'hono';
+import type { AsUser } from '../db/user-scope.ts';
 import type { Logger } from '../logger.ts';
 
 /** The signed-in user, as `requireSession` leaves it for route handlers. */
@@ -22,6 +23,11 @@ export interface AppEnv {
     log: Logger;
     /** Set by `requireSession`; only routes behind it may read it. */
     user: SessionUser;
+    /**
+     * Set by `userScope` on the calendar routes only: runs a function in one
+     * transaction as the signed-in user, under row-level security.
+     */
+    asUser: AsUser;
   };
 }
 
