@@ -84,7 +84,7 @@ To try the installable PWA (the service worker only runs in a production build),
 | `compose.yaml` | The local development database. |
 | `Dockerfile`, `deploy/` | The production image, the production Compose stack (Caddy, API, Postgres), the deploy script and the runbook for the one-time server setup (`deploy/README.md`). |
 | `.github/workflows/` | CI on every pull request; build, push and deploy on `main`. |
-| `docs/brainstorm/` | Design documents. Start with `00-overview.md`. |
+| `docs/brainstorm/` | Design documents, one per area, written before the code. Decision numbers after D-010 (such as `D-034`) refer to a planning log kept outside the repo. |
 
 ## Licence
 
