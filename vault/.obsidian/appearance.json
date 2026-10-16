@@ -1,5 +1,6 @@
 {
   "enabledCssSnippets": [
-    "wide-diagrams"
+    "wide-diagrams",
+    "text-width"
   ]
 }

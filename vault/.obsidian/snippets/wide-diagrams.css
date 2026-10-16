@@ -3,7 +3,7 @@
  *
  * Obsidian draws flowchart, sequence and ER diagrams at their natural
  * width (it turns Mermaid's useMaxWidth off), but the note column is only
- * --file-line-width (700px) wide. In Live Preview each embed block also has
+ * --file-line-width wide (see text-width.css). In Live Preview each embed block also has
  * `contain: paint`, so anything wider than the column is cut off.
  *
  * This snippet lets a top-level diagram use the whole width of the pane,
