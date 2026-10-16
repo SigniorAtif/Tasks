@@ -73,7 +73,7 @@ export default defineConfig({
         // Precache the app shell only: the built HTML, JS, CSS and icons.
         // Opening the app offline then still draws a screen (D-048).
         globPatterns: ['**/*.{html,js,css,svg,png,ico}'],
-        // A navigation to any app URL (/login, a future /calendar) gets the
+        // A navigation to any app URL (/, /login, /series/<id>) gets the
         // cached index.html, and the router takes it from there...
         navigateFallback: 'index.html',
         // ...except the server's own URLs. Google's sign-in redirect lands on
