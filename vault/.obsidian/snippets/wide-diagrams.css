@@ -1,0 +1,39 @@
+/*
+ * Wide diagrams
+ *
+ * Obsidian draws flowchart, sequence and ER diagrams at their natural
+ * width (it turns Mermaid's useMaxWidth off), but the note column is only
+ * --file-line-width (700px) wide. In Live Preview each embed block also has
+ * `contain: paint`, so anything wider than the column is cut off.
+ *
+ * This snippet lets a top-level diagram use the whole width of the pane,
+ * still centred on the text column, and shrinks a diagram only when it is
+ * wider than the space it has. Text stays at the readable width.
+ */
+
+/* The note's scroll area becomes the size reference for `cqw` below. */
+.view-content > .markdown-source-view.mod-cm6 > .cm-editor > .cm-scroller,
+.view-content > .markdown-reading-view > .markdown-preview-view {
+  container-type: inline-size;
+}
+
+/*
+ * Widen the block with equal negative margins: (column - pane) / 2 on each
+ * side, minus a small gutter. min() keeps it at 0 when the column already
+ * fills the pane (narrow pane, or readable line length turned off).
+ */
+.markdown-source-view.mod-cm6 .cm-content > .cm-embed-block.cm-lang-mermaid {
+  margin-inline: min(0px, (100% - 100cqw) / 2 + var(--size-4-2)) !important;
+}
+
+.markdown-reading-view .markdown-preview-sizer > div > .mermaid {
+  margin-inline: min(0px, (100% - 100cqw) / 2 + var(--size-4-2));
+}
+
+/* Shrink to fit (anywhere: callouts, embeds, hover previews, PDF export). */
+.mermaid > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
