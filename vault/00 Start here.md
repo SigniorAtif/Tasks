@@ -15,7 +15,6 @@ This vault explains the planner app: what each part does, why it was chosen, wha
 | `app/` | How **our** app works: overviews, walkthroughs, and one note per part of the code, file by file | You want to understand our code |
 | `foundations/` | **General** technical ideas, explained from zero with examples from our app, grouped by subject (`web/`, `server/`, `database/`, `browser/`, `time/`, `tooling/`, `shipping/`, `algorithms/`). True in any project, not just ours. The [[Glossary]] lives here too | A word or idea in an `app/` note is new to you |
 | `decisions/` | One note per choice we made: the options, and why the others lost | You wonder "why not X?" |
-| `study/` | [[Study plan]] and [[Course map]] (how your course maps onto this project) | Planning your learning |
 
 **Every note says what to read before it**, on its first line:
 - `app/` notes have **Background:** the foundation notes they rely on.
