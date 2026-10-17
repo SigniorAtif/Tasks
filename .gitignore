@@ -13,8 +13,7 @@ ruvector.db
 # Personal learning vault (Obsidian). The notes are shared, and so is the look:
 # the CSS snippets (text width, diagram fit), the themes, and the file that
 # turns them on. Obsidian's per-machine state (open tabs, graph zoom, plugins
-# and the connector's reading history) and the old session handoffs stay local.
-vault/handoffs/
+# and the connector's reading history) stays local.
 vault/tools/__pycache__/
 vault/.trash/
 vault/.obsidian/*
