@@ -11,12 +11,14 @@ ruvector.db
 .idea/
 
 # Personal learning vault (Obsidian), kept local. Only its look is shared:
-# the CSS snippets (text width, diagram fit) and the list that turns them on.
+# the CSS snippets (text width, diagram fit), the themes, and the file that
+# turns them on.
 vault/*
 !vault/.obsidian/
 vault/.obsidian/*
 !vault/.obsidian/appearance.json
 !vault/.obsidian/snippets/
+!vault/.obsidian/themes/
 
 # Dependencies and build output
 node_modules/
