@@ -10,11 +10,13 @@ ruvector.db
 .vscode/
 .idea/
 
-# Personal learning vault (Obsidian), kept local. Only its look is shared:
+# Personal learning vault (Obsidian). The notes are shared, and so is the look:
 # the CSS snippets (text width, diagram fit), the themes, and the file that
-# turns them on.
-vault/*
-!vault/.obsidian/
+# turns them on. Obsidian's per-machine state (open tabs, graph zoom, plugins
+# and the connector's reading history) and the old session handoffs stay local.
+vault/handoffs/
+vault/tools/__pycache__/
+vault/.trash/
 vault/.obsidian/*
 !vault/.obsidian/appearance.json
 !vault/.obsidian/snippets/
