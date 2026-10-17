@@ -1,11 +1,11 @@
 # Start here
 
-This vault explains the planner app: what each part does, why it was chosen, what the alternatives were, and how it works, down to the details. It lives in the repo folder but is git-ignored, so it's never committed.
+This vault explains the planner app: what each part does, why it was chosen, what the alternatives were, and how it works, down to the details. It lives in the repo's `vault/` folder and is committed like the code. The repo is public, so examples use the made-up sample timetable, never your real one.
 
 - **Where to begin:** [[01 Reading order]], the guide: which notes to read, in which order.
 - **Stuck on a word?** [[Glossary]]: every technical term in one line, linked to the note that explains it.
 - **New to TypeScript?** [[TypeScript essentials]]: the language every file is written in, explained with our own code. Read it before anything else.
-- **State of the work:** v0.0 is in PR #4 and v0.2 (the readable calendar, stacked on it) in PR #5; what's left is your one-time server setup (`deploy/README.md`) and the phone checks. Newest overview: [[v0.2 in plain words]]. Past session handoffs are archived in `handoffs/` (latest: [[Handoff v0.2 (2026-10-13)]]); new ones come from `/handoff` in Claude Code, which saves to `/tmp` (gone after a reboot).
+- **State of the work:** v0.0, v0.1 and v0.2 are merged; v0.3 (cancelling and groups) is next. Still waiting: your one-time server setup (`deploy/README.md`) and the phone checks. Newest overview: [[v0.2 in plain words]]. Past session handoffs are archived in `handoffs/` (latest: [[Handoff v0.2 (2026-10-13)]]); new ones come from `/handoff` in Claude Code, which saves to `/tmp` (gone after a reboot).
 
 ## How the vault is organised
 
