@@ -2,14 +2,14 @@
 
 > **Builds on:** [[HTTP basics]] · [[Error responses]] · [[Environment variables and config]]
 
-How a server decides whether a request's data is acceptable, and turns it into something the rest of the code can trust. [[Environment variables and config]] already used zod for settings at start-up; from v0.2 the same tool checks every request body and query string.
+How a server decides whether a request's data is acceptable, and turns it into something the rest of the code can trust. [[Environment variables and config]] already used zod for settings at start-up; from v0.2, the same tool checks every request body and query string.
 
 ## Never trust the client
 
 Anything can arrive at the API:
 - **our own app with a bug** (the form forgot to fill a field);
 - **an old copy of the app** still installed on someone's phone, sending last month's shape;
-- **someone with `curl`**, sending whatever JSON they like. The browser's checks don't exist for them.
+- **someone with `curl`**, sending whatever JSON they like. For them, the browser's checks don't exist.
 
 The server is the one place a check can't be skipped. So every body and query string is checked **on the server, every time**, even when the form already checked it.
 
@@ -25,12 +25,12 @@ What "wrong" looks like with series:
 
 ## Parse, don't validate
 
-Two attitudes to checking:
+There are two attitudes to checking:
 
 - **Validate:** look at the data, answer yes or no, and carry on holding the same unchecked value. The type system still knows nothing about it, so later code checks again "to be safe", or forgets to.
 - **Parse:** turn the unknown input into a **typed value**, or fail with a list of everything that's wrong. After parsing, the handler holds a series whose `durationMin` is a number of at least 1, and TypeScript knows it. Nothing downstream has to wonder.
 
-The phrase comes from Alexis King's essay "Parse, don't validate" (2019). The tool that does the parsing is a **schema**: a description of the shape and rules data must follow, written once as code, that can both check data and produce its TypeScript type. (Not the same as a *database* schema, the list of tables: same word, different thing.)
+The phrase comes from Alexis King's essay "Parse, don't validate" (2019). The tool that does the parsing is a **schema**: a description of the shape and rules data must follow, written once as code, that can both check data and produce its TypeScript type. (This isn't a *database* schema, the list of tables. Same word, different thing.)
 
 ```mermaid
 flowchart TD
@@ -47,7 +47,7 @@ flowchart TD
 
 ## zod in one screen
 
-**zod** is the schema library we use, in both the API and the app. An illustration, simpler than our real schemas in `packages/core/src/schemas.ts`:
+**zod** is the schema library we use, in both the API and the app. Here's an illustration, simpler than our real schemas in `packages/core/src/schemas.ts`:
 
 ```ts
 import { z } from 'zod';
@@ -106,17 +106,17 @@ createSeries.safeParse({
 ```
 
 - **Every problem at once**, not just the first, so a form can mark all the bad fields in one go.
-- **Cross-field rules don't always wait.** A `.refine` on the whole object is skipped only after a *type* error (a field of the wrong type, a missing field, a value outside an enum). After a field's own `.regex`, `.min` or `.refine` fails, the object's rule **still runs**, on the bad value. Send an `untilDate` before the start date *and* a duration of `-30`, and you get both errors at once. So an object rule must never assume its fields are valid: our calendar window check once crashed on `2026-02-30` for exactly this reason ([[Calendar API]], "A pitfall we hit").
+- **Cross-field rules don't always wait.** A `.refine` on the whole object is skipped only after a *type* error (a field of the wrong type, a missing field, a value outside an enum). After a field's own `.regex`, `.min` or `.refine` fails, the object's rule **still runs**, on the bad value. Send an `untilDate` before the start date *and* a duration of `-30`, and you get both errors at once. So an object rule must never assume its fields are valid. Our calendar window check once crashed on `2026-02-30` for exactly this reason ([[Calendar API]], "A pitfall we hit").
 - Our API turns those issues into the `errors` list of a `422` body, joining each path with dots: `rule.byDay` (`validationFailed` in `apps/api/src/http/errors.ts`).
 
 ## z.input and z.output
 
 A schema has two types, because parsing can change the value:
 
-- **`z.input<typeof createSeries>`**: what a client may **send**. `subject`, `untilDate` and `interval` are optional.
-- **`z.output<typeof createSeries>`** (also called `z.infer`): what the handler **gets** after parsing. `subject` is always a string (filled from the title), `untilDate` is a string or `null`, `interval` is a number.
+- **`z.input<typeof createSeries>`** is what a client may **send**. `subject`, `untilDate` and `interval` are optional.
+- **`z.output<typeof createSeries>`** (also called `z.infer`) is what the handler **gets** after parsing. `subject` is always a string (filled from the title), `untilDate` is a string or `null`, and `interval` is a number.
 
-Our contracts export the *input* types (`CreateSeries = z.input<typeof createSeriesSchema>`), because the app is the one writing requests: the form needs to know what it may leave out.
+Our contracts export the *input* types (`CreateSeries = z.input<typeof createSeriesSchema>`), because the app is the one writing requests, and the form needs to know what it may leave out.
 
 ## One schema for the form and the server
 
@@ -141,16 +141,16 @@ export function checkCreateSeries(input: CreateSeries): Problems {
     const input = await jsonBody(c, createSeriesSchema);
 ```
 
-Both files import `createSeriesSchema` from `@tasks/core`: one object, used twice. The form turns its issues into messages under each field (`problemsFromErrors`); the server turns the same issues into a `422` (`jsonBody`, below).
+Both files import `createSeriesSchema` from `@tasks/core`: one object, used twice. The form turns its issues into messages under each field (`problemsFromErrors`), and the server turns the same issues into a `422` (`jsonBody`, below).
 
-One definition means the two can't disagree. If the longest allowed class becomes 600 minutes, the form and the server change in the same commit. With two hand-written copies, the form would eventually accept something the server refuses, and you'd find out from a confusing error after tapping Save.
+One definition means the two can't disagree. If the longest allowed class becomes 600 minutes, the form and the server change in the same commit. With two hand-written copies, the form would sooner or later accept something the server refuses, and you'd find out from a confusing error after tapping Save.
 
 ## 400 or 422
 
 Our API reads a body in two steps (`apps/api/src/http/json-body.ts`):
 
-1. **Is it JSON at all?** `{"title": "DBMS",` (cut off mid-way) → **`400 malformed_request`**. There's no field to point at; the sending program is broken.
-2. **Does it match the schema?** `{"durationMin": -30}` → **`422 validation_failed`**, with one `errors` entry per field. Something a person can fix in a form.
+1. **Is it JSON at all?** `{"title": "DBMS",` (cut off mid-way) gets **`400 malformed_request`**. There's no field to point at; the sending program is broken.
+2. **Does it match the schema?** `{"durationMin": -30}` gets **`422 validation_failed`**, with one `errors` entry per field. That's something a person can fix in a form.
 
 *From `apps/api/src/http/json-body.ts` (shortened):*
 ```ts
@@ -169,21 +169,22 @@ Our API reads a body in two steps (`apps/api/src/http/json-body.ts`):
 ```
 
 What to notice:
-- One `try`/`catch` per step: `c.req.json()` throwing means "not JSON" (400); `safeParse` failing means "JSON, but wrong" (422).
-- `raw: unknown` is "parse, don't validate" in TypeScript: nothing may use a field of `raw` until the schema has turned it into `result.data`, the typed value with its defaults filled in.
+- There's one `try`/`catch` per step: `c.req.json()` throwing means "not JSON" (400), and `safeParse` failing means "JSON, but wrong" (422).
+- `raw: unknown` is "parse, don't validate" in TypeScript. Nothing may use a field of `raw` until the schema has turned it into `result.data`, the typed value with its defaults filled in.
 
 Query strings go through the second step too: `GET /api/v1/calendar?from=2026-10-12&to=2027-01-01` asks for more than 62 days and gets `422`, with the error on `to`.
 
 ## What a schema can't check
 
-A schema sees one request, alone. It can't know whether `groupId` names a group that exists, or one that's *yours*. Facts about other rows are the database's job: foreign keys (composite ones, see [[Row-level security]]), CHECK constraints such as `rule->>'freq' in ('daily', 'weekly')`, and unique constraints.
+A schema sees one request, alone. It can't know whether `groupId` names a group that exists, let alone one that's *yours*. Facts about other rows are the database's job: foreign keys (composite ones, see [[Row-level security]]), CHECK constraints such as `rule->>'freq' in ('daily', 'weekly')`, and unique constraints.
 
 So there are three layers, each for a reason: the **form** (fast feedback), the **API's schema** (the real gate), and the **database's constraints** (the last line, which holds even if the API has a bug).
 
 ## Why zod
 
-- **Why:** the most widely used TypeScript schema library, so answers exist for every question; we already used it for settings; and zod 4 can export a schema as JSON Schema (`z.toJSONSchema`), which is what the planned OpenAPI document needs (D-041).
-- **Alternatives:** Valibot (same idea, smaller bundles, fewer users), ArkType (fast, unusual syntax), TypeBox (writes JSON Schema directly), hand-written `if`s (no types out, and every rule written twice).
+zod is the most widely used TypeScript schema library, so answers exist for every question. We already used it for settings. And zod 4 can export a schema as JSON Schema (`z.toJSONSchema`), which is what the planned OpenAPI document needs (D-041).
+
+What lost: Valibot (the same idea, smaller bundles, fewer users), ArkType (fast, unusual syntax), TypeBox (writes JSON Schema directly), and hand-written `if`s (no types out, and every rule written twice).
 
 ## Check yourself
 - The form sends `{"durationMin": "60"}`, a string. Which status and `errors` entry come back? Would changing the schema to `z.coerce.number()` be a good fix?

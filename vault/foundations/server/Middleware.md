@@ -2,7 +2,7 @@
 
 > **Builds on:** [[HTTP basics]]
 
-A **middleware** is a function every request passes through on its way to the route that answers it. It can look at the request, add something to it, stop it with an answer of its own, or let it continue by calling `next()`. Code after `await next()` runs on the way back, when the response exists.
+A **middleware** is a function every request passes through on its way to the route that answers it. It can look at the request, add something to it, stop it with an answer of its own, or let it continue by calling `next()`. Code after `await next()` runs on the way back, once the response exists.
 
 ```ts
 app.use(async (c, next) => {
@@ -14,9 +14,9 @@ app.use(async (c, next) => {
 
 ## The onion
 
-Picture the KIIT campus gate, then the building's reception, then the classroom door. You pass all three on the way in and all three on the way out, in reverse order. A middleware stack is the same: the first one registered is the outermost layer.
+Picture the KIIT campus gate, then the building's reception, then the classroom door. You pass all three on the way in, and all three on the way out, in reverse order. A middleware stack works the same way: the first one registered is the outermost layer.
 
-Our stack, outermost first (full table in [[API server]]): request id → security headers → body size limit → (routes for `/healthz` and `/api/auth/*`) → session gate → CSRF check → the `/me` route.
+Our stack, outermost first (the full table is in [[API server]]): request id → security headers → body size limit → (routes for `/healthz` and `/api/auth/*`) → session gate → CSRF check → the `/me` route.
 
 What each kind of middleware does:
 
@@ -27,7 +27,7 @@ What each kind of middleware does:
 | `bodyLimit` | Can stop the request | A 300 KB upload never reaches a route: 413 |
 | `requireSession` | Can stop the request; adds to it | No cookie → 401; otherwise sets `user` for the route |
 
-Here is the real `requestContext`, cut down to its shape. Compare it with the sketch at the top of this note:
+Here's the real `requestContext`, cut down to its shape. Compare it with the sketch at the top of this note:
 
 *From `apps/api/src/http/context.ts` (shortened):*
 ```ts
@@ -47,13 +47,13 @@ export function requestContext(logger: Logger): MiddlewareHandler<AppEnv> {
 ```
 
 What to notice:
-- `requestContext(logger)` isn't the middleware itself: it *returns* one (the `async (c, next) => …` function). That's how a middleware gets settings, here the logger, while still having the `(c, next)` shape Hono expects.
+- `requestContext(logger)` isn't the middleware itself; it *returns* one (the `async (c, next) => …` function). That's how a middleware gets settings, here the logger, while keeping the `(c, next)` shape Hono expects.
 - `c` is the **context**: this one request, plus a place to put things. `c.set('requestId', …)` before `next()` lets every later layer read it with `c.get('requestId')`.
 - `c.header(...)` after `next()` changes the response that came back up through the layers.
 
 ## Why not put this code in each route?
 
-Because then every route must remember it. Forget the session check once and that route is open to the internet. A middleware on `/api/*` protects every route under it, including ones written next year. The same goes for logging and request ids: one place, always on.
+Because then every route has to remember it. Forget the session check once, and that route is open to the internet. A middleware on `/api/*` protects every route under it, including the ones written next year. The same goes for logging and request ids: one place, always on.
 
 ## Order matters
 
@@ -73,7 +73,7 @@ In our app, the order is simply the order of the lines in `createApp`:
   meRoute(app, { db, now });
 ```
 
-The first argument, when there is one, says where a middleware applies: none means every request, `'/api/*'` means every path under `/api`. Move the `meRoute` line above `requireSession` and the gate would never run for `/me`: the route answers first, finds no `user` set, and crashes with a 500. A route that didn't need `user` would simply answer strangers.
+The first argument, when there is one, says where a middleware applies: none means every request, and `'/api/*'` means every path under `/api`. Move the `meRoute` line above `requireSession`, and the gate would never run for `/me`. The route would answer first, find no `user` set, and crash with a 500. A route that didn't need `user` would quietly answer strangers.
 
 ## Check yourself
 - `requestContext` measures the duration around `await next()`. If the session gate rejects a request with 401, is that request logged? With which status?
