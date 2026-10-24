@@ -2,9 +2,9 @@
 
 > **Builds on:** [[HTTP basics]] · [[Postgres and SQL basics]]
 
-To talk to Postgres, a program opens a **connection**: a network link plus a login. Opening one takes several round trips (tens of milliseconds, more if the database is far away) and Postgres spends memory on each one it holds open.
+To talk to Postgres, a program opens a **connection**: a network link plus a login. Opening one takes several round trips (tens of milliseconds, more if the database is far away), and Postgres spends memory on every connection it holds open.
 
-A **connection pool** opens a few connections and keeps them. A request **borrows** one, runs its queries, and **gives it back** for the next request. Like the college library's reading room: a fixed number of seats, people sit, read, leave; nobody builds a new chair per visitor.
+A **connection pool** opens a few connections and keeps them. A request **borrows** one, runs its queries, and **gives it back** for the next request. Think of the college library's reading room: a fixed number of seats, and people sit, read and leave. Nobody builds a new chair per visitor.
 
 ## Our settings (`apps/api/src/db/pool.ts`)
 
@@ -14,7 +14,7 @@ A **connection pool** opens a few connections and keeps them. A request **borrow
 | `connectionTimeoutMillis` | 5 s | When the database is down, fail fast instead of hanging the request |
 | `idleTimeoutMillis` | 30 s | Close connections nobody has used for a while |
 
-If all 10 are busy, the 11th request waits in line until one is returned (or the 5 s timeout hits).
+If all 10 are busy, the 11th request waits in line until one comes back (or the 5 s timeout hits).
 
 *From `apps/api/src/db/pool.ts`:*
 ```ts
@@ -32,13 +32,13 @@ export function createPool(connectionString: string): Pool {
 }
 ```
 
-`Pool` comes from `pg`, the Postgres driver for Node. Creating it opens nothing yet: connections are opened the first time a query needs one, up to `max`. `5_000` is just `5000`; the underscore is a digit separator for readability.
+`Pool` comes from `pg`, the Postgres driver for Node. Creating it opens nothing yet: connections open the first time a query needs one, up to `max`. `5_000` is just `5000`; the underscore is a digit separator, there for your eyes only.
 
 ## Things that follow from pooling
 
 - **One pool per process**, created in `main.ts` and passed around. Drizzle and Better Auth both use it.
-- **Idle connections can break** (Postgres restarts, the network blips). The pool reports this as an `error` event; without a listener Node would crash, so `main.ts` logs it.
-- **Close it on shutdown** (`pool.end()`), or the process waits for open connections and Docker eventually kills it.
+- **Idle connections can break** when Postgres restarts or the network blips. The pool reports this as an `error` event, and without a listener Node would crash, so `main.ts` logs it.
+- **Close it on shutdown** (`pool.end()`), or the process waits on open connections until Docker loses patience and kills it.
 - **The health check borrows one too:** `/healthz` runs `select 1` with a 2-second cap and answers 503 if it doesn't come back.
 - **Tests use their own pool** to `tasks_test`, one per test file, closed when the file ends.
 
@@ -62,9 +62,9 @@ const auth = createAuth({ env, db, logger });
 ```
 
 What to notice:
-- One `createPool` call for the whole process. Drizzle (`createDb`) wraps it, and Better Auth gets that same `db`, so both borrow from the same 10 connections.
-- `pool.on('error', …)` registers a listener for the pool's `error` event: the error is logged instead of crashing the server.
-- `server.close` first stops taking new requests and waits for the running ones; only then does `pool.end()` close the connections.
+- There's one `createPool` call for the whole process. Drizzle (`createDb`) wraps it, and Better Auth gets that same `db`, so both borrow from the same 10 connections.
+- `pool.on('error', …)` registers a listener for the pool's `error` event, so the error is logged instead of crashing the server.
+- `server.close` first stops taking new requests and waits for the running ones. Only then does `pool.end()` close the connections.
 
 ## Check yourself
 - Postgres goes down for a minute. What does `/healthz` answer during that minute, and how long does each request take to find out?
