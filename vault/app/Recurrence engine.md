@@ -2,7 +2,7 @@
 
 > **Background:** [[Dates, times and instants]] · [[Time zones and daylight saving]] · [[Testing pure code]]
 
-Turns stored rules into the classes and habits you see on the calendar. Milestone v0.1; design in `docs/brainstorm/01-recurrence.md` §5. It's **pure**: no database, no network, no clock. It takes data in and returns data out, so it's easy to test and the server, the web app and the CLI can all run the same code.
+The engine turns stored rules into the classes and habits you see on the calendar. Milestone v0.1; the design is in `docs/brainstorm/01-recurrence.md` §5. It's **pure**: no database, no network, no clock. It takes data in and returns data out, so it's easy to test, and the server, the web app and the CLI can all run the same code.
 
 Read first: [[Core types]], [[Dates, times and instants]].
 
@@ -21,7 +21,7 @@ flowchart LR
   zone --> out(["Occurrence list, sorted by start"])
 ```
 
-**Precedence, the one rule to memorise:** an explicit action on one occurrence beats a bulk rule, which beats the series rule. *Override > day exception > series rule.* For example, a class you explicitly marked "it's on" stays on even if a holiday is added later.
+**Precedence, the one rule to memorise:** an explicit action on one occurrence beats a bulk rule, which beats the series rule. *Override > day exception > series rule.* So a class you explicitly marked "it's on" stays on, even if a holiday is added later.
 
 ## Files
 
@@ -38,8 +38,8 @@ flowchart LR
 ## Step 1: dates (`ruleDates`, `seriesDates`)
 
 - **Daily, every N days.** Count from the series start. Instead of walking day by day, jump straight to the first aligned day in the window (`Math.ceil(daysSinceStart / N)` steps), so the loop costs one step per occurrence.
-- **Weekly, every N weeks on some weekdays.** Weeks are counted from the **Monday of the series' start week** (the *anchor*). Find the window's first Monday; if it's an "off" week, skip ahead to the next "on" week; then emit the chosen weekdays of every N-th week.
-- **Clipping.** The effective range is *series start..until* ∩ *group active range* ∩ *window*, all inclusive. The phase always comes from the series start, never the clipped start: if the semester's group starts a week later, a fortnightly lab still falls in the same weeks.
+- **Weekly, every N weeks on some weekdays.** Weeks are counted from the **Monday of the series' start week** (the *anchor*). Find the window's first Monday. If it's an "off" week, skip ahead to the next "on" week. Then emit the chosen weekdays of every N-th week.
+- **Clipping.** The effective range is *series start..until* ∩ *group active range* ∩ *window*, all inclusive. The phase always comes from the series start, never from the clipped start, so if the semester's group starts a week later, a fortnightly lab still falls in the same weeks.
 
 The first two bullets are `ruleDates`. It gets the rule, the `anchor` (the series start) and the already-clipped range `lo..hi`:
 
@@ -78,11 +78,11 @@ The first two bullets are `ruleDates`. It gets the rule, the `anchor` (the serie
 
 What to notice:
 - Daily, "every 3 days" from 5 Oct with the window starting 9 Oct: 4 days since the anchor, `Math.ceil(4 / 3) = 2` steps, so the first date is 5 Oct + 6 = 11 Oct. No walking through 6, 7, 8…
-- Weekly: `offPhase` is "how many weeks into the cycle is the window's first Monday?". If it's not 0, jump ahead to the next "on" week; after that the loop steps `interval` weeks at a time, so it never visits an "off" week.
+- Weekly: `offPhase` is "how many weeks into the cycle is the window's first Monday?". If it's not 0, jump ahead to the next "on" week. After that the loop steps `interval` weeks at a time, so it never visits an "off" week.
 - `[...new Set(rule.byDay)]` drops a repeated day, and `.sort` puts the days in Monday-first order, so dates come out ascending within each week.
 - The inner `if` matters for the first and last week: the window may start on a Wednesday, so that week's Monday must not slip in.
 
-The third bullet, clipping, is `seriesDates`. Note that `start` (not `lo`) is what goes to `ruleDates` as the anchor:
+The third bullet, clipping, is `seriesDates`. Notice that `start` (not `lo`) is what goes to `ruleDates` as the anchor:
 
 *From `packages/core/src/recurrence/dates.ts` (shortened):*
 ```ts
@@ -98,19 +98,19 @@ The third bullet, clipping, is `seriesDates`. Note that `start` (not `lo`) is wh
   return ruleDates(series.rule, start, lo, hi);
 ```
 
-`later` and `earlier` pick the later or earlier of two dates. An intersection of ranges is just "the latest start and the earliest end"; if that leaves `lo` after `hi`, `ruleDates` returns nothing.
+`later` and `earlier` pick the later or the earlier of two dates. An intersection of ranges is just "the latest start and the earliest end", and if that leaves `lo` after `hi`, `ruleDates` returns nothing.
 
-Worked example (test E3): every 2 weeks on Monday, starting **Tuesday** 6 Oct. The anchor week is Mon 5 Oct, which is "on", but 5 Oct is before the start. So the first class is Mon 19 Oct, then 2 Nov, 16 Nov, 30 Nov.
+A worked example (test E3): every 2 weeks on Monday, starting **Tuesday** 6 Oct. The anchor week is Mon 5 Oct, which is "on", but 5 Oct is before the start. So the first class is Mon 19 Oct, then 2 Nov, 16 Nov and 30 Nov.
 
 ## Steps 2–4: `expand(input)`
 
-Input: groups, series, overrides, day exceptions and a date window. It works in **three passes**:
+The input is groups, series, overrides, day exceptions and a date window, and it works in **three passes**:
 
 1. **Generated dates in the window.** For each series, each date from step 1 gets its override (looked up by key) and the day layer, then times. If an override moved it *out* of the window, it's dropped here.
-2. **Moved in from outside.** An occurrence originally on 19 Oct but moved to 10 Oct belongs in the week of 5–11 Oct, yet pass 1 never saw it (its original date isn't in the window). Pass 2 scans overrides whose *new* date is in the window and whose original isn't.
-3. **Extras.** Make-up classes: exactly where the user put them, untouched by holidays or group ranges.
+2. **Moved in from outside.** An occurrence originally on 19 Oct but moved to 10 Oct belongs in the week of 5–11 Oct, yet pass 1 never saw it, because its original date isn't in the window. Pass 2 scans overrides whose *new* date is in the window and whose original isn't.
+3. **Extras.** Make-up classes, exactly where the user put them, untouched by holidays or group ranges.
 
-The three loops, with the middle of passes 2 and 3 cut (pass 2 is shown whole, line by line, in [[v0.1 in plain words]]):
+Here are the three loops, with the middle of passes 2 and 3 cut (pass 2 is shown whole, line by line, in [[v0.1 in plain words]]):
 
 *From `packages/core/src/recurrence/expand.ts` (shortened):*
 ```ts
@@ -144,10 +144,10 @@ The three loops, with the middle of passes 2 and 3 cut (pass 2 is shown whole, l
 
 What to notice:
 - `modified` is a `Map` from occurrence key to override, built once before the loops. Pass 1 finds a date's override with one lookup, `modified.get(occurrenceKey(...))`, instead of searching the whole list every time.
-- Pass 1 pushes only if `inWindow(occ.date)`; pass 2 only if the original date is *outside* the window. Together they make sure a moved class appears exactly once, wherever you look from.
-- Pass 3 calls `resolveExtra`, not `resolve`: no day exception or group range is consulted at all.
+- Pass 1 pushes only if `inWindow(occ.date)`, and pass 2 only if the original date is *outside* the window. Together they make sure a moved class appears exactly once, wherever you look from.
+- Pass 3 calls `resolveExtra`, not `resolve`, so no day exception or group range is consulted at all.
 
-Then it sorts by real start time, with the key as a tie-breaker so the order is always the same.
+Then it sorts by real start time, with the key as a tie-breaker, so the order is always the same.
 
 ### The layers for one occurrence (`resolve`)
 
@@ -157,7 +157,7 @@ Then it sorts by real start time, with the key as a tie-breaker so the order is 
   - override says `scheduled` → scheduled, whatever else is true;
   - otherwise, if the group observes holidays, there's a day exception on the *original* date, and the user hasn't placed this occurrence (no new date or time) → cancelled with the exception's effect, origin `holiday`, and its label.
 - **Carry-through:** `confirmedAt` and `note` are copied from the override as they are. A note never counts as "placed" and never touches the status, so a note-only override still lets a holiday cancel the class (test "a note alone still lets the holiday apply"; property "notes are inert").
-- **Zone** (`withTimes`): date + time + zone → `ZonedDateTime` with the `'compatible'` rule, `end = start + duration` in real minutes, `dstShifted` if the clock time had to move. See [[Time zones and daylight saving]].
+- **Zone** (`withTimes`): date + time + zone → `ZonedDateTime` with the `'compatible'` rule, `end = start + duration` in real minutes, and `dstShifted` if the clock time had to move. See [[Time zones and daylight saving]].
 
 "Place it" and "Status", in `resolve`:
 
@@ -191,7 +191,7 @@ Then it sorts by real start time, with the key as a tie-breaker so the order is 
 What to notice:
 - `ov?.newDate ?? null`: `ov` may be `undefined` (no override for this date). `?.` returns `undefined` instead of crashing, and `?? null` turns that into `null`. See [[TypeScript essentials]].
 - `moved` compares the *result* with the rule, so an override that "moves" a class to the time it already had doesn't count as moved.
-- Precedence is the order of the `if`s: the user's `cancelled` is checked first; `else if (ov?.status !== 'scheduled')` means an explicit "it's on" skips the holiday check entirely.
+- Precedence is the order of the `if`s. The user's `cancelled` is checked first, and `else if (ov?.status !== 'scheduled')` means an explicit "it's on" skips the holiday check entirely.
 - `placed` looks only at `newDate` and `newStartTime`. `note` isn't in it, which is exactly why a note-only override still lets a holiday cancel the class.
 - The holiday is looked up with `original.toString()`, the date the rule generated, never the date the class was moved to.
 
@@ -215,13 +215,13 @@ What to notice:
   };
 ```
 
-- `toZonedDateTime(tzid)` with no options uses Temporal's default, `'compatible'`: a time in a gap moves forward, a time that happens twice takes the first.
+- `toZonedDateTime(tzid)` with no options uses Temporal's default, `'compatible'`: a time in a gap moves forward, and a time that happens twice takes the first.
 - `dstShifted` compares the wall clock Temporal actually produced with the one asked for. In Kolkata they're always equal.
 - `.toInstant().toString()` writes the moment in UTC with a `Z`, which is how every `Instant` leaves the engine.
 
 ### Inputs it refuses
 
-`expand` throws on a window that ends before it starts, a series whose group wasn't passed in, an invalid rule (an interval of 0 would loop forever), an unknown zone like `IST`, or a raw offset like `+05:30`. Failing loudly on caller bugs beats returning a quietly wrong calendar. It *ignores* overrides for series it wasn't given: callers may pass a broad set.
+`expand` throws on a window that ends before it starts, a series whose group wasn't passed in, an invalid rule (an interval of 0 would loop forever), an unknown zone like `IST`, or a raw offset like `+05:30`. Failing loudly on caller bugs beats returning a quietly wrong calendar. It *ignores* overrides for series it wasn't given, so callers may pass a broad set.
 
 The offset check is the engine's own, because Temporal itself would happily accept `+05:30`:
 
@@ -236,20 +236,20 @@ function assertZoneName(tzid: string): void {
 }
 ```
 
-`/^[+-]/` is a regular expression: "starts with `+` or `-`". Zone names never do, offsets always do. `IST` needs no check here: Temporal throws on it as soon as a time is converted in that zone.
+`/^[+-]/` is a regular expression meaning "starts with `+` or `-`". Zone names never do, and offsets always do. `IST` needs no check here: Temporal throws on it as soon as a time is converted in that zone.
 
 ## Splits: `splitSeries`
 
 "From 19 Oct, DBMS is at 11:00." Past classes carry attendance, so they must not change. The plan:
 
-- **Split on or before the start** → nothing in the past: update in place (`in_place`).
-- **Otherwise** end the old series the day before (never *extending* it if it already ended earlier), and start a new one linked by `previousSeriesId` (`split`).
+- **Split on or before the start** → nothing in the past, so update in place (`in_place`).
+- **Otherwise**, end the old series the day before (never *extending* it if it already ended earlier), and start a new one linked by `previousSeriesId` (`split`).
   - **Same rule:** the new half starts on the old rule's **first real occurrence** on or after the split. That keeps "every 2 weeks" in the same weeks. Starting it on the split date itself can flip the phase (test S1).
   - **New rule:** it starts on its first matching weekday on or after the split.
 - **Nothing left after the split** → just end the old series (`end_only`).
-- Overrides on or after the split move to the new series if it still generates their date (`rekeyed`); otherwise they're `orphaned`, so the UI can ask: "2 changes on Mondays won't apply any more."
+- Overrides on or after the split move to the new series if it still generates their date (`rekeyed`). Otherwise they're `orphaned`, so the UI can ask: "2 changes on Mondays won't apply any more."
 
-It returns a *plan*, not database writes: the API (v0.3b) applies it in one transaction. The new series' id comes from the caller, because making a UUID needs randomness and the clock, which core doesn't touch.
+It returns a *plan*, not database writes, and the API (v0.3b) applies it in one transaction. The new series' id comes from the caller, because making a UUID needs randomness and the clock, which core doesn't touch.
 
 The decision points, in order:
 
@@ -284,13 +284,13 @@ The decision points, in order:
 
 What to notice:
 - `{ ...series, ...changes }` copies the series, then lets `changes` overwrite the fields it has. Nothing is modified in place; each plan holds new objects.
-- "Same rule" asks `seriesDates` for the *old* series' first date from the split onwards: its real next occurrence, so the phase is kept. `[0]` is `undefined` when no date is left, one of the two ways to reach `end_only`.
+- "Same rule" asks `seriesDates` for the *old* series' first date from the split onwards: its real next occurrence, so the phase is kept. `[0]` is `undefined` when no date is left, which is one of the two ways to reach `end_only`.
 - The last loop sorts each override into one of two lists with a single expression: `(condition ? rekeyed : orphaned).push(o.id)`.
-- The return type `SplitPlan` is a discriminated union on `kind`, like `Rule` in [[Core types]]: the caller switches on `'in_place' | 'end_only' | 'split'`.
+- The return type `SplitPlan` is a discriminated union on `kind`, like `Rule` in [[Core types]], so the caller switches on `'in_place' | 'end_only' | 'split'`.
 
 ## Orphans: `findOrphans`
 
-An override whose date its series no longer generates (the series moved from Mondays to Tuesdays). Never drawn, but kept until you confirm, so nothing is silently lost.
+An orphan is an override whose date its series no longer generates (the series moved from Mondays to Tuesdays, say). It's never drawn, but it's kept until you confirm, so nothing is silently lost.
 
 *From `packages/core/src/recurrence/expand.ts` (shortened):*
 ```ts
@@ -301,11 +301,11 @@ An override whose date its series no longer generates (the series moved from Mon
   });
 ```
 
-`occursOn` is called without the group, on purpose: an override outside a shortened semester is *dormant*, not orphaned, and comes back if the semester is extended. `(o): o is ModifiedOverride` is a *type guard*: it tells TypeScript that whatever passes the filter is a `ModifiedOverride`, so the result is typed `ModifiedOverride[]`.
+`occursOn` is called without the group, on purpose: an override outside a shortened semester is *dormant*, not orphaned, and it comes back if the semester is extended. `(o): o is ModifiedOverride` is a *type guard*: it tells TypeScript that whatever passes the filter is a `ModifiedOverride`, so the result is typed `ModifiedOverride[]`.
 
 ## Trace it yourself
 
-1. Open `expand.test.ts`, test "O4: moved into the window from a date far outside it".
+1. Open `expand.test.ts`, at the test "O4: moved into the window from a date far outside it".
 2. Predict which pass produces the occurrence.
 3. Add `console.log('pass 2', o.id)` inside the pass-2 loop in `expand.ts`, run `pnpm --filter @tasks/core exec vitest run -t O4`, and check.
 4. Remove the log.

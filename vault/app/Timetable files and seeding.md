@@ -2,9 +2,9 @@
 
 > **Background:** [[Validating input with schemas]] · [[Transactions]] · [[Environment variables and config]] · [[Row-level security]]
 
-How your real KIIT timetable gets onto your own machine's database without ever being committed to a public repo (D-020, amended). Two parts: a small JSON **file format** in `packages/core/src/timetable.ts`, and a **seed script** in `apps/api` that writes a file into the database for one user. Uses [[Row-level security in our database]] and the same code paths as the [[Calendar API]]. Why the format looks like this: [[Calendar API choices]].
+How your real KIIT timetable gets into your own machine's database without ever being committed to a public repo (D-020, amended). It has two parts: a small JSON **file format** in `packages/core/src/timetable.ts`, and a **seed script** in `apps/api` that writes a file into the database for one user. It uses [[Row-level security in our database]] and the same code paths as the [[Calendar API]]. Why the format looks like this: [[Calendar API choices]].
 
-**Seeding** means filling a database with starting data by running a script, instead of typing it in through the app. Here: your semester's 20-odd classes, before the series form exists.
+**Seeding** means filling a database with starting data by running a script, instead of typing it in through the app. Here, that's your semester's 20-odd classes, before the series form exists.
 
 ## The file
 
@@ -41,7 +41,7 @@ One file describes one or more groups and their weekly class slots, the way a pr
 | class | `everyWeeks` | no | `2` = every other week, counted from the week of `from`. Default `1` |
 | class | `from`, `until` | no | First and last day this slot runs. Default: the group's `activeFrom`, and "until the group ends" |
 
-The field rules aren't written twice: the group fields **are** `createGroupSchema`'s fields, and `title`, `subject`, `location` are `createSeriesSchema`'s. So a file can never hold a value the API's own `POST` would refuse (an 81-character title, a colour outside the palette).
+The field rules aren't written twice. The group fields **are** `createGroupSchema`'s fields, and `title`, `subject` and `location` are `createSeriesSchema`'s. So a file can never hold a value the API's own `POST` would refuse (an 81-character title, a colour outside the palette).
 
 *From `packages/core/src/timetable.ts` (shortened):*
 ```ts
@@ -71,11 +71,11 @@ const classSchema = z
 What to notice:
 - `.shape` is an object schema's fields, by name. So `series.title` isn't a copy of the API's title rule; it **is** that rule, trimmed and 1 to 80 characters.
 - `createSeriesSchema` is an object followed by a `.transform` (the subject default), and a transform has no fields. `.in` is the object before it.
-- `z.strictObject` instead of `z.object`: an unknown key is an error, not silently dropped. That's the "unknown keys are refused" rule below.
+- `z.strictObject` instead of `z.object` makes an unknown key an error instead of silently dropping it. That's the "unknown keys are refused" rule below.
 
 ### One class line → one series
 
-`timetableToRows(file, newId)` turns each class line into one weekly series: `byDay: [day]`, `interval: everyWeeks`, `startTime: start`, `durationMin: end − start` (14:00–16:00 → `120`). Data Structures on Monday, Wednesday and Friday is **three lines and three series**, not one series with three days. That's how a timetable is printed, and it means "Wednesday's DS is now in room C-204" changes only that slot's series; Monday's and Friday's stay as they are. `newId` is passed in, so the function stays pure: the seed passes UUIDv7, the tests pass a counter.
+`timetableToRows(file, newId)` turns each class line into one weekly series: `byDay: [day]`, `interval: everyWeeks`, `startTime: start`, `durationMin: end − start` (14:00–16:00 → `120`). Data Structures on Monday, Wednesday and Friday is **three lines and three series**, not one series with three days. That's how a timetable is printed, and it means "Wednesday's DS is now in room C-204" changes only that slot's series, while Monday's and Friday's stay as they are. `newId` is passed in, so the function stays pure: the seed passes UUIDv7, and the tests pass a counter.
 
 *From `packages/core/src/timetable.ts` (shortened):*
 ```ts
@@ -105,7 +105,7 @@ const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.
 What to notice:
 - `{ classes, ...fields }` splits each group in two: its `classes` list, and everything else (`name`, `activeFrom`, …) in `fields`, which is exactly a group's create body.
 - `byDay: [row.day]`: one day per series, always. `minutesOf('16:00') - minutesOf('14:00')` is `960 - 840 = 120`.
-- `groupId` is made before the classes, so each series can point at its group before either exists in the database: the ids are the client's job ([[Idempotency and retries]]).
+- `groupId` is made before the classes, so each series can point at its group before either exists in the database. The ids are the client's job ([[Idempotency and retries]]).
 
 ### Errors name the line
 
@@ -144,11 +144,11 @@ Where those lines come from: a rule inside the class schema adds the issue with 
 ```
 
 What to notice:
-- `path: ['end']` names only the field. As the issue travels up through the arrays and objects, zod puts the positions in front: `['groups', 0, 'classes', 3, 'end']`, which `.join('.')` writes as `groups.0.classes.3.end`.
-- An unknown key at the top of the file has an empty path, so `join` gives `''` and `||` swaps in `(the whole file)`.
-- `isTime(...) &&` first: if `start` was `"25:00"`, it already has its own error, and comparing it with an `end` of `"09:00"` would add a second, confusing "must be after start".
+- `path: ['end']` names only the field. As the issue travels up through the arrays and objects, zod puts the positions in front, `['groups', 0, 'classes', 3, 'end']`, which `.join('.')` writes as `groups.0.classes.3.end`.
+- An unknown key at the top of the file has an empty path, so `join` gives `''`, and `||` swaps in `(the whole file)`.
+- `isTime(...) &&` comes first: if `start` was `"25:00"`, it already has its own error, and comparing it with an `end` of `"09:00"` would add a second, confusing "must be after start".
 
-**Unknown keys are refused everywhere**, not ignored: `"loaction": "C-301"` is an error, so a typo can't silently drop your room. It also means v0.3b's holidays will arrive as `"version": 2`, never as an extra key that older code half-reads. Two groups with the same name are refused because the seed replaces groups by name (below).
+**Unknown keys are refused everywhere**, not ignored. `"loaction": "C-301"` is an error, so a typo can't silently drop your room. It also means v0.3b's holidays will arrive as `"version": 2`, never as an extra key that older code half-reads. Two groups with the same name are refused too, because the seed replaces groups by name (below).
 
 ## The sample file
 
@@ -182,9 +182,9 @@ flowchart TD
   tx --> done(["Seeded 2 groups and 20 series"])
 ```
 
-The work is split in two so it can be tested: `src/calendar/seed.ts` has `seedRefusal(env)` and `seedTimetable(deps, file, email)`; `src/scripts/seed.ts` is the thin command around them (arguments, reading the file, printing).
+The work is split in two so it can be tested: `src/calendar/seed.ts` has `seedRefusal(env)` and `seedTimetable(deps, file, email)`, and `src/scripts/seed.ts` is the thin command around them (arguments, reading the file, printing).
 
-**One transaction.** Everything is written inside one `withUser`, so if series 17 is refused, nothing is written: no half timetable ([[Transactions]]). Every row first goes through `createGroupSchema` / `createSeriesSchema` and then the very same `createGroup` / `createSeries` the API uses, under row-level security.
+**One transaction.** Everything is written inside one `withUser`, so if series 17 is refused, nothing is written, and there's no half timetable ([[Transactions]]). Every row first goes through `createGroupSchema` / `createSeriesSchema`, and then through the very same `createGroup` / `createSeries` the API uses, under row-level security.
 
 *From `apps/api/src/calendar/seed.ts`:*
 ```ts
@@ -212,7 +212,7 @@ What to notice:
 - All the parsing happens **before** `withUser`, so no connection is held while it runs. Inside, the delete and every insert share one transaction: a refusal at series 17 rolls back the delete too, and your old timetable is still there.
 - `for (…) await …` writes one row at a time. In a transaction the statements go over one connection in order anyway, so there'd be nothing to gain from sending them all at once.
 
-**Repeatable.** Edit the file, run it again: your groups with the same names are deleted (their series go with them) and the file's are inserted. Groups with other names, and other users' groups, are untouched. The ids are new each time.
+**Repeatable.** Edit the file and run it again: your groups with the same names are deleted (their series go with them), and the file's are inserted. Groups with other names, and other users' groups, are untouched. The ids are new each time.
 
 *From `apps/api/src/calendar/groups.ts` (`deleteGroupsNamed`):*
 ```ts
@@ -236,7 +236,7 @@ The repo is public (MIT). Your real timetable says where you are at 08:00 every 
 | Printing it, into a terminal log or a CI log | The script prints **counts only**. Validation messages give the path and the rule, never the value. A file that isn't valid JSON is reported as "is not valid JSON" without the parser's message, because Node's `SyntaxError` quotes the text around the mistake. A failed query is reported by its Postgres code only, because Drizzle's error message includes the query's parameters: your titles and rooms |
 | Writing it into a server's database | The **localhost guard** below |
 
-The two places in the script that could have printed your file, and don't:
+Here are the two places in the script that could have printed your file, and don't:
 
 *From `apps/api/src/scripts/seed.ts` (shortened):*
 ```ts
@@ -258,7 +258,7 @@ function reason(error: unknown): string {
 
 What to notice:
 - The `catch` never prints `error.message`. It only asks whether the file was missing (`ENOENT` is Node's code for "no such file") and prints one of two fixed phrases.
-- `error as NodeJS.ErrnoException` is a cast: a caught error is `unknown` in TypeScript, and this tells it to expect Node's file-error shape, which has `.code`.
+- `error as NodeJS.ErrnoException` is a cast. A caught error is `unknown` in TypeScript, and this tells it to expect Node's file-error shape, which has `.code`.
 - `reason` builds its text from the SQLSTATE and the constraint name only, say `Postgres error 23514 (series_title_length)`: which rule broke, never the title that broke it.
 
 ## The localhost guard
@@ -267,7 +267,7 @@ The seed refuses to run (exit 1, before any connection is opened) unless **both*
 - `DATABASE_URL`'s host is `localhost`, `127.0.0.1` or `::1`, and
 - `BETTER_AUTH_URL` is a local origin (`isLocalOrigin`, the same check `dev:session` uses).
 
-Why both: settings copied from the server to reach its database through an SSH tunnel would have a local-looking database host (`localhost:5433`) but still `BETTER_AUTH_URL=https://tasks.ahmedatif.in`. A `.env` that keeps the local origin but points `DATABASE_URL` at another machine fails the first check instead. Each check alone catches only one of the two mistakes. It's checked twice: by the script before it creates the pool, and again inside `seedTimetable`, so the function is safe even when called from somewhere else.
+Why both? Settings copied from the server to reach its database through an SSH tunnel would have a local-looking database host (`localhost:5433`) but still `BETTER_AUTH_URL=https://tasks.ahmedatif.in`. A `.env` that keeps the local origin but points `DATABASE_URL` at another machine fails the first check instead. Each check alone catches only one of the two mistakes. It's checked twice: by the script before it creates the pool, and again inside `seedTimetable`, so the function is safe even when called from somewhere else.
 
 *From `apps/api/src/calendar/seed.ts` and `apps/api/src/scripts/seed.ts` (shortened):*
 ```ts
@@ -297,7 +297,7 @@ const pool = createPool(env.DATABASE_URL);
 What to notice:
 - `new URL(env.DATABASE_URL).hostname` pulls the host out of `postgres://tasks:…@localhost:5432/tasks`. A URL writes an IPv6 address in square brackets, which is why the set spells `::1` as `'[::1]'`.
 - `seedRefusal` returns a reason or `undefined` instead of throwing, so the script and `seedTimetable` can each report it their own way.
-- `process.exit(1)` comes several lines before `createPool`: with a wrong host, no connection is ever opened.
+- `process.exit(1)` comes several lines before `createPool`, so with a wrong host, no connection is ever opened.
 
 ## Check yourself
 - Predict first: your timetable has Data Structures on Monday, Wednesday and Friday at 08:00. How many class lines do you write, and how many series does the seed create? What does `timetableToRows` set as `durationMin` for a 14:00–16:00 lab?
