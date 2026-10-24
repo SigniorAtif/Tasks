@@ -2,11 +2,11 @@
 
 > **Builds on:** [[Testing pure code]] · [[Postgres and SQL basics]]
 
-[[Testing pure code]] covered **unit tests**: call a function, check its answer, nothing else involved. An **integration test** checks several real pieces working together: our routes, the middleware, Better Auth, Drizzle and a **real Postgres**. D-017: "API integration tests run against real Postgres… no mocked DB."
+[[Testing pure code]] covered **unit tests**: call a function, check its answer, nothing else involved. An **integration test** checks several real pieces working together: our routes, the middleware, Better Auth, Drizzle and a **real Postgres**. D-017 puts it plainly: "API integration tests run against real Postgres… no mocked DB."
 
 ## Why a real database instead of a fake?
 
-A fake database answers however you programmed it, so it can't catch the bugs that matter here: a wrong column name, a missing foreign key, a unique constraint, `time` coming back as `04:00:00` instead of `04:00`, a cascade that doesn't cascade. All of those were checked against Postgres in v0.0. The cost is that the tests need a Postgres. On your laptop their setup starts the compose one if it isn't running (so it needs Docker); in CI the workflow starts a throwaway one for each run ([[CI and CD]]).
+A fake database answers however you programmed it, so it can't catch the bugs that matter here: a wrong column name, a missing foreign key, a unique constraint, `time` coming back as `04:00:00` instead of `04:00`, a cascade that doesn't cascade. All of those were checked against Postgres in v0.0. The cost is that the tests need a Postgres. On your laptop, their setup starts the compose one if it isn't running (so it needs Docker); in CI, the workflow starts a throwaway one for each run ([[CI and CD]]).
 
 ## How the API tests are set up
 
@@ -19,7 +19,7 @@ A fake database answers however you programmed it, so it can't catch the bugs th
 | Fake Google | `src/test/google.ts` | Replaces `fetch`: answers Google's token endpoint, fails on any other outbound call |
 | Sign-in driver | `src/test/sign-in.ts` | Plays the browser through the whole Google flow |
 
-Each test starts from empty tables, so tests can't depend on each other's leftovers. Test files run **one at a time** (`fileParallelism: false`): they share one database, and one file emptying it while another reads it would cause random failures.
+Each test starts from empty tables, so no test can depend on another's leftovers. Test files run **one at a time** (`fileParallelism: false`), because they share one database: one file emptying it while another reads it would cause random failures.
 
 Both settings live in the API's Vitest config:
 
@@ -36,11 +36,11 @@ Both settings live in the API's Vitest config:
   },
 ```
 
-`globalSetup` runs once for the whole run, before any test file; that's where the database is created and migrated. Compare core's config, which has no `globalSetup` and keeps Vitest's default of running files in parallel: pure tests share nothing, so they can.
+`globalSetup` runs once for the whole run, before any test file, and that's where the database is created and migrated. Compare core's config, which has no `globalSetup` and keeps Vitest's default of running files in parallel: pure tests share nothing, so they can.
 
 ## Mock at the edge, not in the middle
 
-The only fake is Google, because it's outside our system and can't be called from a test. Everything from the HTTP request to the SQL is real. The fake sits at the outermost possible point (the network call), so Better Auth's real code still builds the request, checks `state`, decodes the token and writes the rows.
+The only fake is Google, because it's outside our system and can't be called from a test. Everything from the HTTP request to the SQL is real. The fake sits at the outermost possible point, the network call, so Better Auth's real code still builds the request, checks `state`, decodes the token and writes the rows.
 
 The fake replaces `fetch` itself, the function every outgoing request goes through:
 
@@ -65,7 +65,9 @@ The fake replaces `fetch` itself, the function every outgoing request goes throu
 
 ## What v0.0's tests cover (77 tests)
 
-Environment parsing; problem bodies and request ids; `/healthz` up and down; the migration (defaults, cascades, uniqueness); the session gate; the Google flow end to end (allowed, refused, removed from the list, forged `state`); cookie attributes; sliding expiry; CSRF; `/me`; **the cross-user test** (two users, each sees only their own profile: in v0.0 our stand-in for row-level security; since v0.2 the calendar tables have real row-level security, and its tests prove that a query with no filter still sees only one user's rows, see [[Row-level security in our database]]); static file serving and caching; the dev-session helper and its localhost guard.
+Environment parsing; problem bodies and request ids; `/healthz` up and down; the migration (defaults, cascades, uniqueness); the session gate; the Google flow end to end (allowed, refused, removed from the list, forged `state`); cookie attributes; sliding expiry; CSRF; `/me`; **the cross-user test**; static file serving and caching; the dev-session helper and its localhost guard.
+
+The cross-user test signs in two users and checks that each sees only their own profile. In v0.0 that was our stand-in for row-level security. Since v0.2 the calendar tables have the real thing, and its tests prove that a query with no filter still sees only one user's rows ([[Row-level security in our database]]).
 
 ## Check yourself
 - A test passes alone but fails when the whole suite runs. Name two causes this setup is designed to prevent.

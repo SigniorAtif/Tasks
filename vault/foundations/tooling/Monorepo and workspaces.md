@@ -8,15 +8,15 @@ A **monorepo** is one git repository holding several programs that belong togeth
 - `apps/api`: the server
 - `packages/core`: code both of them use
 
-The alternative is one repo per program ("polyrepo"). Then sharing `core` means publishing it as a package, bumping its version and updating both apps every time it changes. With one repo, a change to `core` and the apps that use it lands in **one commit**, and one test run checks all of them together.
+The alternative is one repo per program, a "polyrepo". Then sharing `core` means publishing it as a package, bumping its version, and updating both apps every time it changes. With one repo, a change to `core` and the apps that use it lands in **one commit**, and one test run checks them all together.
 
 ## Packages and `package.json`
 
 Each folder with a `package.json` is a **package**: a unit with a name, its own dependencies and its own scripts. Ours is called `@tasks/core`. The `@tasks/` part is a *scope*, a namespace so the name can't clash with someone else's `core` on npm.
 
-Two kinds of dependency:
-- **`dependencies`**: needed when the code runs. `core` needs `temporal-polyfill` at runtime.
-- **`devDependencies`**: needed only while developing: the compiler, the linter, the test runner, the test oracle (`rrule-temporal`). They never ship to users.
+There are two kinds of dependency:
+- **`dependencies`** are needed when the code runs. `core` needs `temporal-polyfill` at runtime.
+- **`devDependencies`** are needed only while developing: the compiler, the linter, the test runner, the test oracle (`rrule-temporal`). They never ship to users.
 
 Core's own `package.json` shows both lists:
 
@@ -35,7 +35,7 @@ Core's own `package.json` shows both lists:
   }
 ```
 
-`zod` is a runtime dependency too: the request rules in `schemas.ts` run on every request the API gets. Everything under `devDependencies` is for checking and testing, which is why the production image installs with `--prod` and leaves those out ([[Containers and images]]).
+`zod` is a runtime dependency too, because the request rules in `schemas.ts` run on every request the API gets. Everything under `devDependencies` is for checking and testing, which is why the production image installs with `--prod` and leaves those out ([[Containers and images]]).
 
 ## Workspaces
 
@@ -49,7 +49,7 @@ packages:
 # …
 ```
 
-When `apps/api` lists `"@tasks/core": "workspace:*"` as a dependency (it has since v0.0), pnpm doesn't download anything. It puts a **symlink** (a shortcut to another folder) in `apps/api/node_modules/@tasks/core` that points to `packages/core`. Edits to `core` are visible to the API immediately.
+When `apps/api` lists `"@tasks/core": "workspace:*"` as a dependency (it has since v0.0), pnpm doesn't download anything. It puts a **symlink** (a shortcut to another folder) at `apps/api/node_modules/@tasks/core`, pointing to `packages/core`. Edits to `core` are visible to the API immediately.
 
 *From `apps/api/package.json` (shortened):*
 ```json

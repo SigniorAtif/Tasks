@@ -2,13 +2,13 @@
 
 > **Builds on:** nothing but the JavaScript from your course (variables, functions, objects, arrays, `import`). Read this before [[TypeScript checking vs running]].
 
-Every file in this repo is TypeScript, and your course teaches JavaScript only. This note covers the TypeScript you need to read our code, from zero, with real lines from the repo. It isn't the whole language, just what the code actually uses.
+Every file in this repo is TypeScript, and your course teaches only JavaScript. This note covers the TypeScript you need to read our code, from zero, with real lines from the repo. It isn't the whole language, just the parts the code actually uses.
 
 ## What TypeScript adds, in one idea
 
 TypeScript is JavaScript plus **labels that say what kind of value goes where**: `durationMin: number`, `title: string`. A program called the **type checker** (`tsc`, run by `pnpm typecheck`) reads the labels and complains before anything runs: "you passed a string where a number goes", "this might be `null`", "this object has no field `titel`".
 
-Then the labels are **thrown away**. Node and the browser run plain JavaScript; the types never exist while the app runs ([[TypeScript checking vs running]]). So TypeScript can't protect you from bad data arriving at run time (a broken request body). That's why the API also checks input with zod ([[Validating input with schemas]]).
+Then the labels are **thrown away**. Node and the browser run plain JavaScript, and the types never exist while the app runs ([[TypeScript checking vs running]]). So TypeScript can't protect you from bad data arriving at run time, like a broken request body. That's why the API also checks input with zod ([[Validating input with schemas]]).
 
 A real example from v0.2. A new error code was added to the contract:
 
@@ -17,7 +17,7 @@ A real example from v0.2. A new error code was added to the contract:
 export type ErrorCode = 'unauthenticated' | 'forbidden' | 'not_found' | 'conflict' | /* … */;
 ```
 
-and `pnpm typecheck` immediately failed in a different package:
+and `pnpm typecheck` immediately failed, in a different package:
 
 ```text
 apps/api src/http/errors.ts(14,7): error TS2741: Property 'conflict' is missing in type
@@ -36,7 +36,7 @@ const MAX_BODY_BYTES: number = 256 * 1024;
 function daysInclusive(from: string, to: string): number { … }
 ```
 
-Most of the time you don't have to. TypeScript **infers** the type from the value: `const MAX_BODY_BYTES = 256 * 1024` is already a `number`. Our code writes types on function parameters and on exported things (so the reader sees them) and lets inference do the rest.
+Most of the time you don't have to. TypeScript **infers** the type from the value, so `const MAX_BODY_BYTES = 256 * 1024` is already a `number`. Our code writes types on function parameters and on exported things, so the reader sees them, and lets inference do the rest.
 
 The basic types: `string`, `number`, `boolean`, `null`, `undefined`, arrays (`string[]`, or `readonly string[]` for one you promise not to change), and `void` for "a function that returns nothing useful".
 
@@ -53,7 +53,7 @@ export interface Series {
 }
 ```
 
-An `interface` describes the shape of an object: which fields, of which types. `type` can do the same (`type Series = { … }`) and more (unions, below). The repo uses `interface` for plain object shapes and `type` for everything else; the difference rarely matters.
+An `interface` describes the shape of an object: which fields, of which types. `type` can do the same (`type Series = { … }`) and more (unions, below). The repo uses `interface` for plain object shapes and `type` for everything else, and the difference rarely matters.
 
 A **type alias** gives an existing type a second name:
 
@@ -64,7 +64,7 @@ export type WallTime = string;  // 'HH:MM'
 
 It doesn't make anything stricter: TypeScript still treats an `ISODate` as any `string`. It's documentation the checker carries around, so `startDate: ISODate` tells the reader which format to expect.
 
-**Optional vs `null`.** `note?: string` means "the field may be missing". `note: string | null` means "the field is always there, and may be empty". Our rule ([[Core types]]): stored data uses `| null`, because the database and JSON have a real `null`; `?` is for things a caller may leave out, such as `GetOptions`' `signal?`.
+**Optional vs `null`.** `note?: string` means "the field may be missing". `note: string | null` means "the field is always there, and may be empty". Our rule ([[Core types]]): stored data uses `| null`, because the database and JSON have a real `null`, and `?` is for things a caller may leave out, such as `GetOptions`' `signal?`.
 
 ## Unions and literal types: "one of these"
 
@@ -72,7 +72,7 @@ It doesn't make anything stricter: TypeScript still treats an `ISODate` as any `
 export type CancelReason = 'not_held' | 'skipped';
 ```
 
-`|` means "or". `'not_held'` here isn't "a string": it's that exact string, a **literal type**. So `CancelReason` allows exactly two values, and `'not-held'` (with a dash) is an error before the code runs. The brainstorm docs had seven spellings of these; the union makes an eighth impossible.
+`|` means "or". `'not_held'` here isn't "a string"; it's that exact string, a **literal type**. So `CancelReason` allows exactly two values, and `'not-held'` (with a dash) is an error before the code runs. The brainstorm docs had seven spellings of these. The union makes an eighth impossible.
 
 ## Narrowing: TypeScript follows your `if`s
 
@@ -109,9 +109,9 @@ Other checks narrow too:
 
 ## `null`, `undefined` and the strict rules
 
-With our settings (`"strict": true` in `tsconfig.base.json`), `null` and `undefined` are not allowed where a value is expected. If something might be missing, the type says so (`string | null`), and you must handle it before use. This alone prevents the most common JavaScript crash, "Cannot read properties of undefined".
+With our settings (`"strict": true` in `tsconfig.base.json`), `null` and `undefined` aren't allowed where a value is expected. If something might be missing, the type says so (`string | null`), and you must handle it before use. This alone prevents the most common JavaScript crash, "Cannot read properties of undefined".
 
-We also turn on `noUncheckedIndexedAccess`: reading from an array or a map by position or key might find nothing, so the result includes `undefined`:
+We also turn on `noUncheckedIndexedAccess`. Reading from an array or a map by position or key might find nothing, so the result includes `undefined`:
 
 ```ts
 // apps/api/src/profile/profile.ts
@@ -121,7 +121,7 @@ if (!row) return undefined;
 // from here on, row is the object
 ```
 
-Two operators you'll see everywhere: `a?.b` reads `b` only if `a` isn't null or undefined (otherwise gives `undefined`), and `a ?? b` means "`a`, unless it's null or undefined, then `b`". For example, `subject ?? title` is how a class's subject defaults to its title.
+Two operators you'll see everywhere. `a?.b` reads `b` only if `a` isn't null or undefined (otherwise it gives `undefined`). `a ?? b` means "`a`, unless it's null or undefined, in which case `b`". For example, `subject ?? title` is how a class's subject defaults to its title.
 
 ## Functions, `async` and `Promise<T>`
 
@@ -129,7 +129,7 @@ Two operators you'll see everywhere: `a?.b` reads `b` only if `a` isn't null or 
 export async function getProfile(db: Database, userId: string): Promise<Profile> { … }
 ```
 
-Parameters have types, and the part after the last `:` is the return type. An `async` function always returns a `Promise`: "a `Profile`, later". `await getProfile(…)` waits for it and gives you the `Profile`. Default values work as in JavaScript (`options: GetOptions = {}`), and a parameter with a default may be left out.
+Parameters have types, and the part after the last `:` is the return type. An `async` function always returns a `Promise`, which means "a `Profile`, later". `await getProfile(…)` waits for it and gives you the `Profile`. Default values work as in JavaScript (`options: GetOptions = {}`), and a parameter with a default may be left out.
 
 ## Generics: a type with a blank to fill in
 
@@ -141,7 +141,7 @@ export async function apiGet<T>(path: string, options: GetOptions = {}): Promise
 queryFn: ({ signal }) => apiGet<Me>(paths.me, { signal }),
 ```
 
-`<T>` is a **type parameter**: a blank the caller fills in. `apiGet` works the same way for every path, so it's written once, and each caller says what it expects back: `Me`, `CalendarResponse`. You've already used generics without noticing: `Promise<Profile>`, `Array<string>` (the same as `string[]`), `Map<string, Series>`. In our API, `Created<T>` ("the row, and whether this request made it") works for groups and series alike.
+`<T>` is a **type parameter**, a blank the caller fills in. `apiGet` works the same way for every path, so it's written once, and each caller says what it expects back: `Me`, `CalendarResponse`. You've already used generics without noticing: `Promise<Profile>`, `Array<string>` (the same as `string[]`), `Map<string, Series>`. In our API, `Created<T>` ("the row, and whether this request made it") works for groups and series alike.
 
 ## Types made from values
 
@@ -154,11 +154,11 @@ export type ColorToken = (typeof COLOR_TOKENS)[number];   // 'blue' | 'sky' | �
 ```
 
 Read it piece by piece:
-- `as const` tells TypeScript "this array never changes, so remember the exact strings", rather than just "an array of strings";
+- `as const` tells TypeScript "this array never changes, so remember the exact strings", instead of just "an array of strings";
 - `typeof COLOR_TOKENS` is the type of that array;
 - `[number]` asks for "the type of any element of it", which is the union of the ten strings.
 
-The form loops over `COLOR_TOKENS` to draw the swatches, and the database's CHECK constraint is generated from the same list, so the type, the swatches and the database can never disagree.
+The form loops over `COLOR_TOKENS` to draw the swatches, and the database's CHECK constraint is generated from the same list. The type, the swatches and the database can never disagree.
 
 `satisfies` checks a value against a type **without** replacing the value's own, more exact type:
 
@@ -185,7 +185,7 @@ The second one says the function can only ever return one of the ten CSS variabl
 
 ## Utility types: building types from types
 
-TypeScript ships helpers that transform one type into another. The ones in our code:
+TypeScript ships helpers that turn one type into another. The ones in our code:
 
 | Helper | Means | Our example |
 |---|---|---|
@@ -196,13 +196,13 @@ TypeScript ships helpers that transform one type into another. The ones in our c
 | `NonNullable<T>` | `T` without `null` and `undefined` | `NonNullable<Problem['errors']>` (`apps/web/src/lib/api.ts`) |
 | `Parameters<F>`, `ReturnType<F>` | The parameter list, or the return type, of a function type | `Parameters<…>` digs out the type of Drizzle's transaction object in `apps/api/src/db/user-scope.ts` |
 
-`Problem['errors']` (square brackets on a type) means "the type of the `errors` field of `Problem`".
+`Problem['errors']`, with square brackets on a type, means "the type of the `errors` field of `Problem`".
 
 ## `unknown`, `any` and `as`
 
 - **`unknown`** means "could be anything; prove what it is before using it". Data from outside (a parsed request body, a caught error) starts as `unknown`, and you narrow it (`instanceof`, `typeof`, a zod parse) before touching it. Our code uses `unknown` for exactly those spots.
 - **`any`** means "stop checking". It switches TypeScript off for that value, and the code avoids it.
-- **`as`** (a **type assertion**) tells the checker "trust me, this is a `T`". It checks nothing at run time. In `apps/web/src/lib/api.ts`, `return body as T` trusts the server to send the shape the contract promises; that's a deliberate trust boundary (our own API, the same contract file). Where we *don't* trust the input, the API's request bodies, zod checks the data for real instead of asserting.
+- **`as`**, a **type assertion**, tells the checker "trust me, this is a `T`". It checks nothing at run time. In `apps/web/src/lib/api.ts`, `return body as T` trusts the server to send the shape the contract promises. That's a deliberate trust boundary: our own API, the same contract file. Where we *don't* trust the input (the API's request bodies), zod checks the data for real instead of asserting.
 
 ## Types that come from zod
 
@@ -213,7 +213,7 @@ A zod schema is a check that runs (it exists at run time) **and** a type (TypeSc
 export type CreateSeries = z.input<typeof createSeriesSchema>;
 ```
 
-`z.input` is "what a caller may send": `subject` optional, `location` missing allowed. `z.output` is "what the code gets after parsing": the defaults filled in, `subject` set to the title. So the form, the API and the tests share one definition of a valid series ([[Validating input with schemas]]).
+`z.input` is "what a caller may send": `subject` optional, `location` allowed to be missing. `z.output` is "what the code gets after parsing": the defaults filled in, and `subject` set to the title. So the form, the API and the tests share one definition of a valid series ([[Validating input with schemas]]).
 
 ## A trick: types only one function can make
 
@@ -244,7 +244,7 @@ export interface UserScope {
 
 ## Reading a type error
 
-`tsc` errors look scary but have a fixed shape: **file (line, column): code: message**. Read the message from the end: "Property 'conflict' is missing in type X but required in type Y" means "Y needs `conflict`; you gave X, which lacks it". When an error is long, look at the first line, then the last line; the middle repeats the types involved. In VS Code, hovering over any name shows its type, which answers most "why is this an error" questions.
+`tsc` errors look scary but have a fixed shape: **file (line, column): code: message**. Read the message from the end. "Property 'conflict' is missing in type X but required in type Y" means "Y needs `conflict`; you gave X, which lacks it". When an error is long, look at the first line, then the last; the middle repeats the types involved. In VS Code, hovering over any name shows its type, which answers most "why is this an error" questions.
 
 ## Check yourself
 - `type Status = 'scheduled' | 'cancelled'`. Predict what `tsc` says about `const s: Status = 'canceled'` (one l), and when: while typing, at `pnpm typecheck`, or when the app runs?
