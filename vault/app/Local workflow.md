@@ -2,7 +2,7 @@
 
 > **Background:** [[Containers and images]] · [[Docker Compose]] · [[Postgres and SQL basics]] · [[Integration tests]] · [[CI and CD]]
 
-How to work on the app day to day on your laptop, and how to check a change the way CI will **before** you push. Every command runs from the repo root. Background: [[Containers and images]], [[Docker Compose]], [[CI and CD]], [[Integration tests]].
+How to work on the app day to day on your laptop, and how to check a change the way CI will, **before** you push. Every command runs from the repo root. Background: [[Containers and images]], [[Docker Compose]], [[CI and CD]], [[Integration tests]].
 
 ## One-time setup
 
@@ -17,8 +17,8 @@ pnpm dev
 ```
 
 What happens, in order:
-1. `docker compose up -d --wait db` starts **one container**, Postgres 18, from `compose.yaml`. `-d` means "in the background"; `--wait` means "until its health check says it's ready". Its data lives in the volume `tasks-dev_db-data`, so it survives restarts.
-2. The API's `dev` script applies any new migrations, then starts the API on port 3000 with `node --watch`: it restarts when you save a file.
+1. `docker compose up -d --wait db` starts **one container**, Postgres 18, from `compose.yaml`. `-d` means "in the background", and `--wait` means "until its health check says it's ready". Its data lives in the volume `tasks-dev_db-data`, so it survives restarts.
+2. The API's `dev` script applies any new migrations, then starts the API on port 3000 with `node --watch`, so it restarts when you save a file.
 3. Vite starts the web app on port 5173 and reloads the browser when you save.
 
 Steps 1 and 2 are two `dev` scripts, one calling the other:
@@ -30,8 +30,8 @@ Steps 1 and 2 are two `dev` scripts, one calling the other:
     "dev": "node --env-file-if-exists=../../.env src/db/migrate.ts && node --env-file-if-exists=../../.env --watch src/main.ts",
 ```
 
-- `pnpm -r --parallel run dev` runs the `dev` script of every package at the same time; that's how the API and Vite both start from one command.
-- `&&` means "then, if that worked". If Postgres doesn't come up, nothing else starts; if a migration fails, the API doesn't start at all.
+- `pnpm -r --parallel run dev` runs the `dev` script of every package at the same time. That's how the API and Vite both start from one command.
+- `&&` means "then, if that worked". If Postgres doesn't come up, nothing else starts, and if a migration fails, the API doesn't start at all.
 - `--env-file-if-exists=../../.env` makes Node read the repo's `.env` (if there is one) into `process.env` before the code runs.
 
 Step 1's container, and where the volume name comes from:
@@ -58,9 +58,9 @@ volumes:
 
 Compose prefixes everything with the project `name`, so the volume `db-data` becomes `tasks-dev_db-data`. A fixed name means every checkout of the repo (and every git worktree) shares this one database. `127.0.0.1:5432:5432` publishes the port to your laptop only, so someone on the same campus Wi-Fi can't connect to it.
 
-Open <http://localhost:5173>. To see the signed-in screens without Google, mint a session cookie: `pnpm --filter @tasks/api dev:session you@example.com`. Then in the browser: DevTools → Application → Cookies → add the printed name and value, and reload.
+Open <http://localhost:5173>. To see the signed-in screens without Google, mint a session cookie: `pnpm --filter @tasks/api dev:session you@example.com`. Then in the browser, go to DevTools → Application → Cookies, add the printed name and value, and reload.
 
-Stop with Ctrl+C. Postgres keeps running in the background; `docker compose down` stops it (the data stays).
+Stop with Ctrl+C. Postgres keeps running in the background, and `docker compose down` stops it (the data stays).
 
 ### Your timetable in the local database
 
@@ -81,7 +81,7 @@ What those commands run:
     "seed:private": "node --env-file-if-exists=../../.env src/scripts/seed.ts private/kiit-sem3.json",
 ```
 
-`seed:sample` and `seed:private` are `seed` with the file filled in. To seed some other file, `pnpm --filter @tasks/api seed path/to/file.json`. The path is read from the repo root, wherever you run the command.
+`seed:sample` and `seed:private` are `seed` with the file filled in. To seed some other file, run `pnpm --filter @tasks/api seed path/to/file.json`. The path is read from the repo root, wherever you run the command.
 
 Your timetable is already seeded for `you@example.com` (21 series, checked against your golden weeks on 2026-10-13).
 
@@ -112,18 +112,18 @@ CI runs five jobs on every PR ([[Deploy and CI]]). These commands are their loca
 
 | CI job | Local command | Needs |
 |---|---|---|
-| Lint, typecheck and build | `pnpm check && pnpm typecheck && pnpm build` | — |
+| Lint, typecheck and build | `pnpm check && pnpm typecheck && pnpm build` | Nothing extra |
 | Test API and web | `pnpm --filter "./apps/*" test` | Docker (the tests start Postgres themselves if it isn't running) |
-| Test core | `pnpm --filter @tasks/core test:tz && pnpm --filter @tasks/core coverage` | — |
+| Test core | `pnpm --filter @tasks/core test:tz && pnpm --filter @tasks/core coverage` | Nothing extra |
 | Scan for secrets | `docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --redact` | Docker |
 | Build and boot the image | See "Try the production image" below | Docker + buildx |
 
 A sensible rhythm:
 - **Every commit:** `pnpm check && pnpm typecheck`, plus the tests of the package you touched. `pnpm check:fix` fixes formatting by itself.
 - **Before pushing or opening a PR:** the first three rows. `pnpm test` runs every package's tests at once.
-- **When you touched the `Dockerfile`, `deploy/`, dependencies or anything about start-up:** also the image check.
+- **When you touched the `Dockerfile`, `deploy/`, dependencies, or anything about start-up:** the image check too.
 
-You don't need to start Postgres before testing. The API tests' one-time setup (`apps/api/src/test/global-setup.ts`) tries to connect. If nothing answers on `localhost:5432`, it prints "Postgres isn't running … starting it with docker compose", runs `docker compose up -d --wait db`, and carries on. Postgres keeps running afterwards, like after `pnpm dev`.
+You don't need to start Postgres before testing. The API tests' one-time setup (`apps/api/src/test/global-setup.ts`) tries to connect. If nothing answers on `localhost:5432`, it prints "Postgres isn't running … starting it with docker compose", runs `docker compose up -d --wait db`, and carries on. Postgres keeps running afterwards, as it does after `pnpm dev`.
 
 *From `apps/api/src/test/global-setup.ts` (shortened):*
 ```ts
@@ -147,13 +147,13 @@ You don't need to start Postgres before testing. The API tests' one-time setup (
   return connect(connectionString);
 ```
 
-- Only "connection refused" (nothing listening) leads to starting Postgres. A wrong password, say, is a different error: the setup stops at once with "The API tests need Postgres at …", the original error attached as its `cause`.
+- Only "connection refused" (nothing listening) leads to starting Postgres. A wrong password, say, is a different error: the setup stops at once with "The API tests need Postgres at …", with the original error attached as its `cause`.
 - `execFileSync` runs a program and waits for it to finish. `--wait` makes Docker return only once the health check passes, so the second `connect` finds Postgres ready.
 - `stdio: 'inherit'` shows Docker's own output in your terminal, which is why its error appears "just above" ours in the troubleshooting table below.
 
 It deliberately does **not** do this:
 - in CI (GitHub sets `CI=true`), where the workflow provides Postgres;
-- when `TEST_DATABASE_URL` points somewhere other than this machine's port 5432, because that's your own server and not ours to start.
+- when `TEST_DATABASE_URL` points somewhere other than this machine's port 5432, because that's your own server, and not ours to start.
 
 Both rules are one small function:
 
@@ -170,7 +170,7 @@ function mayStartComposeDatabase(url: URL): boolean {
 
 ## Try the production image on your laptop
 
-The exact image and stack the server will run, on `http://localhost:8080`:
+Here's the exact image and stack the server will run, on `http://localhost:8080`:
 
 ```sh
 # 1. Build the image, labelled with the current commit.
@@ -206,9 +206,9 @@ What this proves that `pnpm dev` doesn't:
 
 **Checking offline opening (v0.2).** Only a production build has a service worker, so use this stack (or `pnpm build` + `pnpm --filter @tasks/web preview`). Open the calendar once online, then in Chrome's DevTools → Network, set the throttling menu to **Offline** and reload. The calendar should still draw your week, with "offline · last synced …" under the title bar ([[Offline reads]]). The same menu has "Slow 4G" and "Fast 4G" presets, the closest your laptop gets to your phone on campus data.
 
-**A quicker image check.** Without the whole Compose stack, the image can run against the dev database directly, the way CI's "Build and boot the image" job does: `docker run --rm --network host -e DATABASE_URL=postgres://tasks:tasks@127.0.0.1:5432/tasks -e BETTER_AUTH_URL=http://localhost:3000 -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) -e GOOGLE_CLIENT_ID=x -e GOOGLE_CLIENT_SECRET=x -e AUTH_ALLOWED_EMAILS=you@example.com tasks-local:$SHA`, then open `http://localhost:3000`. Stop `pnpm dev`'s API first (it also wants port 3000). This skips Caddy, so it doesn't check compression or HTTPS.
+**A quicker image check.** Without the whole Compose stack, the image can run against the dev database directly, the way CI's "Build and boot the image" job does: `docker run --rm --network host -e DATABASE_URL=postgres://tasks:tasks@127.0.0.1:5432/tasks -e BETTER_AUTH_URL=http://localhost:3000 -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) -e GOOGLE_CLIENT_ID=x -e GOOGLE_CLIENT_SECRET=x -e AUTH_ALLOWED_EMAILS=you@example.com tasks-local:$SHA`, then open `http://localhost:3000`. Stop `pnpm dev`'s API first, since it also wants port 3000. This skips Caddy, so it doesn't check compression or HTTPS.
 
-For comparison, CI's version of the same check, which also migrates first:
+For comparison, here's CI's version of the same check, which also migrates first:
 
 *From `.github/workflows/ci.yml` (shortened):*
 ```sh
@@ -222,7 +222,7 @@ For comparison, CI's version of the same check, which also migrates first:
 
 - `vars=( … )` is a bash list of arguments, and `"${vars[@]}"` pastes the whole list into each `docker run`. `-e NAME` with no `=value` copies that variable from the shell into the container; the job sets them a few lines earlier.
 - The first `docker run` replaces the image's start command with `node apps/api/src/db/migrate.ts`, so it migrates and exits. The second runs the image's own command (the API) in the background (`-d`).
-- `--network host` lets the container reach Postgres on `127.0.0.1:5432`, the same reason your local command uses it.
+- `--network host` lets the container reach Postgres on `127.0.0.1:5432`, which is the same reason your local command uses it.
 
 ## From change to merged
 
@@ -238,8 +238,8 @@ flowchart TD
 The house rules (from your global setup):
 1. Branch off the integration branch: `git switch -c feat/<topic> release/<x>`. Branch types: feat, fix, chore, docs, refactor, perf, test.
 2. Small commits, one concern each, each passing check and typecheck. Messages look like `feat(api): add the calendar route`.
-3. Merge back with `git merge --no-ff feat/<topic>`. That keeps the branch's commits as a visible side rail in the history; never squash.
-4. Push the release branch and open one PR to `main`. CI runs. Merge on GitHub when it's green. After the first deploy, merging also ships it.
+3. Merge back with `git merge --no-ff feat/<topic>`. That keeps the branch's commits as a visible side rail in the history. Never squash.
+4. Push the release branch and open one PR to `main`. CI runs, and you merge on GitHub when it's green. After the first deploy, merging also ships it.
 
 ## When something's wrong
 

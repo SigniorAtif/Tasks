@@ -45,10 +45,10 @@ sequenceDiagram
 
 1. `loadEnv()` (`env.ts`) reads and checks every setting with zod, or exits naming the bad ones ([[Environment variables and config]]).
 2. `createLogger(env)` (`logger.ts`) makes the pino logger ([[Structured logging]]).
-3. `createPool(env.DATABASE_URL)` (`db/pool.ts`) prepares up to 10 database connections ([[Connection pools]]). `createDb(pool)` (`db/client.ts`) puts Drizzle on top.
+3. `createPool(env.DATABASE_URL)` (`db/pool.ts`) prepares up to 10 database connections ([[Connection pools]]), and `createDb(pool)` (`db/client.ts`) puts Drizzle on top.
 4. `createAuth(...)` (`auth/auth.ts`) configures Better Auth: Google, the allowlist hooks, the cookie rules.
 5. `createApp(...)` (`app.ts`) builds the Hono app: the list of middleware and routes, in order.
-6. `serve(...)` from `@hono/node-server` opens port 3000. Node's built-in HTTP server receives raw connections; `serve` turns each request into a standard `Request` object and hands it to `app.fetch`.
+6. `serve(...)` from `@hono/node-server` opens port 3000. Node's built-in HTTP server receives raw connections, and `serve` turns each request into a standard `Request` object and hands it to `app.fetch`.
 7. `process.once('SIGTERM', shutdown)` prepares a clean stop for when Docker replaces the container.
 
 *From `apps/api/src/main.ts` (shortened):*
@@ -71,13 +71,13 @@ const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (
 What to notice:
 - Each line uses what the lines above it made, so the order isn't a choice: no logger without `env`, no Drizzle without the pool, no app without all of them.
 - `serve` is given `app.fetch`, a function that takes a `Request` and returns a `Response`. That one function is the whole meeting point between Node's HTTP server and Hono.
-- No database connection is open yet: the pool connects the first time a query needs one.
+- No database connection is open yet. The pool connects the first time a query needs one.
 
 ## 1. Phone → server
 
-1. The installed PWA's code runs `meQuery` (`apps/web/src/lib/queries.ts`). It calls `apiGet('/api/v1/me')` (`apps/web/src/lib/api.ts`), a `fetch` with no host: it goes to the page's own origin, so the cookie rides along automatically.
+1. The installed PWA's code runs `meQuery` (`apps/web/src/lib/queries.ts`), which calls `apiGet('/api/v1/me')` (`apps/web/src/lib/api.ts`). That's a `fetch` with no host, so it goes to the page's own origin, and the cookie rides along automatically.
    - Who triggers it: the `/` route's `beforeLoad` (`apps/web/src/routes/index.tsx`), which runs before the screen draws, and then a refetch every 60 s.
-   - Since v0.2, `beforeLoad` calls `requireSession` (`apps/web/src/lib/require-session.ts`), and the cache may already hold `me`, restored from IndexedDB at start-up ([[Offline reads]]). Then the screen draws from that copy straight away and this request happens in the background; offline, it doesn't happen at all.
+   - Since v0.2, `beforeLoad` calls `requireSession` (`apps/web/src/lib/require-session.ts`), and the cache may already hold `me`, restored from IndexedDB at start-up ([[Offline reads]]). Then the screen draws from that copy straight away, and this request happens in the background. Offline, it doesn't happen at all.
 
    The chain, from the route down to `fetch`:
 
@@ -131,14 +131,14 @@ What to notice:
 
    What to notice: `api:3000` is a name on the private Docker network, not a public address, and `{client_ip}` is the IP Caddy settled on after the `trusted_proxies` check. Why both are needed: [[Reverse proxies and TLS]].
 
-In development the same request goes to Vite on `localhost:5173`, which forwards `/api` to `127.0.0.1:3000` ([[Dev server proxy]]). Everything from here on is identical.
+In development, the same request goes to Vite on `localhost:5173`, which forwards `/api` to `127.0.0.1:3000` ([[Dev server proxy]]). Everything from here on is identical.
 
 ## 2. Through the middleware (`apps/api/src/app.ts`, top to bottom)
 
-Middleware wraps the route like layers of an onion: each one runs its "before" part, calls `await next()`, then runs its "after" part on the way out.
+Middleware wraps the route like the layers of an onion: each one runs its "before" part, calls `await next()`, then runs its "after" part on the way out.
 
 1. **`requestContext(logger)`** (`http/context.ts`)
-   - Before: reads `X-Request-Id` from the request if it's safe, or makes one with `randomUUID()`. Stores the id and a child logger tagged with it in `c` (Hono's context object for this request). Starts a timer.
+   - Before: reads `X-Request-Id` from the request if it's safe, or makes one with `randomUUID()`. Stores the id, and a child logger tagged with it, in `c` (Hono's context object for this request). Starts a timer.
    - After (step 4): sets the `X-Request-Id` response header and logs one line: method, path, status, duration.
 
    *From `apps/api/src/http/context.ts` (shortened):*
@@ -171,24 +171,24 @@ Middleware wraps the route like layers of an onion: each one runs its "before" p
 
    What to notice:
    - Everything above `await next()` is the "before" part. Everything below runs once the route (or `onError`) has produced the response, `c.res`.
-   - `SAFE_REQUEST_ID` is the pattern `/^[\w-]{1,128}$/`: a caller's own id is reused only if it's letters, digits, `_` and `-`, so nobody can smuggle quotes or line breaks into our logs.
+   - `SAFE_REQUEST_ID` is the pattern `/^[\w-]{1,128}$/`. A caller's own id is reused only if it's letters, digits, `_` and `-`, so nobody can smuggle quotes or line breaks into our logs.
    - `log[status >= 500 ? 'error' : 'info'](…)` picks the method by name: `log.error(…)` for a 5xx, `log.info(…)` for everything else.
 
-2. **`secureHeaders()`** (Hono): adds headers like `X-Content-Type-Options: nosniff` on the way out.
+2. **`secureHeaders()`** (Hono) adds headers like `X-Content-Type-Options: nosniff` on the way out.
 3. **`bodyLimit(256 KB)`** (Hono): a GET has no body, so it passes.
-4. **`healthzRoute`**: only matches `/healthz`. Not ours; skipped.
-5. **Better Auth's routes**: only match `/api/auth/*`. Skipped.
+4. **`healthzRoute`** only matches `/healthz`. Not ours, so it's skipped.
+5. **Better Auth's routes** only match `/api/auth/*`. Skipped too.
 6. **`requireSession(auth, allowlist)`** (`auth/require-session.ts`), on every `/api/*` path:
    1. `auth.api.getSession({ headers })` is the Better Auth call that does the real work:
       - parse the cookie;
       - check its HMAC signature with `BETTER_AUTH_SECRET` ([[Hashing and signing]]); a bad signature means no session, with no database query at all;
-      - look up the token in `auth_session`, joined to `auth_user` ([[Postgres and SQL basics]]);
+      - look the token up in `auth_session`, joined to `auth_user` ([[Postgres and SQL basics]]);
       - check `expires_at` hasn't passed;
       - if the session was last extended more than a day ago, push the expiry 30 days out (an `UPDATE`) and prepare a fresh `Set-Cookie`.
    2. Any `Set-Cookie` Better Auth produced is copied onto our response, so the browser's copy of the cookie gets the new expiry too.
    3. No session → `throw new AppError('unauthenticated')`. Jump to step 5.
-   4. Session, but the email is no longer on `AUTH_ALLOWED_EMAILS` → `throw new AppError('forbidden')`.
-   5. Otherwise `c.set('user', { id, email, name, image })` and `await next()`.
+   4. A session, but the email is no longer on `AUTH_ALLOWED_EMAILS` → `throw new AppError('forbidden')`.
+   5. Otherwise, `c.set('user', { id, email, name, image })` and `await next()`.
 
    Steps 6.1 to 6.3 in the code:
 
@@ -208,10 +208,10 @@ Middleware wraps the route like layers of an onion: each one runs its "before" p
 
    What to notice:
    - `const { headers, response: session } = …` takes two fields out of the result and renames `response` to `session` on the way ([[TypeScript essentials]]).
-   - `returnHeaders: true` asks Better Auth to also return the headers it would like to send, which is where the refreshed cookie is. The `for` loop copies each `Set-Cookie` onto our response; `append: true` adds a header rather than replacing one, so several `Set-Cookie` lines can sit side by side.
-   - The 403 branch and `c.set('user', …)` that come next are shown in [[Auth]].
+   - `returnHeaders: true` asks Better Auth to also return the headers it would like to send, which is where the refreshed cookie is. The `for` loop copies each `Set-Cookie` onto our response, and `append: true` adds a header instead of replacing one, so several `Set-Cookie` lines can sit side by side.
+   - The 403 branch, and the `c.set('user', …)` that comes next, are shown in [[Auth]].
 
-7. **`csrf({ origin })`** (Hono), on `/api/v1/*`: blocks state-changing requests from other sites. `GET` is safe, so it passes.
+7. **`csrf({ origin })`** (Hono), on `/api/v1/*`, blocks state-changing requests from other sites. `GET` is safe, so it passes.
 
 ## 3. The route handler (`apps/api/src/routes/me.ts`)
 
@@ -231,9 +231,9 @@ Middleware wraps the route like layers of an onion: each one runs its "before" p
   });
 ```
 
-- The user id comes **only** from the session. There's no `?userId=` anyone could change, which is the most important security line in the file.
+- The user id comes **only** from the session. There's no `?userId=` anyone could change, and that's the most important security line in the file.
 - `getProfile` (`profile/profile.ts`) calls `findProfile`. Drizzle builds `select "tzid", "day_boundary" from "profile" where "user_id" = $1` and sends it with the id as parameter `$1`. A pooled connection is borrowed and returned.
-  - Postgres answers `04:00:00`; `.slice(0, 5)` makes it `04:00` to match the contract's `WallTime`.
+  - Postgres answers `04:00:00`, and `.slice(0, 5)` makes it `04:00` to match the contract's `WallTime`.
   - If there's no row (the sign-in hook failed once, say), `ensureProfile` inserts the defaults with `on conflict do nothing`, and it reads again.
 
   *From `apps/api/src/profile/profile.ts` (shortened):*
@@ -256,21 +256,21 @@ Middleware wraps the route like layers of an onion: each one runs its "before" p
   }
   ```
 
-  Each Drizzle call adds one clause of the SQL above: `.select({…})` picks the two columns, `.from(profile)` the table, `.where(eq(profile.userId, userId))` the `user_id = $1`. The `userId` travels as a separate parameter, never pasted into the SQL text, so it can't change the query. The final `?? DEFAULT_PROFILE` is a last resort: even if the insert somehow left no row, `/me` still answers with the defaults.
+  Each Drizzle call adds one clause of the SQL above: `.select({…})` picks the two columns, `.from(profile)` the table, and `.where(eq(profile.userId, userId))` the `user_id = $1`. The `userId` travels as a separate parameter, never pasted into the SQL text, so it can't change the query. The final `?? DEFAULT_PROFILE` is a last resort: even if the insert somehow left no row, `/me` still answers with the defaults.
 
 - `deps.now()` is the clock, passed in so tests can freeze time.
 - `Me` is the type from `packages/core/src/api.ts`. If this object didn't match it, `pnpm typecheck` would fail ([[v0.0 contracts]]).
-- `c.json(body)` builds the response: status 200, `Content-Type: application/json`, the JSON text.
+- `c.json(body)` builds the response: status 200, `Content-Type: application/json`, and the JSON text.
 
 ## 4. Back out, and back to the phone
 
-The response passes the middleware in reverse: `secureHeaders` adds its headers, `requestContext` adds `X-Request-Id` and writes the log line:
+The response passes the middleware in reverse. `secureHeaders` adds its headers, and `requestContext` adds `X-Request-Id` and writes the log line:
 
 ```json
 {"level":30,"time":1791815740478,"requestId":"…","method":"GET","path":"/api/v1/me","status":200,"durationMs":3.1,"msg":"request"}
 ```
 
-`@hono/node-server` writes it to the socket → Caddy (which compresses it) → Cloudflare → the phone. In the PWA, `apiGet` checks the status, parses the JSON, and TanStack Query stores it under the key `['me']` ([[Server state and caching]]). React draws the screen from that cache.
+`@hono/node-server` writes it to the socket → Caddy (which compresses it) → Cloudflare → the phone. In the PWA, `apiGet` checks the status and parses the JSON, and TanStack Query stores it under the key `['me']` ([[Server state and caching]]). React draws the screen from that cache.
 
 *From `apps/web/src/lib/api.ts`:*
 ```ts
@@ -291,7 +291,7 @@ export async function apiGet<T>(path: string, options: GetOptions = {}): Promise
 ```
 
 What to notice:
-- `<T>` makes `apiGet` generic: `apiGet<Me>(…)` hands back a `Me` ([[TypeScript essentials]]). `body as T` is a promise to the compiler, not a check; the shared `Me` type in `packages/core` is what keeps the two sides in step.
+- `<T>` makes `apiGet` generic: `apiGet<Me>(…)` hands back a `Me` ([[TypeScript essentials]]). `body as T` is a promise to the compiler, not a check. The shared `Me` type in `packages/core` is what keeps the two sides in step.
 - `response.ok` is true for statuses 200 to 299. Anything else becomes an `ApiError` built from the problem body, with the request id attached, which is what section 5 relies on.
 - `readJson` gives `undefined` when the body isn't JSON, so a `200` with an HTML page (a request that missed the API) is caught as an error too.
 
@@ -321,7 +321,7 @@ In the PWA, `apiGet` turns the `Problem` into an `ApiError` with `.code`. The ro
 
 ## Next: a write
 
-This note follows a read. [[One write, line by line]] follows v0.2's "add a class" the same way, through the session check, the shared validation rules, the row-level-security transaction and back to the calendar.
+This note follows a read. [[One write, line by line]] follows v0.2's "add a class" the same way, through the session check, the shared validation rules, and the row-level-security transaction, and back to the calendar.
 
 ## Check yourself
 - Find the one line in `me.ts` that stops user B from reading user A's profile. What would the bug look like if the id came from the URL instead?

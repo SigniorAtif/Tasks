@@ -18,7 +18,7 @@ How you sign in, and how the API knows it's you on every request after that. Bui
 
 ## Signing in, step by step
 
-The same steps as a picture (the numbers don't match the list below one to one; the picture merges some):
+Here are the steps as a picture. (The numbers don't match the list below one to one, because the picture merges some.)
 
 ```mermaid
 sequenceDiagram
@@ -53,7 +53,7 @@ Your phone, the installed PWA, `https://tasks.ahmedatif.in`:
 
 1. **You tap "Sign in with Google".** The PWA sends `POST /api/auth/sign-in/social` with `{ provider: "google", callbackURL: "/", errorCallbackURL: "/login" }`.
 2. **Better Auth prepares a one-time ticket.** It makes a random `state` and a PKCE `code_verifier` (both explained in [[OAuth sign-in]]), saves them in `auth_verification` for 10 minutes, sets a signed `better-auth.state` cookie, and answers with Google's URL.
-3. **The browser goes to Google.** The URL names our client id, the redirect URI `https://tasks.ahmedatif.in/api/auth/callback/google`, `prompt=select_account` (so you pick your personal account, not your KIIT one by accident) and the PKCE challenge. Those come from our configuration:
+3. **The browser goes to Google.** The URL names our client id, the redirect URI `https://tasks.ahmedatif.in/api/auth/callback/google`, `prompt=select_account` (so you pick your personal account, not your KIIT one by accident), and the PKCE challenge. Those come from our configuration:
 
    *From `apps/api/src/auth/auth.ts` (shortened):*
    ```ts
@@ -77,15 +77,15 @@ Your phone, the installed PWA, `https://tasks.ahmedatif.in`:
    ```
 
    What to notice:
-   - `a && b ? x : y`: with both Google variables set, `google` is the provider's settings; otherwise it's an empty object and Better Auth has no Google at all (the `PROVIDER_NOT_FOUND` case below).
+   - `a && b ? x : y`: with both Google variables set, `google` is the provider's settings. Otherwise it's an empty object, and Better Auth has no Google at all (the `PROVIDER_NOT_FOUND` case below).
    - `as const` keeps the type as the exact text `'select_account'` instead of "any string", which Better Auth's types require.
-   - The redirect URI is never written down whole: it's `baseURL` + `basePath` (`/api/auth`) + `/callback/google`.
+   - The redirect URI is never written down whole. It's `baseURL` + `basePath` (`/api/auth`) + `/callback/google`.
 
 4. **You pick your account.** Google never shows us your password; it only vouches for you.
 5. **Google sends the browser back** to `/api/auth/callback/google?code=…&state=…`.
-6. **Better Auth checks the ticket**: the `state` must match the cookie from step 2 and the saved row (and is then used up). A forged or replayed callback stops here.
-7. **Better Auth trades the code for your identity**, server to server: it POSTs the `code` and the `code_verifier` to `https://oauth2.googleapis.com/token` and gets an `id_token` holding your Google id (`sub`), email, name and picture.
-8. **The allowlist.** First sign-in: before the `auth_user` row is written, our `user.create.before` hook checks your email against `AUTH_ALLOWED_EMAILS`. Not on it → no row is ever written, and the browser lands on `/login?error=not_invited`. On it → `auth_user` and `auth_account` are written together (one transaction), then our `after` hook creates your `profile` with the defaults.
+6. **Better Auth checks the ticket.** The `state` must match the cookie from step 2 and the saved row, and it's then used up. A forged or replayed callback stops here.
+7. **Better Auth trades the code for your identity**, server to server. It POSTs the `code` and the `code_verifier` to `https://oauth2.googleapis.com/token` and gets back an `id_token` holding your Google id (`sub`), email, name and picture.
+8. **The allowlist.** On a first sign-in, before the `auth_user` row is written, our `user.create.before` hook checks your email against `AUTH_ALLOWED_EMAILS`. Not on it, and no row is ever written: the browser lands on `/login?error=not_invited`. On it, and `auth_user` and `auth_account` are written together (one transaction), then our `after` hook creates your `profile` with the defaults.
 
    ```ts
    // apps/api/src/auth/auth.ts (shortened)
@@ -112,9 +112,9 @@ Your phone, the installed PWA, `https://tasks.ahmedatif.in`:
    What to notice:
    - A **hook** is a function Better Auth promises to call at a fixed moment: `before` runs just before the `INSERT`, `after` once it's committed.
    - `throw notInvited()` cancels the insert, and Better Auth turns the error into the `/login?error=not_invited` redirect. `return { data: user }` means "go ahead, insert it unchanged".
-   - The list from the environment is already trimmed and lower-case (`env.ts` did it); the email from Google might not be, hence `.trim().toLowerCase()` here.
+   - The list from the environment is already trimmed and lower-case (`env.ts` did that), but the email from Google might not be, hence `.trim().toLowerCase()` here.
 
-9. **A session row.** Our `session.create.before` hook checks the allowlist again (someone removed from the list keeps their user row but can't get a new session). Better Auth inserts `auth_session`: a random 32-character token, expiry in 30 days, IP and user agent.
+9. **A session row.** Our `session.create.before` hook checks the allowlist again, so someone removed from the list keeps their user row but can't get a new session. Better Auth inserts `auth_session`: a random 32-character token, an expiry 30 days out, the IP and the user agent.
 
    *From `apps/api/src/auth/auth.ts`:*
    ```ts
@@ -136,11 +136,11 @@ Your phone, the installed PWA, `https://tasks.ahmedatif.in`:
    ```
 
    What to notice:
-   - A session row only knows its `userId`, so the hook first looks the email up: Drizzle turns `.select().from().where(eq(…))` into `select "email" from "auth_user" where "id" = $1`.
+   - A session row only knows its `userId`, so the hook first looks the email up. Drizzle turns `.select().from().where(eq(…))` into `select "email" from "auth_user" where "id" = $1`.
    - `const [owner] = …` takes the first row of the result, or `undefined` when there is none (a deleted user), which also counts as "not allowed".
 
-10. **The cookie.** The response is a redirect to `/` with `Set-Cookie: __Secure-better-auth.session_token=<token>.<signature>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000` (30 days). On plain `http://localhost` there is no `Secure` and no `__Secure-` prefix. No `Domain`, so the cookie is **host-only**: never sent to any other subdomain.
-11. **`/me`.** The PWA loads, calls `GET /api/v1/me`; the browser attaches the cookie by itself. `requireSession` asks Better Auth to check the signature and look the token up in `auth_session` (not expired?). Once a day of use it pushes the expiry 30 days out and re-sends the cookie with a fresh `Max-Age` (the **sliding** expiry, so an app you use daily never logs you out). The route answers `{ user, profile, serverTime }`.
+10. **The cookie.** The response is a redirect to `/` with `Set-Cookie: __Secure-better-auth.session_token=<token>.<signature>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000` (30 days). On plain `http://localhost` there's no `Secure` and no `__Secure-` prefix. There's no `Domain` either, so the cookie is **host-only**: never sent to any other subdomain.
+11. **`/me`.** The PWA loads and calls `GET /api/v1/me`, and the browser attaches the cookie by itself. `requireSession` asks Better Auth to check the signature and look the token up in `auth_session` (not expired?). Once per day of use, it pushes the expiry 30 days out and re-sends the cookie with a fresh `Max-Age`. That's the **sliding** expiry, so an app you use daily never logs you out. The route answers `{ user, profile, serverTime }`.
 
 The cookie and session rules of steps 10 and 11 are a few lines of configuration:
 
@@ -198,10 +198,10 @@ function notInvited(): APIError {
 ```
 
 What to notice:
-- `APIError` is Better Auth's own error class; its `code` is what reaches the login page as `?error=`.
+- `APIError` is Better Auth's own error class, and its `code` is what reaches the login page as `?error=`.
 - `NOT_INVITED` is the constant `'not_invited'` from `allowlist.ts`, so the code is spelled in exactly one place.
 
-When Google isn't configured (no `GOOGLE_CLIENT_ID`, normal in development), step 1 answers `404 {"code":"PROVIDER_NOT_FOUND"}` instead. Better Auth's routes answer with its own `{ code, message }` JSON, not our problem shape ([[Error responses]]).
+When Google isn't configured (no `GOOGLE_CLIENT_ID`, which is normal in development), step 1 answers `404 {"code":"PROVIDER_NOT_FOUND"}` instead. Better Auth's routes answer with its own `{ code, message }` JSON, not our problem shape ([[Error responses]]).
 
 ## The gate (`requireSession`)
 
@@ -240,11 +240,11 @@ Each row of that table is a line or two of the middleware:
 
 What to notice:
 - The first line lets Better Auth's own `/api/auth/*` paths straight through, so the gate itself knows about them, whatever order `app.ts` registers things in.
-- `throw new AppError(…)` doesn't answer here: it jumps to `onError`, which builds the 401 or 403 problem ([[Error responses]]).
-- `c.set('user', …)` is how one middleware hands something to the next ones; the route reads it back with `c.get('user')`. `?? null` turns a missing picture into `null`.
-- `await next()` is only reached on the success path: without a session, no route ever runs.
+- `throw new AppError(…)` doesn't answer here. It jumps to `onError`, which builds the 401 or 403 problem ([[Error responses]]).
+- `c.set('user', …)` is how one middleware hands something to the next ones, and the route reads it back with `c.get('user')`. `?? null` turns a missing picture into `null`.
+- `await next()` is only reached on the success path. Without a session, no route ever runs.
 
-Every query after that uses `user.id` from the session, never an id from the URL or body. For `profile` that rule is still the whole of our data isolation; the cross-user test in `routes/me.test.ts` checks it. The v0.2 calendar tables add row-level security on top (A10, [[Row-level security in our database]]).
+Every query after that uses `user.id` from the session, never an id from the URL or the body. For `profile`, that rule is still the whole of our data isolation, and the cross-user test in `routes/me.test.ts` checks it. The v0.2 calendar tables add row-level security on top (A10, [[Row-level security in our database]]).
 
 ## CSRF on our own routes
 
@@ -266,9 +266,9 @@ Better Auth checks the `Origin` header on its own state-changing requests. For `
 
 What to notice:
 - Both guards trust one origin and nothing else: `BETTER_AUTH_URL` (`https://tasks.ahmedatif.in` in production, `http://localhost:5173` on your laptop).
-- `disableOriginCheck: false` looks like it does nothing, but it overrides Better Auth's habit of switching the check off under `NODE_ENV=test`, so `auth.test.ts` tests the real protection.
+- `disableOriginCheck: false` looks like it does nothing. It actually overrides Better Auth's habit of switching the check off under `NODE_ENV=test`, so `auth.test.ts` tests the real protection.
 
-Note: an earlier version of [[Origin]] said the cookie would use the `__Host-` prefix. Better Auth actually uses `__Secure-` and leaves out `Domain`; the effect (host-only, https-only) is the same, but `__Host-` would have the browser *enforce* it. Changing it isn't worth fighting the library for now.
+A note: an earlier version of [[Origin]] said the cookie would use the `__Host-` prefix. Better Auth actually uses `__Secure-` and leaves out `Domain`. The effect (host-only, https-only) is the same, but `__Host-` would have the browser *enforce* it. Changing it isn't worth fighting the library for, for now.
 
 ## Without Google: `dev:session`
 
@@ -298,11 +298,11 @@ Note: an earlier version of [[Origin]] said the cookie would use the `__Host-` p
 What to notice:
 - The localhost check is the very first thing, before any database work. `isLocalOrigin` parses the URL and compares only the host name, so `http://localhost:5173` passes and `https://tasks.ahmedatif.in` never does.
 - `ctx.internalAdapter` is Better Auth's own code for writing its rows, so the user and session look exactly like a real sign-in's, and the allowlist hooks above still run.
-- `existing?.user ?? (…)`: use the user if one exists, otherwise create one. `?.` gives `undefined` instead of crashing when `existing` is empty; `??` then picks the right-hand side.
+- `existing?.user ?? (…)` means: use the user if one exists, otherwise create one. `?.` gives `undefined` instead of crashing when `existing` is empty, and `??` then picks the right-hand side.
 - How the cookie value is signed from `session.token` is in [[Hashing and signing]].
 
 ## Check yourself
-- Mallory signs in with Google. List every table she gets a row in. (Careful with `auth_verification`.)
+- Mallory signs in with Google. List every table they get a row in. (Careful with `auth_verification`.)
 - You remove your email from `AUTH_ALLOWED_EMAILS` and restart. What does your phone see on its next `/me`, and what happens when you tap "Sign in" again?
 - Someone copies a row from `auth_session` out of a leaked database backup and puts the `token` in a cookie. Why doesn't it work?
 - You use the app every day for two months. Why are you never logged out, even though sessions last 30 days?

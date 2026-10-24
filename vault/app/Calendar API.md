@@ -16,9 +16,9 @@ The v0.2 routes that put your timetable on the home screen: groups ("Classes · 
 | the same five for `/api/v1/series` | Same, sorted by title. A create without `tzid` takes your profile's zone | Also `422` on `groupId` when the group isn't one of yours |
 | `GET /api/v1/calendar?from=2026-10-12&to=2026-10-18` | `200 { from, to, occurrences: [...] }`, sorted by start | `422` naming `from` or `to`: missing, not a real date, `to` before `from`, or wider than 62 days |
 
-Two rules for all of them:
+Two rules apply to all of them:
 - **No session, no answer:** `401`, from `requireSession`, before any of this code runs ([[Auth]]).
-- **Every answer is marked `Cache-Control: private, no-store`**, errors and `204`s included: it's your timetable, and no shared cache (a college proxy, say) may keep a copy.
+- **Every answer is marked `Cache-Control: private, no-store`**, errors and `204`s included. It's your timetable, and no shared cache (a college proxy, say) may keep a copy.
 
 ## Try it
 
@@ -31,11 +31,11 @@ curl -H 'Cookie: better-auth.session_token=<the value it printed>' \
   'http://localhost:5173/api/v1/calendar?from=2026-10-12&to=2026-10-18'
 ```
 
-The first occurrence in the answer is Data Structures on Monday 12 October: `"start": "2026-10-12T02:30:00Z"`, which is 08:00 in Kolkata (UTC+05:30). Change `to` to `2026-12-31` and you get a `422` with `"errors": [{ "path": "to", "message": "the window can span at most 62 days" }]`.
+The first occurrence in the answer is Data Structures on Monday 12 October: `"start": "2026-10-12T02:30:00Z"`, which is 08:00 in Kolkata (UTC+05:30). Change `to` to `2026-12-31`, and you get a `422` with `"errors": [{ "path": "to", "message": "the window can span at most 62 days" }]`.
 
 ## One request, traced: `GET /calendar`
 
-You open the app on your phone on Monday morning. The calendar screen asks for this week.
+You open the app on your phone on Monday morning, and the calendar screen asks for this week.
 
 ```mermaid
 sequenceDiagram
@@ -62,8 +62,8 @@ sequenceDiagram
 
 Step by step, with the files open:
 
-1. **`app.ts`**: the request passes `requestContext`, `secureHeaders`, `bodyLimit`, `requireSession` (sets `c.var.user`) and `csrf`, exactly as for `/me` ([[API server]]).
-2. **`http/user-scope.ts`**, `userScope(db)`: mounted on `/api/v1/groups/*`, `/api/v1/series/*` and `/api/v1/calendar/*` (in Hono, `/x/*` also matches `/x`). It sets `c.var.asUser`, a function that runs a callback in one transaction as you. The handler never sees your id as something it could change. After the handler, on the way out, it adds `Cache-Control`.
+1. **`app.ts`**: the request passes `requestContext`, `secureHeaders`, `bodyLimit`, `requireSession` (which sets `c.var.user`) and `csrf`, exactly as for `/me` ([[API server]]).
+2. **`http/user-scope.ts`**, `userScope(db)`: mounted on `/api/v1/groups/*`, `/api/v1/series/*` and `/api/v1/calendar/*` (in Hono, `/x/*` also matches `/x`). It sets `c.var.asUser`, a function that runs a callback in one transaction as you, so the handler never sees your id as something it could change. After the handler, on the way out, it adds `Cache-Control`.
 
    *From `apps/api/src/app.ts` and `apps/api/src/http/user-scope.ts` (shortened):*
    ```ts
@@ -87,7 +87,7 @@ Step by step, with the files open:
    What to notice:
    - One middleware, `scoped`, is mounted on three path prefixes. `paths.groups` is `/api/v1/groups`, from core's shared list of paths.
    - `c.get('user').id` was put there by `requireSession`, earlier in the chain. The arrow function `(fn) => withUser(db, userId, fn)` *remembers* `db` and `userId` (a closure), so the handler calls `c.var.asUser(fn)` and never touches the id.
-   - `c.header('Cache-Control', …)` comes after `await next()`: it runs on the way out, once the handler (or the error handler) has made the answer.
+   - `c.header('Cache-Control', …)` comes after `await next()`, so it runs on the way out, once the handler (or the error handler) has made the answer.
 3. **`routes/calendar.ts`**: `calendarQuerySchema.safeParse(c.req.query())`, the shared rule from core. A failure becomes `422` through `validationFailed` ([[Validating input with schemas]]). Why that rule needed a fix first: see "A pitfall we hit" below.
 
    *From `apps/api/src/routes/calendar.ts`:*
@@ -100,7 +100,7 @@ Step by step, with the files open:
 
    `c.req.query()` is every query-string value as text: `{ from: '2026-10-12', to: '2026-10-18' }`. `safeParse` never throws; it returns `success` and either `data` or `error`. The handler throws the 422 itself, and `onError` in `http/errors.ts` turns it into the response. After that line, `query.data` is known to hold two checked dates.
 4. **`c.var.asUser(async (scope) => ...)`** → **`db/user-scope.ts`**, `withUser`: `BEGIN`, `set_config('app.user_id', <your id>, true)`, `SET LOCAL ROLE tasks_app` ([[Row-level security in our database]]).
-5. Three reads, in **`calendar/groups.ts`**, **`calendar/series.ts`** and **`calendar/overrides.ts`**. All your groups and series (you have tens, so filtering them by the window would cost more than it saves), and only the overrides whose original date *or* new date is in the window: a lab moved from last Friday into this Monday has its new date here, its original date not.
+5. Three reads, in **`calendar/groups.ts`**, **`calendar/series.ts`** and **`calendar/overrides.ts`**: all your groups and series (you have tens, so filtering them by the window would cost more than it saves), and only the overrides whose original date *or* new date is in the window. A lab moved from last Friday into this Monday has its new date here, but not its original date.
 
    *From `apps/api/src/calendar/overrides.ts`:*
    ```ts
@@ -118,9 +118,9 @@ Step by step, with the files open:
        );
    ```
 
-   Drizzle's `and`, `or`, `eq` and `between` build the SQL `where user_id = $1 and (original_date between $2 and $3 or new_date between $4 and $5)`. The `or` is the "moved in or moved out" rule: last Friday's lab has `original_date` outside this week but `new_date` inside it, so the second `between` catches it. `eq(…userId, scope.userId)` is the app's own filter, on top of the RLS policy.
-6. **`COMMIT`**. The transaction lasted three short queries. The pooled connection goes back as the owner, naming nobody.
-7. **`expand()`** from `@tasks/core` runs *after* the commit: it's pure computation, and no database connection should wait on it. `dayExceptions` is `[]` until v0.3b adds holidays.
+   Drizzle's `and`, `or`, `eq` and `between` build the SQL `where user_id = $1 and (original_date between $2 and $3 or new_date between $4 and $5)`. The `or` is the "moved in or moved out" rule: last Friday's lab has its `original_date` outside this week but its `new_date` inside it, so the second `between` catches it. `eq(…userId, scope.userId)` is the app's own filter, on top of the RLS policy.
+6. **`COMMIT`**. The transaction lasted three short queries, and the pooled connection goes back as the owner, naming nobody.
+7. **`expand()`** from `@tasks/core` runs *after* the commit. It's pure computation, and no database connection should wait on it. `dayExceptions` is `[]` until v0.3b adds holidays.
 
    *From `apps/api/src/routes/calendar.ts`:*
    ```ts
@@ -139,9 +139,9 @@ Step by step, with the files open:
 
    What to notice:
    - `async (scope) => ({ … })`: the round brackets around `{ … }` make the arrow function return an object, instead of treating the braces as a function body.
-   - The `}));` line is where the transaction ends: the callback's promise resolves, `withUser` sends `COMMIT`, and only then does `expand` run on the next line.
+   - The `}));` line is where the transaction ends. The callback's promise resolves, `withUser` sends `COMMIT`, and only then does `expand` run on the next line.
    - `{ ...rows, dayExceptions: [], window }` copies `groups`, `series` and `overrides` out of `rows` and adds two more fields: exactly the input `expand()` takes.
-8. `c.json(...)`, then `userScope` adds `Cache-Control` and `requestContext` adds `X-Request-Id` and logs one line.
+8. `c.json(...)`, then `userScope` adds `Cache-Control`, and `requestContext` adds `X-Request-Id` and logs one line.
 
 Each row is turned into the contract's shape on the way out, field by field, in **`calendar/rows.ts`**:
 
@@ -179,12 +179,12 @@ export function toSeries(row: SeriesRow): Series {
 
 What to notice:
 - `value.slice(0, 5)` keeps the first five characters: `08:00:00` → `08:00`. `toISOString()` always writes UTC with a `Z`.
-- `Date | null` is a union type: "a `Date` or `null`" ([[TypeScript essentials]]). The return type `Series` comes from core, so if the contract gains a field, `pnpm typecheck` fails here until it's mapped.
-- No `...row`: every field is named, which is why `userId`, `createdAt` and `updatedAt` never reach the JSON.
+- `Date | null` is a union type, "a `Date` or `null`" ([[TypeScript essentials]]). The return type `Series` comes from core, so if the contract gains a field, `pnpm typecheck` fails here until it's mapped.
+- There's no `...row`. Every field is named, which is why `userId`, `createdAt` and `updatedAt` never reach the JSON.
 
 ## Creating a row: idempotent, and the 409
 
-Your phone on campus Wi-Fi sends "create Data Structures", the answer is lost, and it sends the same request again, same `id` ([[Idempotency and retries]]). `createGroup` and `createSeries` (`calendar/groups.ts`, `calendar/series.ts`, with the helpers in `calendar/writes.ts`) handle all three cases with one insert and at most one lookup:
+Your phone on campus Wi-Fi sends "create Data Structures", the answer is lost, and it sends the same request again, with the same `id` ([[Idempotency and retries]]). `createGroup` and `createSeries` (`calendar/groups.ts`, `calendar/series.ts`, with the helpers in `calendar/writes.ts`) handle all three cases with one insert and at most one lookup:
 
 ```mermaid
 flowchart TD
@@ -197,7 +197,7 @@ flowchart TD
   mine -->|"no, invisible"| c409(["409 conflict"])
 ```
 
-The `409` case: the id is taken, but neither your `WHERE user_id` nor the RLS policy lets you see the row, so it's someone else's. The answer doesn't say whose. With UUIDv7 ids made on the phone this never happens by accident; it takes a copied id.
+The `409` case: the id is taken, but neither your `WHERE user_id` nor the RLS policy lets you see the row, so it's someone else's. The answer doesn't say whose. With UUIDv7 ids made on the phone, this never happens by accident; it takes a copied id.
 
 The whole flowchart in code, from the insert to the status:
 
@@ -235,11 +235,11 @@ What to notice:
 - `const [row] = …` takes the first element of the array `returning()` gives back. When `on conflict do nothing` inserted nothing, the array is empty and `row` is `undefined`.
 - `{ ...input, userId: scope.userId }`: the owner comes from the scope, written after the spread so it wins over anything in `input`.
 - `findSeries` filters by `scope.userId` and runs under RLS, so someone else's row comes back `undefined`, and `alreadyCreated` throws the 409. `<T>` makes it work for groups and series alike ([[TypeScript essentials]], generics).
-- The route only reads `created`: `true` → 201 plus `Location`, `false` → 200.
+- The route only reads `created`: `true` gives 201 plus `Location`, `false` gives 200.
 
 ## Refused writes become 422s that name the field
 
-zod checks every body first. Some rules need the stored row, which only the database has. Example: the semester group runs `2026-07-13` to `2026-11-27`, and you send `PATCH { "activeFrom": "2026-12-01" }` alone. zod sees one valid date. Postgres compares it with the stored `active_to` and the CHECK `schedule_group_active_range` refuses (SQLSTATE `23514`).
+zod checks every body first. But some rules need the stored row, which only the database has. Example: the semester group runs `2026-07-13` to `2026-11-27`, and you send `PATCH { "activeFrom": "2026-12-01" }` alone. zod sees one valid date. Postgres compares it with the stored `active_to`, and the CHECK `schedule_group_active_range` refuses it (SQLSTATE `23514`).
 
 `calendar/constraints.ts` turns that into a `422`. It reads the error's code and constraint name (`db/pg-errors.ts` finds Postgres' error inside Drizzle's wrapper), looks the constraint up in a table, and names a field. A rule about two fields lists both sides, and the side you actually sent gets the blame. So the answer is `{ "path": "activeFrom", "message": "must be on or before activeTo" }`, not a message about `activeTo`, which you never touched.
 
@@ -270,10 +270,10 @@ zod checks every body first. Some rules need the stored row, which only the data
 ```
 
 What to notice:
-- `sent` is `Object.keys(changes)`, the fields the `PATCH` carried: here `['activeFrom']`. `sides.find(…)` picks the side whose `path` you sent; `?? sides[0]` falls back to the first side if you sent neither.
+- `sent` is `Object.keys(changes)`, the fields the `PATCH` carried: here `['activeFrom']`. `sides.find(…)` picks the side whose `path` you sent, and `?? sides[0]` falls back to the first side if you sent neither.
 - `pg?.constraint` is optional chaining: `undefined` instead of a crash when there's no Postgres error at all.
-- `return undefined` means "not a constraint problem": `guardedWrite` then rethrows the original error, and it becomes a 500.
-- The `for` loop walks the `cause` chain: Drizzle's error wraps the driver's `DatabaseError`, which is the one carrying `code` and `constraint`.
+- `return undefined` means "not a constraint problem". `guardedWrite` then rethrows the original error, and it becomes a 500.
+- The `for` loop walks the `cause` chain, because Drizzle's error wraps the driver's `DatabaseError`, which is the one carrying `code` and `constraint`.
 
 | Postgres says | SQLSTATE | We answer |
 |---|---|---|
@@ -284,9 +284,9 @@ What to notice:
 
 ## A pitfall we hit: a bad date crashed the window check
 
-The first version passed the query straight to core's `calendarQuerySchema`. A test asking for `?from=2026-02-30&to=2026-03-01` got a **500**. Why: the schema's whole-object check ("at most 62 days") parses both dates with Temporal, and zod 4 runs that check **even when a field's own check already failed**, as long as the field still has the right type (a string). Temporal throws on `2026-02-30`, and a throw inside a schema is a crash, not a validation error.
+The first version passed the query straight to core's `calendarQuerySchema`, and a test asking for `?from=2026-02-30&to=2026-03-01` got a **500**. Here's why. The schema's whole-object check ("at most 62 days") parses both dates with Temporal, and zod 4 runs that check **even when a field's own check already failed**, as long as the field still has the right type (a string). Temporal throws on `2026-02-30`, and a throw inside a schema is a crash, not a validation error.
 
-The first fix, in `routes/calendar.ts`, was a **pipe**: `z.object({ from: isoDateSchema, to: isoDateSchema }).pipe(calendarQuerySchema)`. A pipe runs its second schema only if the first passed, so the window check only ever saw real dates. The proper fix then went into the shared rule itself (`packages/core/src/schemas.ts`, branch `fix/calendar-window-bad-date`): the window check now returns early unless both dates are real, so the route uses `calendarQuerySchema` directly and any other caller (the PWA) is safe too. Lesson: in zod 4, a `.refine` on an object can run on fields that failed, so it must not assume they're valid.
+The first fix, in `routes/calendar.ts`, was a **pipe**: `z.object({ from: isoDateSchema, to: isoDateSchema }).pipe(calendarQuerySchema)`. A pipe runs its second schema only if the first passed, so the window check only ever saw real dates. The proper fix then went into the shared rule itself (`packages/core/src/schemas.ts`, branch `fix/calendar-window-bad-date`): the window check now returns early unless both dates are real. The route uses `calendarQuerySchema` directly, and any other caller (the PWA) is safe too. The lesson: in zod 4, a `.refine` on an object can run on fields that failed, so it must never assume they're valid.
 
 *From `packages/core/src/schemas.ts` (shortened):*
 ```ts
@@ -347,7 +347,7 @@ What to notice:
 | `src/calendar/seed.test.ts` | The seeded sample's calendar equals `expand()` of the seeded rows ([[Timetable files and seeding]]) |
 
 ## Check yourself
-- Predict first: your phone sends `POST /api/v1/series` with an id, the Wi-Fi drops, it sends it again. What does each answer say, and how many rows exist? Now trace the same with the second request sent by your friend's phone using your id.
+- Predict first: your phone sends `POST /api/v1/series` with an id, the Wi-Fi drops, and it sends it again. What does each answer say, and how many rows exist? Now trace the same with the second request sent by your friend's phone, using your id.
 - `PATCH /api/v1/series/<id>` with `{ "untilDate": "2026-07-01" }` on a series starting `2026-07-13`. Which layer refuses it, with which SQLSTATE, and which field does the `422` name? What if you sent `{ "startDate": "2026-12-01" }` to a series ending `2026-11-27` instead?
 - Break it: in `packages/core/src/schemas.ts`, delete the line `if (!isRealDate(from) || !isRealDate(to)) return;`. Which API test fails, with which status, and why does zod let it happen?
 - Why does `expand()` run after `COMMIT` and not inside `asUser`? What would a slow `expand()` inside the transaction hold on to?

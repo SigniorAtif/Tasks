@@ -32,7 +32,7 @@ Everything that turns the repo into a running app on the box: the image, the pro
 └── apps/web/dist/                the built PWA, served by the API
 ```
 
-It starts with `node apps/api/src/main.ts`, as the unprivileged user `node`, with `NODE_ENV=production HOST=0.0.0.0 PORT=3000 STATIC_DIR=/app/apps/web/dist TZ=UTC` and `GIT_SHA` set to the commit it was built from. No compile step: Node 24 strips the types itself ([[TypeScript checking vs running]]). The symlink matters: Node refuses to strip types from files inside `node_modules`, and through the link `@tasks/core`'s real location is `packages/core/src`, outside it.
+It starts with `node apps/api/src/main.ts`, as the unprivileged user `node`, with `NODE_ENV=production HOST=0.0.0.0 PORT=3000 STATIC_DIR=/app/apps/web/dist TZ=UTC` and `GIT_SHA` set to the commit it was built from. There's no compile step, because Node 24 strips the types itself ([[TypeScript checking vs running]]). The symlink matters: Node refuses to strip types from files inside `node_modules`, and through the link, `@tasks/core`'s real location is `packages/core/src`, outside it.
 
 The last two stages of the `Dockerfile`, where all of that is decided:
 
@@ -65,7 +65,7 @@ CMD ["node", "apps/api/src/main.ts"]
 ```
 
 What to notice:
-- `--prod` skips dev tools; `--filter @tasks/api...` (with the three dots) means "the API and the workspace packages it depends on", so `@tasks/core` comes along as the symlink.
+- `--prod` skips dev tools, and `--filter @tasks/api...` (with the three dots) means "the API and the workspace packages it depends on", so `@tasks/core` comes along as the symlink.
 - `COPY --from=prod-deps` and `COPY --from=web-build` take files out of earlier stages. Everything else those stages had (pnpm's store, Vite, TypeScript) is left behind.
 - `HOST=0.0.0.0`: inside a container, `127.0.0.1` is reachable only from that same container, so Caddy (another container) couldn't connect.
 - `ARG GIT_SHA` is filled by `--build-arg GIT_SHA=<commit>` at build time, and `ENV` keeps it in the image, where `/healthz` reads it.
@@ -100,7 +100,7 @@ flowchart TD
    | `Scan for secrets` | gitleaks over the full history |
    | `Build and boot the image` | builds the image (x86, not pushed), runs migrations, starts it, checks `/healthz` reports this commit |
 
-   The end of that last job, where "boots" is checked:
+   Here's the end of that last job, where "boots" is checked:
 
    *From `.github/workflows/ci.yml` (shortened):*
    ```sh
@@ -122,10 +122,10 @@ flowchart TD
 
    - The loop tries `/healthz` up to 30 times, a second apart. `curl -f` fails on an error status, so only a real answer gets past the `if`.
    - `jq -r .sha` pulls one field out of the JSON answer.
-   - The last line is the verdict: `test` exits non-zero when the two differ, which turns the step, and the PR's check, red. `docker logs api` runs first so a failure shows why.
+   - The last line is the verdict. `test` exits non-zero when the two differ, which turns the step, and the PR's check, red. `docker logs api` runs first, so a failure shows why.
 
 2. **All green, you merge.** Branch protection on `main` won't allow it otherwise.
-3. **`deploy.yml`, job `Build and push the image`.** Builds for amd64 and arm64 with `GIT_SHA=<commit>` and pushes `ghcr.io/signioratif/tasks:<commit>` and `:main`.
+3. **`deploy.yml`, job `Build and push the image`.** It builds for amd64 and arm64 with `GIT_SHA=<commit>` and pushes `ghcr.io/signioratif/tasks:<commit>` and `:main`.
 
    *From `.github/workflows/deploy.yml` (shortened):*
    ```yaml
@@ -145,7 +145,7 @@ flowchart TD
    ```
 
    `platforms` is the line that makes the image multi-arch. `${{ github.sha }}` is GitHub filling in the commit being built. `cache-from`/`cache-to: type=gha` keep Docker's layers in GitHub's cache, so the next build reuses the dependency layers.
-4. **Job `Deploy to the box`** (skipped until the repository variable `DEPLOY_ENABLED` is `true`). Copies `compose.prod.yaml`, `Caddyfile` and `deploy.sh` to `~/tasks` over SSH, then runs `~/tasks/deploy.sh <commit>` there.
+4. **Job `Deploy to the box`** (skipped until the repository variable `DEPLOY_ENABLED` is `true`). It copies `compose.prod.yaml`, `Caddyfile` and `deploy.sh` to `~/tasks` over SSH, then runs `~/tasks/deploy.sh <commit>` there.
 
    *From `.github/workflows/deploy.yml` (shortened):*
    ```yaml
@@ -165,17 +165,17 @@ flowchart TD
             ssh box ./tasks/deploy.sh "$GITHUB_SHA"
    ```
 
-   `needs: image` waits for the build job; `if:` is the on/off switch. `box` isn't a real hostname: the "Set up SSH" step before these writes an SSH config entry named `box` with the server's address, user and key, all from repository secrets.
+   `needs: image` waits for the build job, and `if:` is the on/off switch. `box` isn't a real hostname: the "Set up SSH" step before these writes an SSH config entry named `box` with the server's address, user and key, all from repository secrets.
 5. **`deploy.sh` on the box:**
    1. Takes a lock, so two deploys can't overlap.
-   2. Pulls the image (skipped if already there: a commit's image never changes).
+   2. Pulls the image (skipped if it's already there, since a commit's image never changes).
    3. Starts Postgres if needed and dumps it to `backups/tasks-<time>-before-<commit>.sql.gz`, keeping the newest 10.
    4. Runs the new image's migrations in a one-off `migrate` container.
    5. `docker compose up --wait`: replaces the API container and waits for its health check.
    6. Asks the API, from inside its container, for `/healthz` until it answers `200` with the new commit (2 minutes at most).
-   7. Writes the new tag into `.env`, appends to `deploy-history.log`, deletes images older than the previous one.
+   7. Writes the new tag into `.env`, appends to `deploy-history.log`, and deletes images older than the previous one.
 
-   Steps 1 to 6 in the script itself:
+   Here are steps 1 to 6 in the script itself:
 
    *From `deploy/deploy.sh` (shortened):*
    ```sh
@@ -208,12 +208,12 @@ flowchart TD
 
    What to notice:
    - `compose` is a tiny function defined at the top: `docker compose -f compose.prod.yaml "$@"`.
-   - `a || die "…"` reads "do `a`, or else stop with this message". `die` only stops; `fail` (used once the new API has started) rolls back first. That split is the "When something fails" table below.
-   - `export TAG=$new_tag` is how the new image is chosen: `compose.prod.yaml` names the image `…:${TAG}`, and a variable set in the shell wins over the old `TAG=` still written in `.env`.
+   - `a || die "…"` reads "do `a`, or else stop with this message". `die` only stops, while `fail` (used once the new API has started) rolls back first. That split is the "When something fails" table below.
+   - `export TAG=$new_tag` is how the new image is chosen. `compose.prod.yaml` names the image `…:${TAG}`, and a variable set in the shell wins over the old `TAG=` still written in `.env`.
    - The dump goes to `"$dump.partial"` and is renamed only when complete, so a half-written file can never be mistaken for a backup.
-   - `flock --nonblock 9` takes a lock on the open file `.deploy.lock` or fails at once if another deploy holds it. The lock is released automatically when the script exits, however it exits.
-   - `SECONDS` is a bash variable that counts seconds since the script started, which makes the 2-minute deadline one line.
-6. **The workflow checks the public URL**, through Cloudflare and Caddy, until `https://tasks.ahmedatif.in/healthz` reports the commit (3 minutes at most). Green: it's live.
+   - `flock --nonblock 9` takes a lock on the open file `.deploy.lock`, or fails at once if another deploy holds it. The lock is released automatically when the script exits, however it exits.
+   - `SECONDS` is a bash variable that counts the seconds since the script started, which makes the 2-minute deadline one line.
+6. **The workflow checks the public URL**, through Cloudflare and Caddy, until `https://tasks.ahmedatif.in/healthz` reports the commit (3 minutes at most). Green means it's live.
 
    *From `.github/workflows/deploy.yml` (shortened):*
    ```sh
@@ -227,7 +227,7 @@ flowchart TD
              done
    ```
 
-   The same "ask until it says the right commit, with a deadline" loop as in `deploy.sh`, but from the outside: this request travels through DNS, Cloudflare and Caddy before it reaches the API. `::error::` is a GitHub Actions convention that shows the line as a red error on the run's page.
+   It's the same "ask until it says the right commit, with a deadline" loop as in `deploy.sh`, but from the outside: this request travels through DNS, Cloudflare and Caddy before it reaches the API. `::error::` is a GitHub Actions convention that shows the line as a red error on the run's page.
 
 ## When something fails
 
@@ -240,7 +240,7 @@ flowchart TD
 | Health check or SHA check | **Rolls back**: starts the previous tag again, exits with an error | The previous API on the new schema, which is fine because migrations only add (expand/contract) |
 | Public URL check only | The workflow goes red; the box itself is healthy | New version; look at Cloudflare/DNS/Caddy |
 
-Every attempt, ok or failed, is a line in `~/tasks/deploy-history.log`.
+Every attempt, ok or failed, becomes a line in `~/tasks/deploy-history.log`.
 
 The "rolls back" row is this function, which `fail` calls before stopping:
 
@@ -260,15 +260,15 @@ rollback() {
 }
 ```
 
-- `previous_tag` was read from `.env` at the start, before anything changed. Since `.env` is only updated after a successful deploy, it always names the last version that worked.
-- `TAG=$previous_tag compose up … api` sets `TAG` for that one command only, and recreates just the `api` service: Postgres and its (already migrated) data are left alone.
-- No previous tag (the very first deploy), or a redeploy of the same tag: there's nothing different to go back to, so it says so and leaves things as they are.
+- `previous_tag` was read from `.env` at the start, before anything changed. `.env` is only updated after a successful deploy, so it always names the last version that worked.
+- `TAG=$previous_tag compose up … api` sets `TAG` for that one command only, and recreates just the `api` service. Postgres and its (already migrated) data are left alone.
+- With no previous tag (the very first deploy), or on a redeploy of the same tag, there's nothing different to go back to, so it says so and leaves things as they are.
 
 ## Running the production stack on a laptop
 
-Step by step, with what to edit in `deploy/.env`: [[Local workflow]] ("Try the production image on your laptop"). It also maps each CI job to the local command that runs the same check.
+Step by step, with what to edit in `deploy/.env`: [[Local workflow]] ("Try the production image on your laptop"). That note also maps each CI job to the local command that runs the same check.
 
-The commands are in `deploy/README.md` ("The production stack on a laptop"). In short: build the image with `GIT_SHA=local`, copy `deploy/env.example` to `deploy/.env` with `SITE_ADDRESS=http://localhost`, `HTTP_PORT=8080` and `IMAGE=tasks-local`, then `deploy/deploy.sh local` and open `http://localhost:8080`. The project is named `tasks-prod`, so it doesn't collide with the dev database from `compose.yaml`.
+The commands are in `deploy/README.md` ("The production stack on a laptop"). In short: build the image with `GIT_SHA=local`, copy `deploy/env.example` to `deploy/.env` with `SITE_ADDRESS=http://localhost`, `HTTP_PORT=8080` and `IMAGE=tasks-local`, then run `deploy/deploy.sh local` and open `http://localhost:8080`. The project is named `tasks-prod`, so it doesn't collide with the dev database from `compose.yaml`.
 
 ## Check yourself
 - Trace a merge: which file decides the image is built for arm64 too, and which one decides it's deployed at all?

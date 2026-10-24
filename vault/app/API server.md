@@ -2,9 +2,9 @@
 
 > **Background:** [[HTTP basics]] · [[Middleware]] · [[Error responses]] · [[Structured logging]] · [[Environment variables and config]] · [[Connection pools]]
 
-`apps/api` (`@tasks/api`): the Node program that answers every `/api/*` request, `/healthz`, and, in production, the PWA's files. Built in v0.0. Why these tools: [[API stack choices]]. Its database: [[Database and migrations]]. Its sign-in: [[Auth]].
+`apps/api` (`@tasks/api`) is the Node program that answers every `/api/*` request, `/healthz`, and, in production, the PWA's files. Built in v0.0. Why these tools: [[API stack choices]]. Its database: [[Database and migrations]]. Its sign-in: [[Auth]].
 
-Read [[How a request travels]] first: this note zooms into step 4 ("Caddy → Hono") of that journey.
+Read [[How a request travels]] first. This note zooms into step 4 of that journey, "Caddy → Hono".
 
 ## How to run it
 
@@ -19,7 +19,7 @@ Read [[How a request travels]] first: this note zooms into step 4 ("Caddy → Ho
 | `pnpm --filter @tasks/api seed:sample [email]` | Writes the made-up sample timetable into your **local** database for that user ([[Timetable files and seeding]]) |
 | `pnpm --filter @tasks/api seed:private [email]` | The same with your real timetable from git-ignored `private/kiit-sem3.json`. Refuses anything but a local database |
 
-There is **no build step**. `node src/main.ts` runs the TypeScript directly: Node deletes the type annotations as it loads each file ([[TypeScript checking vs running]]). That's why imports name the `.ts` file (`import { createApp } from './app.ts'`). The scripts show it:
+There's **no build step**. `node src/main.ts` runs the TypeScript directly, because Node deletes the type annotations as it loads each file ([[TypeScript checking vs running]]). That's why imports name the `.ts` file (`import { createApp } from './app.ts'`). The scripts show it:
 
 *From `apps/api/package.json` (shortened):*
 ```json
@@ -71,7 +71,7 @@ Try it: with the server running, `curl -i localhost:3000/healthz` answers `200` 
 
 ## The middleware stack, in order
 
-Every request takes one path through this; errors from anywhere jump to `onError`.
+Every request takes one path through this, and errors from anywhere jump to `onError`.
 
 ```mermaid
 flowchart TD
@@ -92,7 +92,7 @@ flowchart TD
   oe --> res
 ```
 
-Every request passes through these layers from top to bottom; the response passes back up ([[Middleware]]). From `src/app.ts`:
+Every request passes through these layers from top to bottom, and the response passes back up ([[Middleware]]). From `src/app.ts`:
 
 | # | Applies to | Layer | What it does |
 |---|---|---|---|
@@ -107,8 +107,8 @@ Every request passes through these layers from top to bottom; the response passe
 | 8a | `/api/v1/groups/*`, `/series/*`, `/calendar/*` | `userScope` | Gives the routes `c.var.asUser` (one transaction as you, under row-level security); on the way out, `Cache-Control: private, no-store` |
 | 8b | those paths | routes | The calendar API ([[Calendar API]]) |
 | 9 | other GETs | static site | Only when `STATIC_DIR` is set: PWA files, else `index.html` |
-| — | nothing matched | `notFound` | 404 problem |
-| — | anything threw | `onError` | The matching problem; unknown errors → 500, logged with the stack |
+| | nothing matched | `notFound` | 404 problem |
+| | anything threw | `onError` | The matching problem; unknown errors → 500, logged with the stack |
 
 The same order in `createApp`, line by line (the numbers in the comments are the table's):
 
@@ -147,19 +147,19 @@ The same order in `createApp`, line by line (the numbers in the comments are the
 ```
 
 What to notice:
-- `app.use(fn)` with no path wraps every request; `app.use('/api/*', fn)` only paths under `/api`. Hono runs everything in the order it was registered, which is why the order of these lines *is* the security design.
-- `${paths.apiV1}/*` is a template string: `paths.apiV1` is `'/api/v1'` (from `packages/core/src/api.ts`, shared with the PWA), so this reads `/api/v1/*`.
+- `app.use(fn)` with no path wraps every request, and `app.use('/api/*', fn)` only paths under `/api`. Hono runs everything in the order it was registered, which is why the order of these lines *is* the security design.
+- `${paths.apiV1}/*` is a template string. `paths.apiV1` is `'/api/v1'` (from `packages/core/src/api.ts`, shared with the PWA), so this reads `/api/v1/*`.
 - Line 5 hands Better Auth the raw standard `Request` (`c.req.raw`) and returns whatever `Response` it builds, untouched.
-- `notFound` and `onError` aren't layers in the chain: Hono calls them when no route matched, or when anything above threw.
+- `notFound` and `onError` aren't layers in the chain. Hono calls them when no route matched, or when anything above threw.
 
 **Trace one request:** your phone opens the app and asks `GET /api/v1/me` with its cookie.
 1. `requestContext` names it `7a06…`.
 2. `secureHeaders` and `bodyLimit` pass it on (no body).
 3. `/healthz` and `/api/auth/*` don't match.
 4. `requireSession` finds the cookie, checks it with Better Auth (one indexed Postgres lookup), and sets `user`.
-5. `csrf` lets a `GET` through: reading can't change anything.
+5. `csrf` lets a `GET` through, because reading can't change anything.
 6. The `/me` route reads your profile (`where user_id = <your id>`) and answers JSON.
-7. On the way out, `secureHeaders` adds its headers and `requestContext` adds `X-Request-Id: 7a06…` and logs `GET /api/v1/me 200 16ms`.
+7. On the way out, `secureHeaders` adds its headers, and `requestContext` adds `X-Request-Id: 7a06…` and logs `GET /api/v1/me 200 16ms`.
 
 ## Why `createApp` takes its dependencies
 
@@ -194,9 +194,9 @@ export const TEST_NOW = new Date('2026-10-12T04:30:00.000Z');
 ```
 
 What to notice:
-- `now: () => Date` means "a function that returns a `Date`": the clock is a dependency, just like the database ([[TypeScript essentials]] for `interface`).
+- `now: () => Date` means "a function that returns a `Date`". The clock is a dependency, just like the database ([[TypeScript essentials]] for `interface`).
 - `main.ts` passes `() => new Date()`, the real time. The test passes `() => TEST_NOW`, the same instant on every call.
-- `{ env, logger, pool, … }` is shorthand for `{ env: env, logger: logger, pool: pool, … }`; the test spells out the pieces whose names differ (`pool: testPool`).
+- `{ env, logger, pool, … }` is shorthand for `{ env: env, logger: logger, pool: pool, … }`, and the test spells out the pieces whose names differ (`pool: testPool`).
 
 ## Shutting down
 
@@ -227,7 +227,7 @@ process.once('SIGINT', shutdown);
 What to notice:
 - `server.close(callback)` stops taking new connections and calls back once the requests in flight have finished. Only then does `pool.end()` close the database connections, so no request loses its connection halfway.
 - The `setTimeout(…, 8_000)` is the safety net: after 8 s it exits with code 1, whatever is still hanging. `.unref()` tells Node not to stay alive just for this timer, so a quick shutdown doesn't wait the full 8 s. (`8_000` is 8000; the `_` only helps you read it.)
-- `stopping` makes a second signal (pressing Ctrl+C twice) harmless; `process.once` reacts to the first of each signal only.
+- `stopping` makes a second signal (pressing Ctrl+C twice) harmless, and `process.once` reacts only to the first of each signal.
 
 ## Check yourself
 - Swap layers 5 and 6 in `app.ts` (the session gate before Better Auth's routes). Does signing in still work? Find the first line of `requireSession` that answers it, and say what would break if that line weren't there.

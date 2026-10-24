@@ -2,7 +2,7 @@
 
 > **Background:** [[Postgres and SQL basics]] · [[Database migrations]] · [[Connection pools]]
 
-How the API stores data: one Postgres 18 database, eight tables, three migrations. v0.0 made the five identity and settings tables; v0.2 added the three calendar tables and row-level security. Concepts behind it: [[Database migrations]], [[Connection pools]], [[Row-level security]]. Choices: [[API stack choices]], [[v0.2 contracts]].
+How the API stores data: one Postgres 18 database, eight tables, three migrations. v0.0 made the five identity and settings tables, and v0.2 added the three calendar tables and row-level security. Concepts behind it: [[Database migrations]], [[Connection pools]], [[Row-level security]]. Choices: [[API stack choices]], [[v0.2 contracts]].
 
 New to databases? Read [[Postgres and SQL basics]] first: tables, keys, indexes, transactions, and how to open `psql` on our database.
 
@@ -27,7 +27,7 @@ New to databases? Read [[Postgres and SQL basics]] first: tables, keys, indexes,
 
 ## The tables
 
-How the tables connect (only the important columns shown). `||--o{` reads "one user has zero or more sessions"; `||--o|` reads "zero or one profile".
+How the tables connect (only the important columns shown). `||--o{` reads "one user has zero or more sessions", and `||--o|` reads "zero or one profile".
 
 ```mermaid
 erDiagram
@@ -121,8 +121,8 @@ erDiagram
 | `occurrence_override` | thing said about one occurrence | Unique on `(series_id, original_date)`; empty until v0.3's cancel button |
 
 Three things are new compared with the v0.0 tables:
-- **CHECK constraints**: rules Postgres checks on every write. `series` refuses a `freq` other than daily or weekly, a weekly rule with no days, an end date before the start, a duration outside 1–1440 minutes. The API's zod rules catch all of these first; the CHECKs are the last line of defence if some future code forgets.
-- **Composite foreign keys**: a series points at the *pair* `(user_id, group_id)` in `schedule_group`, not just `group_id`. So a series can only belong to a group of the same user, and the database refuses "my class in your group" by itself. `schedule_group` has a unique `(user_id, id)` so the pair can be pointed at.
+- **CHECK constraints** are rules Postgres checks on every write. `series` refuses a `freq` other than daily or weekly, a weekly rule with no days, an end date before the start, and a duration outside 1–1440 minutes. The API's zod rules catch all of these first; the CHECKs are the last line of defence if some future code forgets.
+- **Composite foreign keys**: a series points at the *pair* `(user_id, group_id)` in `schedule_group`, not just at `group_id`. So a series can only belong to a group of the same user, and the database refuses "my class in your group" by itself. `schedule_group` has a unique `(user_id, id)` so that the pair can be pointed at.
 - **Row-level security** on all three ([[Row-level security in our database]]): even a query with no `where` sees only the current user's rows.
 
 The first two, as they're written in the schema:
@@ -144,7 +144,7 @@ The first two, as they're written in the schema:
 ```
 
 What to notice:
-- `columns: [userId, groupId]` must match `foreignColumns: [scheduleGroup.userId, scheduleGroup.id]` *as a pair*: your `user_id` with Bob's group id is a pair that doesn't exist, so Postgres refuses it.
+- `columns: [userId, groupId]` must match `foreignColumns: [scheduleGroup.userId, scheduleGroup.id]` *as a pair*. Your `user_id` with Bob's group id is a pair that doesn't exist, so Postgres refuses it.
 - ``sql`…` `` is Drizzle's way of writing raw SQL, and `${table.rule}` becomes the column's name. `->>'freq'` is Postgres for "the `freq` field of this JSON, as text".
 - Every constraint has a name (`'series_duration_min'`). When Postgres refuses a write, its error names the constraint, and `calendar/constraints.ts` turns that name into a 422 for the right field (`durationMin`).
 
@@ -154,9 +154,9 @@ What's **not** stored: the occurrences themselves. "DS on 14 Oct" is computed fr
 
 Every table has `created_at` and `updated_at` as `timestamptz`: an instant, stored in UTC, never a wall-clock time ([[Dates, times and instants]]).
 
-Every `user_id` column is a **foreign key** to `auth_user.id` with `on delete cascade`. A foreign key is a promise the database enforces: "this value must exist over there". You can't create a profile for a user who doesn't exist. Cascade means deleting a user deletes their sessions, accounts and profile in the same statement, so nothing is left pointing at nobody. `schema.test.ts` checks it.
+Every `user_id` column is a **foreign key** to `auth_user.id` with `on delete cascade`. A foreign key is a promise the database enforces, "this value must exist over there", so you can't create a profile for a user who doesn't exist. Cascade means deleting a user deletes their sessions, accounts and profile in the same statement, so nothing is left pointing at nobody. `schema.test.ts` checks it.
 
-Here is `profile` in TypeScript, then the SQL drizzle-kit generated from it:
+Here's `profile` in TypeScript, then the SQL drizzle-kit generated from it:
 
 *From `apps/api/src/db/schema.ts`:*
 ```ts
@@ -187,19 +187,19 @@ ALTER TABLE "profile" ADD CONSTRAINT "profile_user_id_auth_user_id_fk" FOREIGN K
 ```
 
 What to notice:
-- `.references(() => authUser.id, { onDelete: 'cascade' })` became the separate `ALTER TABLE … FOREIGN KEY … ON DELETE cascade` at the end of the file: drizzle-kit creates every table first and adds the foreign keys after, so the order of the tables doesn't matter.
+- `.references(() => authUser.id, { onDelete: 'cascade' })` became the separate `ALTER TABLE … FOREIGN KEY … ON DELETE cascade` at the end of the file. drizzle-kit creates every table first and adds the foreign keys after, so the order of the tables doesn't matter.
 - `DEFAULT_PROFILE.tzid` (from `packages/core`) was copied into the SQL as the plain text `'Asia/Kolkata'` when the migration was generated. Changing it in core later changes nothing in the database until a new migration is generated.
-- `.$onUpdate(() => new Date())` has no SQL at all: Drizzle fills `updated_at` itself when *our code* updates a row. An `UPDATE` typed into psql leaves it alone.
+- `.$onUpdate(() => new Date())` has no SQL at all. Drizzle fills `updated_at` itself when *our code* updates a row, and an `UPDATE` typed into psql leaves it alone.
 
 **Indexes** (a sorted copy of one column that makes lookups fast, like the index at the back of a textbook) exist on every `user_id`, on `auth_session.token` and on `auth_verification.identifier`: the columns queries search by.
 
 ### Why the `auth_` prefix?
 
-Better Auth would call its tables `user`, `session`, `account` and `verification`. In v1 the app gets *work sessions* (a timer running while you study), and "session" would mean two things. D-058 renamed them; the prefix also makes the identity tables easy to spot and keep separate from the app's own ones (the boundary a future shared login at `accounts.ahmedatif.in` would cut along, D-063).
+Better Auth would call its tables `user`, `session`, `account` and `verification`. In v1 the app gets *work sessions* (a timer running while you study), and "session" would mean two things. D-058 renamed them. The prefix also makes the identity tables easy to spot and keep separate from the app's own ones, which is the boundary a future shared login at `accounts.ahmedatif.in` would cut along (D-063).
 
 ### Why UUIDv7 ids?
 
-An id like `01a1307f-b42d-7297-9423-bf3e74a4aa70`. A **UUID** is a 128-bit random-looking id that any computer can make without asking the database, with no realistic chance of two being equal. **Version 7** starts with the current time in milliseconds, so ids made later sort later (Postgres's index stays tidy, and "newest first" is just "biggest id first"). The app makes them (`uuid` package, through Better Auth's `generateId`); the columns also default to Postgres 18's built-in `uuidv7()` in case a row is ever typed in by hand. Alternatives in [[API stack choices]].
+An id looks like `01a1307f-b42d-7297-9423-bf3e74a4aa70`. A **UUID** is a 128-bit random-looking id that any computer can make without asking the database, with no realistic chance of two being equal. **Version 7** starts with the current time in milliseconds, so ids made later sort later: Postgres's index stays tidy, and "newest first" is just "biggest id first". The app makes them (the `uuid` package, through Better Auth's `generateId`), and the columns also default to Postgres 18's built-in `uuidv7()` in case a row is ever typed in by hand. Alternatives in [[API stack choices]].
 
 ```ts
 // apps/api/src/db/schema.ts: every table's id column
@@ -208,11 +208,11 @@ const id = () => uuid('id').primaryKey().default(sql`uuidv7()`);
       database: { generateId: () => uuidv7() },
 ```
 
-Two different `uuidv7()`s: in `schema.ts` it's SQL text (inside ``sql`…` ``), copied into each migration as `DEFAULT uuidv7()` for Postgres to run; in `auth.ts` it's the `uuid` package's function (`import { v7 as uuidv7 } from 'uuid'`), run by Node. Same kind of id either way.
+There are two different `uuidv7()`s here. In `schema.ts` it's SQL text (inside ``sql`…` ``), copied into each migration as `DEFAULT uuidv7()` for Postgres to run. In `auth.ts` it's the `uuid` package's function (`import { v7 as uuidv7 } from 'uuid'`), run by Node. Same kind of id either way.
 
 ## Naming
 
-TypeScript uses camelCase (`emailVerified`), Postgres uses snake_case (`email_verified`). `schema.ts` maps each one explicitly: `emailVerified: boolean('email_verified')`. Better Auth finds columns by the TypeScript names, so those must match its own field names.
+TypeScript uses camelCase (`emailVerified`), and Postgres uses snake_case (`email_verified`). `schema.ts` maps each one explicitly: `emailVerified: boolean('email_verified')`. Better Auth finds columns by the TypeScript names, so those must match its own field names.
 
 *From `apps/api/src/db/schema.ts`:*
 ```ts
@@ -242,8 +242,8 @@ flowchart LR
 
 1. Edit `src/db/schema.ts`.
 2. `pnpm --filter @tasks/api db:generate --name add-reminders` writes the next file, e.g. `drizzle/0003_add-reminders.sql`.
-3. **Read the SQL line by line.** It is what will run on your real data. Look for: a `DROP` you didn't mean, a `NOT NULL` column added to a table that already has rows (fails), a missing index.
-4. `pnpm db:migrate`, run the tests, commit the schema change, the SQL and `meta/` together.
+3. **Read the SQL line by line.** It's what will run on your real data. Look for a `DROP` you didn't mean, a `NOT NULL` column added to a table that already has rows (it fails), or a missing index.
+4. `pnpm db:migrate`, run the tests, and commit the schema change, the SQL and `meta/` together.
 
    `db:migrate` (and the server's deploy step) ends up here:
 
@@ -258,9 +258,9 @@ flowchart LR
 
    `import.meta.dirname` is the folder this file sits in (`apps/api/src/db`), so `../../drizzle` is always `apps/api/drizzle`, whichever folder you run the command from. `migrate` is Drizzle's: it reads the journal in `drizzle/meta/`, checks `drizzle.__drizzle_migrations` for what this database already has, and runs only the newer files, in order.
 
-Never edit a migration that has already been applied anywhere: write a new one.
+Never edit a migration that has already been applied anywhere. Write a new one.
 
-**SQL drizzle-kit can't write** (row-level security, roles, functions): `pnpm --filter @tasks/api db:generate --custom --name <what>` makes an empty numbered file that you fill by hand, the way `0002_calendar_rls.sql` was made. It's applied in order like the others. Each statement is separated by a `--> statement-breakpoint` line, because Drizzle runs them one by one.
+**SQL drizzle-kit can't write** (row-level security, roles, functions): `pnpm --filter @tasks/api db:generate --custom --name <what>` makes an empty numbered file that you fill by hand, which is how `0002_calendar_rls.sql` was made. It's applied in order like the others. Statements are separated by a `--> statement-breakpoint` line, because Drizzle runs them one by one.
 
 *From `apps/api/drizzle/0002_calendar_rls.sql` (shortened):*
 ```sql
@@ -278,7 +278,7 @@ CREATE POLICY series_owner ON series
   WITH CHECK (user_id = app_current_user_id());
 ```
 
-To Postgres, `--> statement-breakpoint` is just a comment (anything after `--`); to Drizzle it's the cut between two statements. What the function and the policy mean is in [[Row-level security in our database]].
+To Postgres, `--> statement-breakpoint` is just a comment (anything after `--`); to Drizzle, it's the cut between two statements. What the function and the policy mean is in [[Row-level security in our database]].
 
 ## Check yourself
 - You delete Alice's row from `auth_user` in psql. Which other rows disappear, and which rule makes it happen?
