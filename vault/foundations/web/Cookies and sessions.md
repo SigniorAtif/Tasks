@@ -2,11 +2,11 @@
 
 > **Builds on:** [[HTTP basics]] · [[Origin]]
 
-HTTP has no memory: each request arrives alone. After you sign in once, something must prove "it's me again" on every later request. That proof is a **session**, carried by a **cookie**.
+HTTP has no memory: each request arrives alone. After you sign in once, something has to prove "it's me again" on every later request. That proof is a **session**, and a **cookie** carries it.
 
 ## Cookies
 
-A **cookie** is a small named value the server asks the browser to store (`Set-Cookie` response header) and that the browser then sends back by itself on every request to the same site (`Cookie` request header). Our session cookie, as the server sets it in production:
+A **cookie** is a small named value the server asks the browser to store (the `Set-Cookie` response header). From then on, the browser sends it back by itself on every request to the same site (the `Cookie` request header). Here's our session cookie as the server sets it in production:
 
 ```
 Set-Cookie: __Secure-better-auth.session_token=<token>.<signature>; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax
@@ -15,13 +15,13 @@ Set-Cookie: __Secure-better-auth.session_token=<token>.<signature>; Max-Age=2592
 | Part | Meaning | Protects against |
 |---|---|---|
 | `Max-Age=2592000` | Keep it 30 days, even across phone restarts | Being logged out every time Android kills the PWA |
-| `Path=/` | Send it with every path on the site | — |
+| `Path=/` | Send it with every path on the site | Nothing; it just sets the scope |
 | `HttpOnly` | JavaScript can't read it (`document.cookie` doesn't show it) | A script injected into the page stealing your login |
 | `Secure` (+ `__Secure-` name) | Only over https | Someone on the hostel Wi-Fi reading it in transit |
 | `SameSite=Lax` | Not sent on requests started by *other sites*, except plain link clicks | Another site making your browser act as you |
 | no `Domain` | **Host-only**: sent to `tasks.ahmedatif.in` and nothing else | A bug on another `*.ahmedatif.in` subdomain using your session ([[Origin]]) |
 
-In our app, Better Auth sets `HttpOnly`, `SameSite=Lax` and `Path=/` by default. The cookie setting our own code makes is one line:
+In our app, Better Auth sets `HttpOnly`, `SameSite=Lax` and `Path=/` by default. The one cookie setting our own code makes is a single line:
 
 *From `apps/api/src/auth/auth.ts`:*
 ```ts
@@ -35,13 +35,13 @@ In our app, Better Auth sets `HttpOnly`, `SameSite=Lax` and `Path=/` by default.
 
 ## Sessions in the database (D-060)
 
-The cookie holds no personal data, just a random 32-character **token** plus a **signature**. The token is a key to a row in `auth_session` (user id, expiry, IP, browser). On every request the API looks the row up (one indexed query, well under a millisecond).
+The cookie holds no personal data, only a random 32-character **token** plus a **signature**. The token is the key to a row in `auth_session` (user id, expiry, IP, browser), and on every request the API looks that row up: one indexed query, well under a millisecond.
 
-- **Signature:** an HMAC, a fingerprint computed from the token and `BETTER_AUTH_SECRET`. Without the secret nobody can produce a valid one, so a token stolen from a database backup is useless as a cookie, and a made-up cookie is rejected before any lookup.
-- **Revocation is instant:** delete the row and that browser is signed out on its next request. "Sign out everywhere" is one `delete … where user_id = …`.
-- **Sliding expiry:** a session expires 30 days after it was last *extended*. At most once a day of use, the API pushes the expiry 30 days out and re-sends the cookie with a fresh `Max-Age`. Use the app daily and you're never logged out; leave it for a month and you are.
+- The **signature** is an HMAC, a fingerprint computed from the token and `BETTER_AUTH_SECRET`. Nobody can produce a valid one without the secret. So a token stolen from a database backup is useless as a cookie, and a made-up cookie is rejected before any lookup happens.
+- **Revocation is instant.** Delete the row, and that browser is signed out on its next request. "Sign out everywhere" is one `delete … where user_id = …`.
+- **Expiry slides.** A session expires 30 days after it was last *extended*, and at most once per day of use the API pushes the expiry 30 days out and re-sends the cookie with a fresh `Max-Age`. Use the app daily and you're never logged out. Leave it for a month and you are.
 
-The three rules above are three settings:
+Those three rules are three settings:
 
 *From `apps/api/src/auth/auth.ts` (shortened):*
 ```ts
@@ -58,10 +58,10 @@ The three rules above are three settings:
 ```
 
 What to notice:
-- `expiresIn` is in seconds: `30 * DAY_SECONDS` is 2,592,000, the `Max-Age=2592000` in the cookie above. `updateAge: DAY_SECONDS` is "extend at most once a day".
-- `cookieCache` would keep a signed copy of the session in a second cookie and skip the database for a while, a small step towards the JWT idea below. It's off, which is what makes revocation instant.
+- `expiresIn` is in seconds: `30 * DAY_SECONDS` is 2,592,000, the `Max-Age=2592000` in the cookie above. `updateAge: DAY_SECONDS` means "extend at most once a day".
+- `cookieCache` would keep a signed copy of the session in a second cookie and skip the database for a while, a small step towards the JWT idea below. It's off, and that's what keeps revocation instant.
 
-**The alternative, JWTs:** the cookie itself holds signed data ("user 01a1…, expires …") and the server checks the signature without a database lookup. Faster at huge scale, but you can't revoke one before it expires without building… a table of revoked tokens. Useful between services; not needed here.
+The alternative is a **JWT**: the cookie itself holds signed data ("user 01a1…, expires …"), and the server checks the signature without a database lookup. That's faster at huge scale, but you can't revoke one before it expires without building… a table of revoked tokens. Useful between services; not needed here.
 
 ## A session's life as a picture
 
@@ -86,17 +86,17 @@ sequenceDiagram
 
 ## CSRF: the attack cookies invite
 
-Because the browser attaches cookies *by itself*, a page on `evil.example` can make your browser send a request to our API, and the cookie goes along. That's **cross-site request forgery** (CSRF). Reading the answer is blocked by the browser; *causing* a change isn't. Our layers:
+Because the browser attaches cookies *by itself*, a page on `evil.example` can make your browser send a request to our API, and the cookie tags along. That's **cross-site request forgery** (CSRF). The browser blocks reading the answer, but it doesn't block *causing* a change. Our layers:
 
-1. `SameSite=Lax`: a cross-site form POST arrives without the cookie at all.
-2. Hono's `csrf()` on `/api/v1/*`: a form-style POST (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`) must come from our own origin (`Origin` / `Sec-Fetch-Site` headers). This also covers sibling subdomains, which `SameSite` treats as "same site".
-3. JSON requests from another origin need a CORS "preflight" (the browser asks first: "may I?"). We never say yes, so they never get sent.
+1. `SameSite=Lax`: a cross-site form POST arrives with no cookie at all.
+2. Hono's `csrf()` on `/api/v1/*`: a form-style POST (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`) must come from our own origin, judged by the `Origin` / `Sec-Fetch-Site` headers. This also covers sibling subdomains, which `SameSite` treats as "same site".
+3. JSON requests from another origin need a CORS "preflight", where the browser asks first: "may I?". We never say yes, so they're never sent.
 4. Better Auth checks `Origin` on its own state-changing routes.
 5. `GET` never changes anything, so following a link can't do damage.
 
-How the signature works, and why a database dump alone can't forge a cookie: [[Hashing and signing]]. What a request carries, including `Cookie` and `Set-Cookie`: [[HTTP basics]].
+How the signature works, and why a database dump alone can't forge a cookie, is in [[Hashing and signing]]. What a request carries, `Cookie` and `Set-Cookie` included, is in [[HTTP basics]].
 
 ## Check yourself
 - Which cookie attribute stops a malicious browser extension's injected page script from reading your session token? Which one stops the hostel Wi-Fi?
-- An attacker gets a copy of `auth_session` from a leaked backup but not the server's environment. Can they sign in as you? What if they got both?
+- An attacker gets a copy of `auth_session` from a leaked backup, but not the server's environment. Can they sign in as you? What if they got both?
 - Why does `requireSession` copy Better Auth's `Set-Cookie` headers onto our response? What would happen after 30 days if it didn't?
