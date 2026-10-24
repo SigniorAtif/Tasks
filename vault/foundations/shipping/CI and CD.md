@@ -2,12 +2,12 @@
 
 > **Builds on:** [[Containers and images]]
 
-What happens automatically between "I opened a pull request" and "the new version is on my phone". The files: `.github/workflows/ci.yml` and `deploy.yml`, walked through in [[Deploy and CI]].
+What happens automatically between "I opened a pull request" and "the new version is on my phone". The files are `.github/workflows/ci.yml` and `deploy.yml`, walked through in [[Deploy and CI]].
 
 ## The two halves
 
-- **CI (continuous integration)**: every pull request is checked on a fresh machine: lint, typecheck, tests, build. If any check is red, GitHub won't let the PR merge (branch protection). A typo can't reach `main`, even late at night before an exam.
-- **CD (continuous delivery/deployment)**: every commit that lands on `main` is built into an image and deployed, then checked. Nobody SSHes in and runs commands by hand, so deploys are boring and repeatable.
+- **CI (continuous integration):** every pull request is checked on a fresh machine: lint, typecheck, tests, build. If any check is red, GitHub won't let the PR merge (branch protection). A typo can't reach `main`, even late at night before an exam.
+- **CD (continuous delivery/deployment):** every commit that lands on `main` is built into an image, deployed, then checked. Nobody SSHes in and runs commands by hand, so deploys are boring and repeatable. Boring is the goal.
 
 ## GitHub Actions vocabulary
 
@@ -24,7 +24,7 @@ What happens automatically between "I opened a pull request" and "the new versio
 | `concurrency` | Rules for overlapping runs | CI cancels a run when you push again; deploys queue, never cancel |
 | Required status check | A job name branch protection insists is green | The five CI job names |
 
-Most of these words in one real job, the one that runs the API and web tests:
+Most of these words appear in one real job, the one that runs the API and web tests:
 
 *From `.github/workflows/ci.yml` (shortened):*
 ```yaml
@@ -53,10 +53,10 @@ Most of these words in one real job, the one that runs the API and web tests:
         run: pnpm --filter "./apps/*" run test
 ```
 
-- `test-apps` is the job's id inside the file; `name:` is what GitHub shows, and what branch protection requires to be green.
-- `runs-on` picks the fresh machine; `timeout-minutes` kills a stuck run instead of letting it burn 6 hours.
+- `test-apps` is the job's id inside the file. `name:` is what GitHub shows, and what branch protection requires to be green.
+- `runs-on` picks the fresh machine, and `timeout-minutes` kills a stuck run instead of letting it burn 6 hours.
 - `services:` starts Postgres before the first step. The password `tasks` isn't a secret: this database lives for a few minutes on a throwaway machine.
-- `uses:` steps are reusable actions (pinned, see below); `run:` steps are shell commands. `--frozen-lockfile` makes the install fail if `pnpm-lock.yaml` doesn't match `package.json`, instead of quietly changing it.
+- `uses:` steps are reusable actions (pinned, see below), and `run:` steps are shell commands. `--frozen-lockfile` makes the install fail if `pnpm-lock.yaml` doesn't match `package.json`, instead of quietly changing it.
 
 The `concurrency` row is worth seeing in both files, because the two workflows want opposite things:
 
@@ -71,9 +71,9 @@ concurrency:
   cancel-in-progress: false
 ```
 
-CI's group is per PR (`ci-12` for PR #12), so a new push to the same PR cancels the now-outdated run, while other PRs run undisturbed. Deploy has one group for everything and never cancels: a deploy stopped halfway could leave the box between two versions, so a newer one waits its turn instead.
+CI's group is per PR (`ci-12` for PR #12), so a new push to the same PR cancels the now-outdated run, while other PRs run undisturbed. Deploy has one group for everything and never cancels. A deploy stopped halfway could leave the box between two versions, so a newer one waits its turn instead.
 
-CI runs on `pull_request` only. It used to run on every push to a `release/**` branch as well, but a push to a branch with an open PR fires *both* triggers, and the two runs had different groups (`ci-4` and `ci-refs/heads/release/0.0.1` for PR #4), so neither cancelled the other and every job ran twice. Dropping the push trigger fixed it; the cost is that a release branch without a PR isn't checked until the PR is opened.
+CI runs on `pull_request` only. It used to run on every push to a `release/**` branch as well, but a push to a branch with an open PR fires *both* triggers, and the two runs landed in different groups (`ci-4` and `ci-refs/heads/release/0.0.1` for PR #4). Neither cancelled the other, and every job ran twice. Dropping the push trigger fixed it. The cost: a release branch without a PR isn't checked until the PR is opened.
 
 ## Pinning actions
 
@@ -85,7 +85,7 @@ A **smoke test** is the simplest check that something is alive and is the right 
 
 ## Alternatives
 
-- **Deploy by hand** (`ssh box && git pull && restart`): fine for a weekend, but every deploy is slightly different and nothing stops a broken commit.
+- **Deploy by hand** (`ssh box && git pull && restart`): fine for a weekend, but every deploy is slightly different, and nothing stops a broken commit.
 - **GitLab CI, CircleCI, Jenkins**: the same ideas. Actions is free for public repos and lives next to the code.
 - **Pull-based deploys** (the box polls the registry, as Watchtower does): no SSH key in CI, but no clear "this deploy failed" signal back on the PR.
 

@@ -2,7 +2,7 @@
 
 > **Builds on:** [[Containers and images]]
 
-How several containers are described and run together. Used by `compose.yaml` (development: just Postgres) and `deploy/compose.prod.yaml` (production: everything). See [[Containers and images]] first.
+How several containers are described and run together. `compose.yaml` uses it for development (just Postgres), and `deploy/compose.prod.yaml` for production (everything). Read [[Containers and images]] first.
 
 ## What it is
 
@@ -22,9 +22,9 @@ Each entry under `services:` is one container. The words you'll meet:
 | `restart` | What to do when a container stops | `unless-stopped`: restart after a crash or a reboot |
 | `profiles` | Services that `up` skips unless asked | `migrate`, run once per deploy with `docker compose run --rm migrate` |
 
-`${TAG}` in the file is **interpolation**: Compose fills it in from the shell's environment or from `.env` next to the file before doing anything. `${TAG:?message}` refuses to run, with that message, if it's empty.
+`${TAG}` in the file is **interpolation**: before doing anything, Compose fills it in from the shell's environment or from the `.env` next to the file. `${TAG:?message}` refuses to run, with that message, if it's empty.
 
-Most of the table in one service, the API:
+Most of the table shows up in one service, the API:
 
 *From `deploy/compose.prod.yaml` (shortened):*
 ```yaml
@@ -55,8 +55,8 @@ services:
 ```
 
 - `&app-image` names a value and `*app-image` reuses it (a YAML *anchor* and *alias*), so `api` and `migrate` can never run different images.
-- `${IMAGE:-ghcr.io/…}` is the other interpolation form: `:-` means "use this default if `IMAGE` is unset". It's how a laptop run swaps in `tasks-local`.
-- The health check is a command run *inside* the container every 15 s; exit code 0 means healthy. `process.exit(r.ok ? 0 : 1)` turns "did `/healthz` answer 2xx?" into that exit code.
+- `${IMAGE:-ghcr.io/…}` is the other interpolation form: `:-` means "use this default if `IMAGE` is unset". That's how a laptop run swaps in `tasks-local`.
+- The health check is a command run *inside* the container every 15 s, and exit code 0 means healthy. `process.exit(r.ok ? 0 : 1)` turns "did `/healthz` answer 2xx?" into that exit code.
 
 ## Our production stack as a picture
 
@@ -82,11 +82,11 @@ flowchart LR
 
 ## How it fits our deploy
 
-`docker compose up --detach --wait` compares the file with what's running and changes only what differs. Deploying a new commit changes one thing, the API's image tag, so only the API container is replaced; Postgres and Caddy keep running. `--wait` blocks until every health check passes, which is what lets `deploy.sh` notice a broken release and roll it back.
+`docker compose up --detach --wait` compares the file with what's running and changes only what differs. Deploying a new commit changes one thing, the API's image tag, so only the API container is replaced while Postgres and Caddy keep running. `--wait` blocks until every health check passes, and that's what lets `deploy.sh` notice a broken release and roll it back.
 
 ## Networks as a security tool
 
-Postgres has no `ports:`, so nothing outside the box can reach it, whatever the firewall says. It sits on a network marked `internal: true`, which also blocks it from reaching the internet. Caddy isn't on that network at all. If Caddy were ever compromised, the database still wouldn't be one hop away.
+Postgres has no `ports:`, so nothing outside the box can reach it, whatever the firewall says. It sits on a network marked `internal: true`, which also blocks it from reaching the internet. Caddy isn't on that network at all, so even if Caddy were compromised, the database still wouldn't be one hop away.
 
 *From `deploy/compose.prod.yaml` (shortened):*
 ```yaml
@@ -102,11 +102,11 @@ networks:
     internal: true
 ```
 
-The API, as shown above, is on both `edge` and `backend`: it's the one bridge between Caddy and the database. Caddy is on `edge` only, `db` and `migrate` on `backend` only.
+The API, as shown above, is on both `edge` and `backend`: it's the one bridge between Caddy and the database. Caddy is on `edge` only, and `db` and `migrate` on `backend` only.
 
 ## Alternatives
 
-- **Kubernetes**: runs containers across many machines, with self-healing and rolling updates. Built for fleets; for one box it's mostly overhead and a lot to learn.
+- **Kubernetes** runs containers across many machines, with self-healing and rolling updates. It's built for fleets; for one box it's mostly overhead, and a lot to learn.
 - **systemd units**, one per container: works, but you write the ordering, health checks and networking yourself.
 - **Docker Swarm / Nomad**: multi-machine schedulers, again more than one box needs.
 
