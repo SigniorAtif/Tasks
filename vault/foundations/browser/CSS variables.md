@@ -2,18 +2,18 @@
 
 > **Builds on:** [[Single-page apps and routing]] · [[Responsive layouts]]
 
-A **CSS variable** (officially a *custom property*) is a named value you set once and read anywhere below it on the page. Its name starts with two dashes; you read it with `var()`:
+A **CSS variable** (officially a *custom property*) is a named value you set once and read anywhere below it on the page. Its name starts with two dashes, and you read it with `var()`:
 
 ```css
 :root { --brand: #4338ca; }           /* set it on the whole page */
 .button { background: var(--brand); } /* read it */
 ```
 
-Two things make them more than "constants for CSS": they **inherit** down the page like a font size does, and they can be **set per element**, even from JavaScript or React's `style`. Our calendar grid uses both, for two different jobs: placing blocks and switching colours for dark mode. How the grid uses them: [[Calendar grid]].
+Two things make them more than "constants for CSS". They **inherit** down the page, the way a font size does, and they can be **set per element**, even from JavaScript or React's `style`. Our calendar grid uses both, for two different jobs: placing blocks, and switching colours for dark mode. How the grid uses them is in [[Calendar grid]].
 
 ## Job 1: geometry from data
 
-Your Thursday OOP class runs 10:00–11:00. The grid needs a rectangle whose top is "600 minutes down the column". One way is to compute pixels in JavaScript (`top: 600 * 1.2 + 'px'`). We do something else: React only states the *data*, and CSS does the arithmetic.
+Your Thursday OOP class runs 10:00–11:00, so the grid needs a rectangle whose top is "600 minutes down the column". One way is to compute pixels in JavaScript (`top: 600 * 1.2 + 'px'`). We do something else: React only states the *data*, and CSS does the arithmetic.
 
 ```html
 <button class="tg-block" style="--start: 600; --len: 60; --col: 0; --cols: 1; --span: 1">
@@ -30,10 +30,10 @@ Your Thursday OOP class runs 10:00–11:00. The grid needs a rectangle whose top
 ```
 
 - `calc()` does arithmetic with units. A plain number times `1px` becomes a length, which is why the formulas end in `* 1px`.
-- `max(22px, …)` picks the larger: a 15-minute block is still 22 px tall, enough to read and tap.
-- `--px-per-min` is set **once** on the grid and **inherited** by every block. Zooming (60 px an hour on a phone, 72 on a laptop) changes one variable; no block needs re-rendering by React.
+- `max(22px, …)` picks the larger of the two, so a 15-minute block is still 22 px tall: enough to read and tap.
+- `--px-per-min` is set **once** on the grid and **inherited** by every block. Zooming (60 px an hour on a phone, 72 on a laptop) changes one variable, and React re-renders no blocks.
 
-Why bother? The numbers the code works with (minutes, columns) stay the numbers in the HTML, so you can inspect a block in the browser's dev tools and read `--start: 600` instead of reverse-engineering `top: 720px`. And the "how big is a minute" decision lives in one place.
+Why bother? The numbers the code works with (minutes, columns) stay the numbers in the HTML. You can inspect a block in the browser's dev tools and read `--start: 600`, instead of reverse-engineering `top: 720px`. And the "how big is a minute" decision lives in one place.
 
 The real rules in our grid have one more variable:
 
@@ -57,7 +57,7 @@ The real rules in our grid have one more variable:
 ```
 
 What to notice:
-- `--lane` stands where the sketch above had `100%`. It's set by CSS itself, per block: a block with the `data-over-cancelled` attribute redefines it as 85%, and the same `left` and `width` formulas squeeze it, leaving the stripes of a cancelled class visible on the right ([[Calendar grid]]).
+- `--lane` stands where the sketch above had `100%`. CSS itself sets it, per block: a block with the `data-over-cancelled` attribute redefines it as 85%, and the same `left` and `width` formulas squeeze it, leaving the stripes of a cancelled class visible on the right ([[Calendar grid]]).
 - `--px-per-min` appears nowhere in this file as a value. React sets it on the grid element (see "In React" below), and every block inherits it.
 
 ## Job 2: themes
@@ -77,7 +77,7 @@ Our colours are variables with **two values**, one per theme:
 }
 ```
 
-The blocks only ever say `var(--palette-teal)`. When you switch your phone to dark mode, the media query ([[Responsive layouts]]) swaps the values and every block follows, with no JavaScript. A group stores the **token** `teal`, never a colour code, so retuning the colours later is an edit to one CSS file, not to everyone's stored data.
+The blocks only ever say `var(--palette-teal)`. When you switch your phone to dark mode, the media query ([[Responsive layouts]]) swaps the values and every block follows, with no JavaScript. A group stores the **token** `teal`, never a colour code, so retuning the colours later is an edit to one CSS file instead of to everyone's stored data.
 
 ## Mixing colours: `color-mix()`
 
@@ -87,17 +87,17 @@ A class block's background is its group colour, faded:
 background: color-mix(in oklab, var(--c) 20%, var(--grid-surface));
 ```
 
-"20% of the group colour, 80% of the surface". On a white page that's a light tint; in dark mode, mixed with the dark surface, a dark tint. The same line gives the right result in both themes.
+That reads "20% of the group colour, 80% of the surface". On a white page it's a light tint; in dark mode, mixed with the dark surface, it's a dark tint. One line gives the right result in both themes.
 
-`in oklab` names the **colour space** the mixing happens in. `oklch` and `oklab` are colour spaces designed so equal number steps look like equal changes to the eye (in the older HSL model, yellow and blue at the same "50% lightness" look nothing alike in brightness). Both describe the same colours; `oklch` uses lightness, chroma (how vivid) and hue (an angle on the colour wheel), `oklab` uses lightness plus two straight axes. For *mixing*, that difference matters: mixing in `oklch` also travels around the hue wheel, so orange mixed into our slightly blue dark surface swings through purple. `oklab` mixes in a straight line, so orange fades to dark orange-brown as you'd expect.
+`in oklab` names the **colour space** the mixing happens in. `oklch` and `oklab` are colour spaces designed so equal number steps look like equal changes to the eye. (In the older HSL model, yellow and blue at the same "50% lightness" look nothing alike in brightness.) Both describe the same colours: `oklch` uses lightness, chroma (how vivid) and hue (an angle on the colour wheel), while `oklab` uses lightness plus two straight axes. For *mixing*, that difference matters. Mixing in `oklch` also travels around the hue wheel, so orange mixed into our slightly blue dark surface swings through purple on the way. `oklab` mixes in a straight line, so orange fades to a dark orange-brown, as you'd expect.
 
 ## Contrast: why the values aren't arbitrary
 
-**Contrast ratio** compares the brightness of two colours, from 1:1 (identical) to 21:1 (black on white). The accessibility guidelines (WCAG) ask for at least **4.5:1** for normal text and **3:1** for shapes that carry meaning, such as a block's coloured edge. Each palette colour was checked: at least 3.5:1 against the grid's surface in its theme, and the text colour at least 12:1 on the 20% tint. That's why light mode uses darker shades and dark mode lighter ones of the same hue.
+**Contrast ratio** compares the brightness of two colours, from 1:1 (identical) to 21:1 (black on white). The accessibility guidelines (WCAG) ask for at least **4.5:1** for normal text and **3:1** for shapes that carry meaning, such as a block's coloured edge. Each palette colour was checked: at least 3.5:1 against the grid's surface in its theme, and the text colour at least 12:1 on the 20% tint. That's why light mode uses darker shades of each hue, and dark mode lighter ones.
 
 ## In React
 
-React passes `--` names straight to the browser, but TypeScript's type for `style` doesn't list them, so `style={{ '--start': 600 }}` is a type error. Our grid has one small helper, `cssVars()` in `apps/web/src/calendar/css-vars.ts`, that says "these are CSS variables" in one place instead of a cast on every element.
+React passes `--` names straight to the browser, but TypeScript's type for `style` doesn't list them, so `style={{ '--start': 600 }}` is a type error. Our grid has one small helper, `cssVars()` in `apps/web/src/calendar/css-vars.ts`, that says "these are CSS variables" in one place, instead of a cast on every element.
 
 *From `apps/web/src/calendar/css-vars.ts`, and the two places that use it (shortened):*
 ```tsx
@@ -120,7 +120,7 @@ export function cssVars(vars: Record<`--${string}`, string | number>): CSSProper
 What to notice:
 - `` `--${string}` `` is a *template literal type*: "any string that starts with `--`" ([[TypeScript essentials]]). So `cssVars({ start: 600 })`, without the dashes, is a type error.
 - `as CSSProperties` is the "trust me" cast, written once here instead of on every element.
-- Job 1 in practice: the grid sets `--px-per-min` once (1 on a phone, 1.2 on a laptop) and each block only states its minutes and columns.
+- Job 1 in practice: the grid sets `--px-per-min` once (1 on a phone, 1.2 on a laptop), and each block only states its minutes and columns.
 
 ## Check yourself
 
