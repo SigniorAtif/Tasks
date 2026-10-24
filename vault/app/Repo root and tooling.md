@@ -2,7 +2,7 @@
 
 > **Background:** [[Monorepo and workspaces]] · [[TypeScript checking vs running]]
 
-What every file at the top of the repo does. Why each tool was picked: [[Tooling choices]].
+What every file at the top of the repo does. Why each tool was picked is in [[Tooling choices]].
 
 ## Files
 
@@ -21,7 +21,7 @@ What every file at the top of the repo does. Why each tool was picked: [[Tooling
 | `private/` | **Not in git** (listed in `.gitignore`): your real timetable and the hand-checked weeks. Read only by `seed:private`, on your laptop |
 | `compose.yaml` | The development Postgres ([[Docker Compose]]) |
 
-Close-ups of three rows. First, how the root `package.json` pins the tools:
+Three rows, up close. First, how the root `package.json` pins the tools:
 
 *From `package.json` (shortened):*
 ```json
@@ -38,7 +38,7 @@ Close-ups of three rows. First, how the root `package.json` pins the tools:
 - `packageManager` names one exact pnpm. Corepack and CI's `pnpm/action-setup` read it, so everyone runs the same pnpm.
 - `engines` is a floor, not a pin: Node 24 or newer. `.node-version` says which one to actually install.
 
-The `Date`/`Temporal` ban in `biome.json`. The `Temporal` part applies everywhere; this override adds `Date` for `packages/core` only:
+Then the `Date`/`Temporal` ban in `biome.json`. The `Temporal` part applies everywhere, and this override adds `Date` for `packages/core` only:
 
 *From `biome.json` (shortened):*
 ```json
@@ -57,7 +57,7 @@ The `Date`/`Temporal` ban in `biome.json`. The `Temporal` part applies everywher
                 }
 ```
 
-`noRestrictedGlobals` is a Biome rule that forbids using a global name you list; the text after each name is the error message you see. The override writes the rule's list out in full for those files, so `Temporal` appears again, now joined by `Date`.
+`noRestrictedGlobals` is a Biome rule that forbids using a global name you list, and the text after each name is the error message you see. The override writes the rule's list out in full for those files, so `Temporal` appears again, now joined by `Date`.
 
 And what `.gitignore` keeps out:
 
@@ -112,7 +112,7 @@ The `package.json` and `vitest.config.ts` rows, up close:
 ```
 
 - `exports` says what `import … from '@tasks/core'` loads: the TypeScript file `src/index.ts`, with no build step in between ([[TypeScript checking vs running]]).
-- `test:tz` is three runs joined by `&&` ("only if the previous one passed"). `TZ=UTC vitest run` sets the machine's time zone for that one command.
+- `test:tz` is three runs joined by `&&`, which means "only if the previous one passed". `TZ=UTC vitest run` sets the machine's time zone for that one command.
 
 *From `packages/core/vitest.config.ts` (shortened):*
 ```ts
@@ -129,11 +129,11 @@ The `package.json` and `vitest.config.ts` rows, up close:
     },
 ```
 
-`coverage.include` is the reason the gate covers only the engine: other files aren't measured at all. `60_000` is just `60000`; the `_` is a digit separator for readability.
+`coverage.include` is why the gate covers only the engine: other files aren't measured at all. `60_000` is just `60000`; the `_` is a digit separator, for readability.
 
 ## Commands
 
-Run from the repo root. `pnpm -r` means "in every package that has this script".
+Run these from the repo root. `pnpm -r` means "in every package that has this script".
 
 *From `package.json` (shortened):*
 ```json
@@ -150,7 +150,7 @@ Run from the repo root. `pnpm -r` means "in every package that has this script".
   },
 ```
 
-The root scripts mostly fan out: `pnpm test` runs `test` in every package that has one. Not every package has every script: `pnpm test:tz` reaches `packages/core` and `apps/web` (the API has no `test:tz`), and `pnpm coverage` reaches only `packages/core`. `dev` and `build` are covered in [[Local workflow]].
+The root scripts mostly fan out: `pnpm test` runs `test` in every package that has one. Not every package has every script, though. `pnpm test:tz` reaches `packages/core` and `apps/web` (the API has no `test:tz`), and `pnpm coverage` reaches only `packages/core`. `dev` and `build` are covered in [[Local workflow]].
 
 | Command | What it runs |
 |---|---|
@@ -161,7 +161,7 @@ The root scripts mostly fan out: `pnpm test` runs `test` in every package that h
 | `pnpm typecheck` | `tsc --noEmit` in every package (twice in the web app: once for the browser code, once for its config files, each with its own tsconfig) |
 | `pnpm check` / `check:fix` | Biome lint and format; `check:fix` rewrites files |
 
-Inside `packages/core`, `pnpm test:watch` reruns tests on every save.
+Inside `packages/core`, `pnpm test:watch` reruns the tests on every save.
 
 ## Check yourself
 - Which file would you edit to make `noUncheckedIndexedAccess` stricter or looser for every package at once?
