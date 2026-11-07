@@ -72,6 +72,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Term | In one line | Explained in |
 |---|---|---|
 | daemon (`dockerd`) | A background service; Docker's does the real work, the `docker` command just asks it | [[Containers and images]] |
+| debounce | Wait until something stops happening, then act once; our notes save a second after the typing stops, not on every key | [[Swap, days off and series choices]] |
 | default deny | With RLS on, a row is hidden unless a policy lets it through; no policy, or no user set, means no rows | [[Row-level security]] |
 | defence in depth | Two independent guards on the same risk, so one bug isn't enough (app filters plus RLS) | [[Row-level security]] |
 | dehydrate / hydrate | Turn TanStack Query's cache into plain data to save it / put saved data back into the cache | [[Offline reads]] |
@@ -86,6 +87,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Drizzle | Our query builder: SQL queries written in TypeScript, checked against the schema | [[Postgres and SQL basics]], [[Database and migrations]] |
 | ENABLE / FORCE ROW LEVEL SECURITY | `ENABLE` turns RLS on for a table; `FORCE` makes it apply to the table's owner too | [[Row-level security]] |
 | `ensureQueryData` | Return a query's cached answer, or fetch it if there is none; used in a route's `beforeLoad` and loader | [[Offline reads]], [[Web app]] |
+| entity | A kind of thing the app stores as its own row with its own id, in its own table: group, series, override. A series in no group is still a series, not a new entity | [[Swap, days off and series choices]], [[Database and migrations]] |
 | `enum` | A TypeScript feature we can't use: it needs generated code, and our settings allow only types Node can delete | [[TypeScript essentials]] |
 | environment variable | A named setting handed to a program at start (`PORT=3000`) | [[Environment variables and config]] |
 | erasableSyntaxOnly | Our setting that allows only TypeScript that can be deleted to get JavaScript, because Node runs `.ts` by stripping types | [[TypeScript essentials]], [[TypeScript checking vs running]] |
@@ -198,6 +200,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | psql | Postgres's command-line client: `docker compose exec db psql -U tasks tasks` | [[Postgres and SQL basics]] |
 | PWA | A website your phone can install like an app | [[PWAs and service workers]] |
 | quota (storage) | The most a site may store in the browser; Chrome allows about 60% of the disk | [[IndexedDB and offline storage]] |
+| refresh token | A long-lived key from Google that gets the app a fresh, hour-long access pass without asking you again; we don't store one yet | [[Swap, days off and series choices]], [[OAuth sign-in]] |
 | registry | Where images are stored and downloaded from (GHCR, Docker Hub) | [[Containers and images]] |
 | request id | A unique id per request, in the `X-Request-Id` header, the log line and error bodies | [[Structured logging]], [[Error responses]] |
 | resource | A thing an API lets you work with, named by a URL | [[REST resources and CRUD]] |
@@ -214,6 +217,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `satisfies` | Checks a value against a type without losing the value's exact type | [[TypeScript essentials]] |
 | schema (database) | The tables and columns, defined in `apps/api/src/db/schema.ts`. Not the same as a validation schema | [[Database and migrations]] |
 | schema (validation) | A description of the shape and rules data must follow, which checks it and gives its type | [[Validating input with schemas]] |
+| scope (OAuth) | One permission an app asks Google for; sign-in asks only for name and email, Drive would need `drive.file` | [[Swap, days off and series choices]], [[OAuth sign-in]] |
 | secret | Any value that grants access (`BETTER_AUTH_SECRET`, OAuth secret); never in git | [[Environment variables and config]], [[Secret scanning]] |
 | seed, seeding | Filling a database with starting data by running a script instead of typing it into the app | [[Timetable files and seeding]] |
 | `seed:sample` / `seed:private` | Write the made-up sample / your real git-ignored timetable into your local database, for one user | [[Timetable files and seeding]] |
@@ -228,11 +232,13 @@ Every technical term used in this vault and the code: one line each, plus the no
 | SQL / SQL injection | The language for asking Postgres / an attack that sneaks SQL in through a value | [[Postgres and SQL basics]] |
 | SQLSTATE | Postgres' five-character error code, stable unlike the message: `23505` unique, `23503` foreign key, `23514` check, `42501` not allowed | [[Calendar API]] |
 | SSH | Encrypted remote login; the deploy job uses it to run `deploy.sh` on the server | [[Deploy and CI]] |
+| SSRF | Server-side request forgery: tricking a server that fetches URLs into reaching places only it can see; our notes' links are never fetched | [[Swap, days off and series choices]] |
 | `staleTime` | How long TanStack Query treats an answer as fresh and won't refetch it; the calendar uses a minute | [[Calendar grid]], [[Server state and caching]] |
 | status code | The 3-digit result of a request (200, 401, 404, 500) | [[HTTP basics]] |
 | strict mode | Our TypeScript setting that, among other things, forbids `null` where a value is expected | [[TypeScript essentials]] |
 | structured clone | The browser's built-in deep copy, used to store values in IndexedDB | [[IndexedDB and offline storage]] |
 | superuser | A Postgres role that skips every permission check and RLS; our `tasks` login is one | [[Roles and privileges]] |
+| sweep (clash check) | Sort the expanded occurrences by start and walk through once, noting every pair that overlaps; how clashes are found | [[Swap, days off and series choices]], [[Interval partitioning]] |
 | sync badge | The "offline · last synced 2:02 PM" pill: the screen shows saved answers, last confirmed at that time | [[Offline reads]] |
 | TanStack Query | The app's cache of server data; refetches and stores answers | [[Server state and caching]] |
 | `tasks_app` | The non-owner, non-superuser role each API request switches into, so RLS applies | [[Row-level security in our database]], [[Roles and privileges]] |

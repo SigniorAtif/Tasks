@@ -49,6 +49,10 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 
 1. [[Cancel and group choices]] (a decision): what was settled before any code, with the examples that settled it. The app notes follow as the milestone is built.
 
+## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
+
+1. [[Swap, days off and series choices]] (a decision): series in no group, one-offs, "Applies from", the semester swap, clashes, days off, moves, extras and notes. Read [[Cancel and group choices]] first; this one builds on it.
+
 ## Foundations, in order (bottom-up)
 
 Subject by subject. Inside each subject, each note builds on the ones above it. Subjects 1–4 are what the backend needs; 5–8 can wait until you meet them.
