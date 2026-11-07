@@ -21,6 +21,26 @@ html {
   margin: 0;
 }
 
+/* The occurrence sheet (src/calendar/OccurrenceSheet.tsx), a modal <dialog>.
+   On a phone it's a bottom sheet: full width, against the bottom edge, round
+   only at the top. From 768 px, where the calendar shows the week, it's a
+   dialog in the middle of the screen. The browser's own dialog style centres
+   it and caps its size, which the phone layout undoes. */
+.occurrence-sheet {
+  width: 100%;
+  max-width: 100%;
+  margin: auto 0 0;
+  border-radius: 1rem 1rem 0 0;
+}
+
+@media (min-width: 768px) {
+  .occurrence-sheet {
+    width: 24rem;
+    margin: auto;
+    border-radius: 1rem;
+  }
+}
+
 /* The calendar's colours, as CSS variables, with one value for light mode and
    one for dark. Most values are Tailwind's own shades (named in comments), so
    the grid matches the rest of the app.

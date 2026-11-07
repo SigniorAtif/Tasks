@@ -1,7 +1,8 @@
 // The home screen's body: a title bar with Previous / Today / Next, the grid,
-// and its loading, empty and error states. It owns two pieces of UI state:
-// the anchor date (which day the user is looking at) and, from the window's
-// width, the view (one day on a phone, the week from 768 px).
+// and its loading, empty and error states. It owns the UI state: the anchor
+// date (which day the user is looking at), from the window's width the view
+// (one day on a phone, the week from 768 px), the occurrence whose sheet is
+// open, and the toast that offers Undo after a cancel.
 //
 // Data: the whole Monday-to-Sunday week around the anchor, in both views, so
 // moving between days of one week needs no request, and the week next to it
@@ -16,9 +17,12 @@ import {
 import { Navigate } from '@tanstack/react-router';
 import type { DateWindow, ISODate, Occurrence } from '@tasks/core';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { Toast, type ToastMessage } from '../components/Toast.tsx';
 import { describeError, isUnauthenticated } from '../lib/api.ts';
+import { useChangeOccurrence } from '../lib/mutations.ts';
 import { calendarQuery, groupsQuery, meQuery } from '../lib/queries.ts';
 import { isKnownZone } from '../lib/time.ts';
+import { useOnline } from '../lib/use-online.ts';
 import {
   addDays,
   type CalendarView,
@@ -29,7 +33,9 @@ import {
   todayIn,
   weekDays,
 } from './model/dates.ts';
-import { dayHeader, dayLabel, longDayLabel, weekLabel } from './model/format.ts';
+import { dayHeader, dayLabel, longDayLabel, statusLabel, weekLabel } from './model/format.ts';
+import { RESTORE } from './model/sheet.ts';
+import { OccurrenceSheet } from './OccurrenceSheet.tsx';
 import { type GridGroup, TimeGrid } from './TimeGrid.tsx';
 import { useMediaQuery } from './use-media-query.ts';
 import { useServerMinute } from './use-server-minute.ts';
@@ -58,14 +64,11 @@ const weekWindow = (monday: ISODate): DateWindow => ({ from: monday, to: addDays
 export function CalendarScreen({
   leading,
   trailing,
-  onOpen,
 }: {
   /** Drawn at the start of the title bar (the logo). */
   leading?: ReactNode;
   /** Drawn at its end (the account menu). */
   trailing?: ReactNode;
-  /** A block was tapped: passed straight to the grid. */
-  onOpen?: (occurrence: Occurrence) => void;
 }) {
   // In the cache already: the route's beforeLoad fetched it.
   const me = useSuspenseQuery(meQuery);
@@ -113,6 +116,28 @@ export function CalendarScreen({
     for (const group of groups.data?.groups ?? []) byId[group.id] = group;
     return byId;
   }, [groups.data]);
+
+  // The occurrence whose sheet is open, as it was when its block was tapped.
+  const [opened, setOpened] = useState<Occurrence | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const undo = useChangeOccurrence();
+  const online = useOnline();
+  // Undo sends exactly what Restore sends.
+  const offerUndo = (cancelled: Occurrence) => {
+    const { seriesId, originalDate } = cancelled;
+    if (originalDate === null) return;
+    setToast({
+      text: `${cancelled.title} · ${statusLabel(cancelled)}`,
+      action: {
+        label: 'Undo',
+        onClick: () =>
+          undo.mutate(
+            { seriesId, originalDate, change: RESTORE },
+            { onError: (error) => setToast({ text: describeError(error).title }) },
+          ),
+      },
+    });
+  };
 
   // The session ended while the screen was open.
   if (isUnauthenticated(calendar.error) || isUnauthenticated(groups.error)) {
@@ -217,10 +242,21 @@ export function CalendarScreen({
           groups={groupsById}
           nowMs={nowMs}
           pxPerMin={PX_PER_MIN[view]}
-          onOpen={onOpen}
+          onOpen={setOpened}
         />
         {overlay}
       </div>
+
+      {opened !== null && (
+        <OccurrenceSheet
+          occurrence={opened}
+          group={groups.data?.groups.find((group) => group.id === opened.groupId)}
+          zone={zone}
+          onClose={() => setOpened(null)}
+          onCancelled={offerUndo}
+        />
+      )}
+      <Toast message={toast} actionDisabled={!online} onDismiss={() => setToast(null)} />
     </div>
   );
 }

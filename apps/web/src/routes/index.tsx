@@ -1,7 +1,5 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, Link, Navigate, useNavigate } from '@tanstack/react-router';
-import type { Occurrence } from '@tasks/core';
-import { useCallback } from 'react';
+import { createFileRoute, Link, Navigate } from '@tanstack/react-router';
 import { CalendarScreen } from '../calendar/CalendarScreen.tsx';
 import { AccountMenu } from '../components/AccountMenu.tsx';
 import { Logo } from '../components/Logo.tsx';
@@ -12,7 +10,7 @@ import { requireSession } from '../lib/require-session.ts';
 
 // `/`, the home screen: this week's calendar, a button to add a class, the
 // "offline · last synced" badge, and the account menu (sign out, deployed
-// commit) behind the avatar. Tapping a class opens it in the series form.
+// commit) behind the avatar. Tapping a class opens its sheet (CalendarScreen).
 export const Route = createFileRoute('/')({
   // The week view needs the whole window, not the phone-width column (__root.tsx).
   staticData: { wide: true },
@@ -25,15 +23,6 @@ export const Route = createFileRoute('/')({
 function HomeScreen() {
   // Already in the cache (beforeLoad put it there), so this never waits.
   const me = useSuspenseQuery(meQuery);
-  const navigate = useNavigate();
-  // A class on the calendar → the form that edits its series ("DS on Fridays").
-  // One series makes many occurrences; editing it changes all of them (v0.3b
-  // adds "only this one").
-  const openSeries = useCallback(
-    (occurrence: Occurrence) =>
-      navigate({ to: '/series/$seriesId', params: { seriesId: occurrence.seriesId } }),
-    [navigate],
-  );
 
   // The session ended while the screen was open (a refetch got a 401).
   if (isUnauthenticated(me.error)) return <Navigate to="/login" replace />;
@@ -41,7 +30,6 @@ function HomeScreen() {
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <CalendarScreen
-        onOpen={openSeries}
         leading={
           <span className="flex shrink-0 items-center gap-2">
             <Logo className="size-8" />
