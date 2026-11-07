@@ -41,6 +41,7 @@ import {
   toCreateSeries,
   toFullUpdate,
   valuesFromSeries,
+  withGroupChosen,
 } from './form-values.ts';
 
 const HINTS = {
@@ -79,10 +80,13 @@ function failureText(error: unknown) {
 export function SeriesForm({
   series,
   groups,
+  seriesList = [],
   today,
 }: {
   series: Series | null;
   groups: readonly ScheduleGroup[];
+  /** Every series, for a new class: its first day suggests the earliest future first day in its group. */
+  seriesList?: readonly Series[];
   /** Today in the user's zone: the default first day. */
   today: ISODate;
 }) {
@@ -92,7 +96,7 @@ export function SeriesForm({
   const online = useSyncStatus().state !== 'offline';
   // What the form started with: an edit sends only what differs from it.
   const [initial] = useState(() =>
-    series === null ? blankValues(today, groups) : valuesFromSeries(series),
+    series === null ? blankValues(today, groups, seriesList) : valuesFromSeries(series),
   );
   const [values, setValues] = useState<SeriesFormValues>(initial);
   const [problems, setProblems] = useState<Problems>(NO_PROBLEMS);
@@ -135,6 +139,15 @@ export function SeriesForm({
     setValues((v) => ({ ...v, newGroup: { ...v.newGroup, ...change } }));
     if (change.name !== undefined) clearProblem('groupName');
     if (change.colorToken !== undefined) clearProblem('groupColor');
+  }
+  /** A new class's first day follows the group picked, until the user changes it. */
+  function chooseGroup(groupId: string) {
+    if (series === null) {
+      setValues((v) => withGroupChosen(v, groupId, seriesList, today));
+      clearProblem('groupId');
+    } else {
+      set('groupId', groupId);
+    }
   }
   /** The id for the group or series this form creates: the same one on every try. */
   function pendingId(kind: 'group' | 'series'): string {
@@ -296,7 +309,7 @@ export function SeriesForm({
             id="series-group"
             ref={register('groupId')}
             value={values.groupId}
-            onChange={(e) => set('groupId', e.target.value)}
+            onChange={(e) => chooseGroup(e.target.value)}
             className={inputClass}
             {...describedBy('series-group', { error: errors.groupId })}
           >

@@ -142,8 +142,50 @@ export function selectableGroups(
   return groups.filter((group) => !isArchived(group, today) || group.id === currentGroupId);
 }
 
+/** Where each series sits and when it starts: all a first-day suggestion needs. */
+export type SeriesFirstDays = readonly Pick<Series, 'groupId' | 'startDate'>[];
+
+/**
+ * The first day a new series in this group suggests: the earliest first day of a
+ * series already in it that is still to come, else today. Adding a semester's
+ * twenty classes then means typing its first day once.
+ */
+export function suggestedFirstDay(
+  groupId: string,
+  seriesList: SeriesFirstDays,
+  today: ISODate,
+): ISODate {
+  const upcoming = seriesList
+    .filter((s) => s.groupId === groupId && s.startDate >= today)
+    .map((s) => s.startDate)
+    .sort();
+  return upcoming[0] ?? today;
+}
+
+/**
+ * A new class put in another group. Its first day follows that group's
+ * suggestion, unless the user already changed it from the old group's.
+ */
+export function withGroupChosen(
+  values: SeriesFormValues,
+  groupId: string,
+  seriesList: SeriesFirstDays,
+  today: ISODate,
+): SeriesFormValues {
+  const untouched = values.startDate === suggestedFirstDay(values.groupId, seriesList, today);
+  return {
+    ...values,
+    groupId,
+    startDate: untouched ? suggestedFirstDay(groupId, seriesList, today) : values.startDate,
+  };
+}
+
 /** A blank form for a new class. With no groups yet, it starts on "New group". */
-export function blankValues(today: ISODate, groups: readonly ScheduleGroup[]): SeriesFormValues {
+export function blankValues(
+  today: ISODate,
+  groups: readonly ScheduleGroup[],
+  seriesList: SeriesFirstDays = [],
+): SeriesFormValues {
   const groupId = selectableGroups(groups, today)[0]?.id ?? NEW_GROUP;
   return {
     title: '',
@@ -155,7 +197,7 @@ export function blankValues(today: ISODate, groups: readonly ScheduleGroup[]): S
     interval: 1,
     startTime: '',
     durationMin: '60',
-    startDate: today,
+    startDate: suggestedFirstDay(groupId, seriesList, today),
     untilDate: '',
   };
 }

@@ -12,11 +12,13 @@ import {
   problemsFromErrors,
   type SeriesFormValues,
   selectableGroups,
+  suggestedFirstDay,
   toCreateGroup,
   toCreateSeries,
   todayIn,
   toFullUpdate,
   valuesFromSeries,
+  withGroupChosen,
 } from './form-values.ts';
 
 // Made-up rows, shaped like the sample timetable (packages/core/.../sample-timetable.ts).
@@ -93,6 +95,50 @@ describe('starting values', () => {
 
   it('offers archived groups only when the series already belongs to one', () => {
     expect(selectableGroups([archived, sem3], TODAY, archived.id)).toEqual([archived, sem3]);
+  });
+
+  describe("the first day suggests the group's earliest future first day, so a semester's date is typed once", () => {
+    const startingOn = (startDate: string, groupId = GROUP_ID): Series => ({
+      ...lab,
+      id: `0199d6a0-0000-7000-8000-${startDate.replaceAll('-', '').padStart(12, '0')}`,
+      groupId,
+      startDate,
+    });
+    const series = [
+      startingOn('2026-07-16'),
+      startingOn('2027-01-11'),
+      startingOn('2027-01-04'),
+      startingOn('2026-10-20', archived.id),
+    ];
+
+    it('is the earliest first day in the group that is still to come', () => {
+      expect(suggestedFirstDay(GROUP_ID, series, TODAY)).toBe('2027-01-04');
+      expect(blankValues(TODAY, [sem3], series).startDate).toBe('2027-01-04');
+    });
+
+    it('counts a series starting today', () => {
+      expect(suggestedFirstDay(GROUP_ID, [...series, startingOn(TODAY)], TODAY)).toBe(TODAY);
+    });
+
+    it('follows the group picked until the user changes the first day', () => {
+      const other = { ...sem3, id: NEW_GROUP_ID };
+      const withOther = [...series, startingOn('2027-02-01', NEW_GROUP_ID)];
+      const start = blankValues(TODAY, [sem3, other], withOther);
+      const moved = withGroupChosen(start, NEW_GROUP_ID, withOther, TODAY);
+      expect(moved).toMatchObject({ groupId: NEW_GROUP_ID, startDate: '2027-02-01' });
+
+      const typed = { ...start, startDate: '2026-12-01' };
+      expect(withGroupChosen(typed, NEW_GROUP_ID, withOther, TODAY)).toMatchObject({
+        groupId: NEW_GROUP_ID,
+        startDate: '2026-12-01',
+      });
+    });
+
+    it('is today when nothing in the group starts later, or for a new group', () => {
+      expect(suggestedFirstDay(GROUP_ID, [startingOn('2026-07-16')], TODAY)).toBe(TODAY);
+      expect(suggestedFirstDay(NEW_GROUP, series, TODAY)).toBe(TODAY);
+      expect(blankValues(TODAY, [], series).startDate).toBe(TODAY);
+    });
   });
 
   it('fills the form from a series, leaving the subject empty when it is the title', () => {
