@@ -69,10 +69,14 @@ The status of an occurrence that did not or will not happen. It is never deleted
 _Avoid_: deleted, missed
 
 **Not held**:
-The cancel reason when the occurrence didn't take place at all (the prof cancelled, a holiday).
+The cancel reason when the occurrence didn't take place at all (the prof cancelled, a holiday). The user gives it with **Prof**, and it reads "Prof cancelled".
 
 **Skipped**:
-The cancel reason when the occurrence took place but the user chose not to go.
+The cancel reason when the occurrence took place but the user chose not to go. The user gives it with **Me**, and it reads "I skipped".
+
+**Not today**:
+A cancel with no reason, the only cancel a group without attendance offers. If the group tracks attendance later, the occurrence reads "No reason given" and is never guessed to be not held or skipped; the calendar draws it like not held.
+_Avoid_: unknown, other
 
 **Restore**:
 Taking back a cancel, so the occurrence happens again; restoring one on a day off overrules the day off.
