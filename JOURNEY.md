@@ -80,7 +80,7 @@ Format: what was decided → why → alternatives considered.
 - **Decision:** The evening shutdown shows today's classes pre-ticked as "went"; one tap flips one to "skipped." Classes not yet reviewed count as *unconfirmed*, and attendance shows as a range until they're confirmed.
 
 ### ADR v0.0 · The walking-skeleton stack (2026-10-12)
-- **Decision:** v0.0 is built on this stack, the minimal one from `docs/brainstorm/00-overview.md` §1:
+- **Decision:** v0.0 is built on this stack, the minimal one the brainstorm settled on:
   - **Repo:** one pnpm monorepo (`apps/api`, `apps/web`, `packages/core`), TypeScript 7 strict, Biome, Vitest, Node 24 as the floor.
   - **API:** one Hono process on Node 24, which runs the TypeScript source directly (no build step). Settings checked with zod at start-up, pino logs, and one RFC 9457 error shape with stable codes (D-043).
   - **Data:** Postgres 18 through Drizzle 0.45 + `pg`, with the generated SQL migration reviewed and committed (D-038). UUIDv7 ids. Auth tables are prefixed `auth_` (`auth_user`, `auth_session`, …) so `user` never clashes with the SQL keyword and `session` never clashes with v1's work sessions.

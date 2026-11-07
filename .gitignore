@@ -13,6 +13,10 @@ ruvector.db
 # Personal learning vault (Obsidian), kept local
 vault/
 
+# Planning notes kept local: the decision log and the critique of the brainstorm
+docs/brainstorm/00-overview.md
+docs/brainstorm/99-critique.md
+
 # Dependencies and build output
 node_modules/
 dist/
