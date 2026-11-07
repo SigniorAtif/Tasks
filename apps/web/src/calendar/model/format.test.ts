@@ -96,10 +96,25 @@ describe('statusLabel and blockDescription', () => {
     expect(blockDescription(holiday, ist)).toBe(
       'Data Structures, 10:00–11:00 AM, cancelled: Holiday (example)',
     );
+  });
 
-    const skipped = occurrence({ status: 'cancelled', cancelReason: 'skipped' });
-    expect(statusLabel(skipped)).toBe('Skipped');
-    expect(blockDescription(skipped, ist)).toBe('Data Structures, 10:00–11:00 AM, skipped');
+  it('says in words why the user cancelled a class: Prof cancelled, I skipped, or no reason', () => {
+    const cancelled = (cancelReason: 'not_held' | 'skipped' | null) =>
+      occurrence({ status: 'cancelled', cancelReason, cancelOrigin: 'user' });
+
+    expect(statusLabel(cancelled('not_held'))).toBe('Prof cancelled');
+    expect(blockDescription(cancelled('not_held'), ist)).toBe(
+      'Data Structures, 10:00–11:00 AM, Prof cancelled',
+    );
+    expect(statusLabel(cancelled('skipped'))).toBe('I skipped');
+    expect(blockDescription(cancelled('skipped'), ist)).toBe(
+      'Data Structures, 10:00–11:00 AM, I skipped',
+    );
+    // "Not today" in a group without attendance.
+    expect(statusLabel(cancelled(null))).toBe('Cancelled');
+    expect(blockDescription(cancelled(null), ist)).toBe(
+      'Data Structures, 10:00–11:00 AM, cancelled',
+    );
   });
 
   it('labels moved and extra classes, and reads out a note', () => {

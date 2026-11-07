@@ -203,9 +203,9 @@
 }
 
 /* Not held (a holiday, or the prof cancelled): grey stripes, a faded edge,
-   the title struck through and a "Cancelled" pill. States differ by pattern,
-   border and words, never by colour alone. Whole-pixel stripe widths avoid
-   shimmering on phones with fractional pixel ratios. */
+   the title struck through and a pill saying why ("Prof cancelled"). States
+   differ by pattern, border and words, never by colour alone. Whole-pixel
+   stripe widths avoid shimmering on phones with fractional pixel ratios. */
 .tg-block[data-status="cancelled"] {
   background-color: var(--grid-surface-muted);
   background-image: repeating-linear-gradient(
