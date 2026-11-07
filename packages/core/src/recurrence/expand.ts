@@ -12,6 +12,7 @@ import type {
   DateWindow,
   DayException,
   ExtraOverride,
+  ISODate,
   ModifiedOverride,
   Occurrence,
   OccurrenceKey,
@@ -108,6 +109,32 @@ export function expand(input: ExpandInput): Occurrence[] {
     return a.occurrence.key < b.occurrence.key ? -1 : a.occurrence.key > b.occurrence.key ? 1 : 0;
   });
   return out.map((r) => r.occurrence);
+}
+
+/** What `occurrenceOn` needs: one series, its group, and what was said about the date. */
+export interface OccurrenceInput {
+  series: Series;
+  group: ScheduleGroup;
+  /** The override on this series and date, if there is one. */
+  override: ModifiedOverride | undefined;
+  dayExceptions: readonly DayException[];
+}
+
+/**
+ * The occurrence the series' rule generates on `originalDate`, exactly as `expand()` would
+ * compute it, wherever it was moved to. `undefined` when the series never generates that
+ * date: before its first day, after its own or its group's last day, or off its rule.
+ */
+export function occurrenceOn(
+  input: OccurrenceInput,
+  originalDate: ISODate,
+): Occurrence | undefined {
+  const { series: s, group: g } = input;
+  assertZoneName(s.tzid);
+  const original = Temporal.PlainDate.from(originalDate);
+  if (!occursOn(s, original, g)) return undefined;
+  return resolve(s, g, original, input.override, dayExceptionsByDate(input.dayExceptions))
+    .occurrence;
 }
 
 /**

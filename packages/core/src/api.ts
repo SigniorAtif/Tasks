@@ -33,6 +33,11 @@ export const paths = {
   series: '/api/v1/series',
   /** `GET ?from=YYYY-MM-DD&to=YYYY-MM-DD`: the expanded occurrences (B6). */
   calendar: '/api/v1/calendar',
+  /**
+   * `PATCH /api/v1/occurrences/:seriesId/:originalDate` cancels, restores or changes the
+   * reason of one occurrence, and answers with the `Occurrence` as it is now.
+   */
+  occurrences: '/api/v1/occurrences',
 } as const;
 
 /**
