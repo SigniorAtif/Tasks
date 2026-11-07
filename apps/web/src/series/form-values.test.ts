@@ -29,18 +29,17 @@ const sem3: ScheduleGroup = {
   id: GROUP_ID,
   name: 'Classes · Sem 3 (sample)',
   colorToken: 'teal',
-  activeFrom: '2026-07-13',
-  activeTo: '2026-11-27',
+  untilDate: '2026-11-27',
   observesHolidays: true,
   attendance: true,
   attendanceThresholdPct: 75,
   attendanceTrackingFrom: null,
-  archivedAt: null,
 };
+/** Its last day has passed, so it counts as archived. */
 const archived: ScheduleGroup = {
   ...sem3,
   id: '0199d6a0-0000-7000-8000-000000000009',
-  archivedAt: '2026-07-01T00:00:00Z',
+  untilDate: '2026-07-01',
 };
 
 const lab: Series = {
@@ -85,13 +84,19 @@ describe('starting values', () => {
     expect(blankValues(TODAY, []).groupId).toBe(NEW_GROUP);
   });
 
+  it('counts a group as archived once its last day has passed, not on it', () => {
+    expect(selectableGroups([archived, sem3], TODAY)).toEqual([sem3]);
+    expect(selectableGroups([sem3], '2026-11-27')).toEqual([sem3]);
+    expect(selectableGroups([sem3], '2026-11-28')).toEqual([]);
+    expect(selectableGroups([{ ...sem3, untilDate: null }], '2099-01-01')).toHaveLength(1);
+  });
+
   it('offers archived groups only when the series already belongs to one', () => {
-    expect(selectableGroups([archived, sem3])).toEqual([sem3]);
-    expect(selectableGroups([archived, sem3], archived.id)).toEqual([archived, sem3]);
+    expect(selectableGroups([archived, sem3], TODAY, archived.id)).toEqual([archived, sem3]);
   });
 
   it('fills the form from a series, leaving the subject empty when it is the title', () => {
-    expect(valuesFromSeries(lab, TODAY)).toMatchObject({
+    expect(valuesFromSeries(lab)).toMatchObject({
       title: 'Digital Systems Lab',
       subject: '',
       location: 'Lab 5',
@@ -105,7 +110,7 @@ describe('starting values', () => {
 
   it('shows a daily rule as every day of every week', () => {
     const run = { ...lab, rule: { freq: 'daily' as const, interval: 1 } };
-    expect(valuesFromSeries(run, TODAY)).toMatchObject({
+    expect(valuesFromSeries(run)).toMatchObject({
       days: ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'],
       interval: 1,
     });
@@ -135,21 +140,20 @@ describe('request bodies', () => {
     expect(body).not.toHaveProperty('subject');
   });
 
-  it('builds the new group from the inline fields', () => {
+  it('builds the new group from the inline fields, with no first day', () => {
     const values = filled({
       groupId: NEW_GROUP,
-      newGroup: { name: 'Sem 4', colorToken: 'violet', activeFrom: '2027-01-04' },
+      newGroup: { name: 'Sem 4', colorToken: 'violet' },
     });
     expect(toCreateGroup(values, NEW_GROUP_ID)).toEqual({
       id: NEW_GROUP_ID,
       name: 'Sem 4',
       colorToken: 'violet',
-      activeFrom: '2027-01-04',
     });
   });
 
   it('sends only what changed in an edit', () => {
-    const initial = valuesFromSeries(lab, TODAY);
+    const initial = valuesFromSeries(lab);
     expect(changedFields(initial, initial, GROUP_ID)).toEqual({});
     expect(
       changedFields({ ...initial, location: 'Lab 3', durationMin: '90' }, initial, GROUP_ID),
@@ -157,7 +161,7 @@ describe('request bodies', () => {
   });
 
   it('sends the whole rule when the days change, and the new group id when it changes', () => {
-    const initial = valuesFromSeries(lab, TODAY);
+    const initial = valuesFromSeries(lab);
     expect(changedFields({ ...initial, days: ['TH', 'TU'] }, initial, NEW_GROUP_ID)).toEqual({
       groupId: NEW_GROUP_ID,
       rule: { freq: 'weekly', interval: 2, byDay: ['TU', 'TH'] },
@@ -165,7 +169,7 @@ describe('request bodies', () => {
   });
 
   it('does not resend a daily rule the user did not touch', () => {
-    const initial = valuesFromSeries({ ...lab, rule: { freq: 'daily', interval: 1 } }, TODAY);
+    const initial = valuesFromSeries({ ...lab, rule: { freq: 'daily', interval: 1 } });
     expect(changedFields({ ...initial, title: 'Lab' }, initial, GROUP_ID)).toEqual({
       title: 'Lab',
       // The subject was following the title, so it follows the new one.
@@ -218,11 +222,10 @@ describe('checking with the shared schemas', () => {
   it('checks the new group with its own schema', () => {
     const values = filled({
       groupId: NEW_GROUP,
-      newGroup: { name: ' ', colorToken: 'blue', activeFrom: '' },
+      newGroup: { name: ' ', colorToken: 'blue' },
     });
     expect(checkGroup(toCreateGroup(values, NEW_GROUP_ID)).fields).toEqual({
       groupName: 'Group name must not be empty',
-      groupActiveFrom: 'Group starts on must be a date like 2026-10-13',
     });
   });
 });

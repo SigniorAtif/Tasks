@@ -12,9 +12,9 @@ export {
 } from './api.ts';
 export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {
-  type ActiveRange,
   assertValidRule,
   expandDates,
+  type GroupLastDay,
   MAX_INTERVAL,
   occursOn,
   untilDateForCount,

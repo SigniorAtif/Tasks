@@ -121,46 +121,34 @@ export const ruleSchema = z.discriminatedUnion('freq', [
 // Groups
 // ---------------------------------------------------------------------------
 
-const activeRangeCheck = {
-  check: (g: { activeFrom?: string; activeTo?: string | null }) =>
-    g.activeFrom === undefined || g.activeTo == null || g.activeTo >= g.activeFrom,
-  params: { path: ['activeTo'], message: 'must be on or after activeFrom' },
-};
-
-/** `POST /api/v1/groups`. */
-export const createGroupSchema = z
-  .object({
-    id: newIdSchema,
-    name: text(80),
-    colorToken: colorTokenSchema.default(DEFAULT_COLOR_TOKEN),
-    activeFrom: isoDateSchema,
-    /** `null` = open-ended (a semester whose last day isn't known yet). */
-    activeTo: isoDateSchema.nullable().default(null),
-    observesHolidays: z.boolean().default(true),
-    attendance: z.boolean().default(true),
-    attendanceThresholdPct: z.number().int().min(0).max(100).default(75),
-    attendanceTrackingFrom: isoDateSchema.nullable().default(null),
-  })
-  .refine(activeRangeCheck.check, activeRangeCheck.params);
-
 /**
- * `PATCH /api/v1/groups/:id`: only the fields being changed. A range check that
- * needs the stored value too (a new `activeTo` against the old `activeFrom`) is the
- * database's job: its CHECK constraint refuses the update and the API answers 422.
+ * `POST /api/v1/groups`. A group is a folder: it has no first day, only an
+ * optional last day (ADR v0.3).
  */
+export const createGroupSchema = z.object({
+  id: newIdSchema,
+  name: text(80),
+  colorToken: colorTokenSchema.default(DEFAULT_COLOR_TOKEN),
+  /** Last day, inclusive. `null` = open-ended (a semester whose last day isn't known yet). */
+  untilDate: isoDateSchema.nullable().default(null),
+  observesHolidays: z.boolean().default(true),
+  attendance: z.boolean().default(true),
+  attendanceThresholdPct: z.number().int().min(0).max(100).default(75),
+  attendanceTrackingFrom: isoDateSchema.nullable().default(null),
+});
+
+/** `PATCH /api/v1/groups/:id`: only the fields being changed. */
 export const updateGroupSchema = z
   .object({
     name: text(80),
     colorToken: colorTokenSchema,
-    activeFrom: isoDateSchema,
-    activeTo: isoDateSchema.nullable(),
+    untilDate: isoDateSchema.nullable(),
     observesHolidays: z.boolean(),
     attendance: z.boolean(),
     attendanceThresholdPct: z.number().int().min(0).max(100),
     attendanceTrackingFrom: isoDateSchema.nullable(),
   })
-  .partial()
-  .refine(activeRangeCheck.check, activeRangeCheck.params);
+  .partial();
 
 // ---------------------------------------------------------------------------
 // Series

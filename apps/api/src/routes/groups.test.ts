@@ -42,13 +42,11 @@ describe('POST /api/v1/groups', () => {
       id: body.id,
       name: 'Classes · Sem 3 (sample)',
       colorToken: 'blue',
-      activeFrom: '2026-07-13',
-      activeTo: '2026-11-27',
+      untilDate: '2026-11-27',
       observesHolidays: true,
       attendance: true,
       attendanceThresholdPct: 75,
       attendanceTrackingFrom: null,
-      archivedAt: null,
     } satisfies ScheduleGroup);
   });
 
@@ -73,7 +71,7 @@ describe('POST /api/v1/groups', () => {
     const taken = newId();
     await testDb
       .insert(scheduleGroup)
-      .values({ id: taken, userId: someone?.id ?? '', name: 'Theirs', activeFrom: '2026-07-01' });
+      .values({ id: taken, userId: someone?.id ?? '', name: 'Theirs' });
 
     const response = await client.post(GROUPS, groupBody({ id: taken }));
     expect(response.status).toBe(409);
@@ -88,22 +86,29 @@ describe('POST /api/v1/groups', () => {
       id: '00000000-0000-4000-8000-000000000000',
       name: '',
       colorToken: 'purple',
-      activeFrom: '2026-07-13',
-      activeTo: '2026-07-01',
+      untilDate: '2026-02-30',
     });
     expect(response.status).toBe(422);
     const problem = await json<Problem>(response);
     expect(problem.code).toBe('validation_failed');
-    expect(problem.errors?.map((error) => error.path).sort()).toEqual(['colorToken', 'id', 'name']);
+    expect(problem.errors?.map((error) => error.path).sort()).toEqual([
+      'colorToken',
+      'id',
+      'name',
+      'untilDate',
+    ]);
   });
 
-  it('refuses activeTo before activeFrom', async () => {
+  it('creates a group with no last day, and ignores a first day sent by an old client', async () => {
     const client = await signedIn();
-    const response = await client.post(GROUPS, groupBody({ activeTo: '2026-07-01' }));
-    expect(response.status).toBe(422);
-    expect((await json<Problem>(response)).errors).toEqual([
-      { path: 'activeTo', message: 'must be on or after activeFrom' },
-    ]);
+    const response = await client.post(GROUPS, {
+      ...groupBody({ untilDate: null }),
+      activeFrom: '2026-07-13',
+    });
+    expect(response.status).toBe(201);
+    const group = await json<Record<string, unknown>>(response);
+    expect(group.untilDate).toBeNull();
+    expect(group).not.toHaveProperty('activeFrom');
   });
 
   it('answers 400 when the body is not JSON', async () => {
@@ -115,20 +120,20 @@ describe('POST /api/v1/groups', () => {
 });
 
 describe('GET /api/v1/groups', () => {
-  it('lists every group, oldest activeFrom first, then by name', async () => {
+  it('lists every group, archived ones too, sorted by name', async () => {
     const client = await signedIn();
-    await create(client, { name: 'Health', activeFrom: '2026-07-01', activeTo: null });
+    await create(client, { name: 'Health', untilDate: null });
+    await create(client, { name: 'Clubs', untilDate: '2026-07-31' });
     await create(client, { name: 'Classes · Sem 3 (sample)' });
-    await create(client, { name: 'Clubs', activeFrom: '2026-07-13', activeTo: null });
 
     const response = await client.get(GROUPS);
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     const { groups } = await json<GroupList>(response);
     expect(groups.map((group) => group.name)).toEqual([
-      'Health',
       'Classes · Sem 3 (sample)',
       'Clubs',
+      'Health',
     ]);
   });
 
@@ -175,14 +180,14 @@ describe('PATCH /api/v1/groups/:id', () => {
     const response = await client.patch(`${GROUPS}/${group.id}`, {
       name: 'Classes · Sem 3',
       colorToken: 'violet',
-      activeTo: null,
+      untilDate: null,
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       ...group,
       name: 'Classes · Sem 3',
       colorToken: 'violet',
-      activeTo: null,
+      untilDate: null,
     });
   });
 
@@ -194,26 +199,18 @@ describe('PATCH /api/v1/groups/:id', () => {
     expect(await response.json()).toEqual(group);
   });
 
-  it('names activeTo when it would end before the stored activeFrom', async () => {
+  it('sets a last day, and refuses one that is not a real date', async () => {
     const client = await signedIn();
-    const group = await create(client);
-    const response = await client.patch(`${GROUPS}/${group.id}`, { activeTo: '2026-07-01' });
-    expect(response.status).toBe(422);
-    expect((await json<Problem>(response)).errors).toEqual([
-      { path: 'activeTo', message: 'must be on or after activeFrom' },
-    ]);
-  });
+    const group = await create(client, { untilDate: null });
+    const set = await client.patch(`${GROUPS}/${group.id}`, { untilDate: '2026-11-27' });
+    expect(set.status).toBe(200);
+    expect((await json<ScheduleGroup>(set)).untilDate).toBe('2026-11-27');
 
-  it('names activeFrom when it would start after the stored activeTo', async () => {
-    const client = await signedIn();
-    const group = await create(client);
-    const response = await client.patch(`${GROUPS}/${group.id}`, { activeFrom: '2026-12-01' });
-    expect(response.status).toBe(422);
-    expect((await json<Problem>(response)).errors).toEqual([
-      { path: 'activeFrom', message: 'must be on or before activeTo' },
+    const invalid = await client.patch(`${GROUPS}/${group.id}`, { untilDate: '27/11/2026' });
+    expect(invalid.status).toBe(422);
+    expect((await json<Problem>(invalid)).errors?.map((error) => error.path)).toEqual([
+      'untilDate',
     ]);
-    // Nothing changed.
-    expect(await json<ScheduleGroup>(await client.get(`${GROUPS}/${group.id}`))).toEqual(group);
   });
 
   it('refuses invalid values and unknown ids', async () => {

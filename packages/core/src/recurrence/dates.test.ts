@@ -75,21 +75,17 @@ describe('expandDates', () => {
     const dates = expandDates(
       s,
       { from: '2026-11-01', to: '2026-12-31' },
-      { activeFrom: '2026-07-13', activeTo: '2026-11-27' },
+      { untilDate: '2026-11-27' },
     );
     expect(dates.at(-1)).toBe('2026-11-27');
   });
 
-  it("E8: a fortnightly rule keeps the series' phase when the group starts later", () => {
+  it("E8: a fortnightly rule keeps the series' phase when the window starts in an off week", () => {
     const s = series({
       rule: { freq: 'weekly', interval: 2, byDay: ['MO'] },
       startDate: '2026-10-05',
     });
-    const dates = expandDates(
-      s,
-      { from: '2026-10-01', to: '2026-11-01' },
-      { activeFrom: '2026-10-12', activeTo: null },
-    );
+    const dates = expandDates(s, { from: '2026-10-12', to: '2026-11-01' }, { untilDate: null });
     // 10-12 is an "off" week for a series that started on 10-05.
     expect(dates).toEqual(['2026-10-19']);
   });
@@ -100,14 +96,10 @@ describe('expandDates', () => {
     expect(expandDates(s, { from: '2026-01-01', to })).toHaveLength(400);
   });
 
-  it('respects the group start for daily rules too', () => {
+  it("a group never moves a series' first day: it has none of its own", () => {
     const s = series({ rule: { freq: 'daily', interval: 2 }, startDate: '2026-10-01' });
-    const dates = expandDates(
-      s,
-      { from: '2026-10-01', to: '2026-10-10' },
-      { activeFrom: '2026-10-04', activeTo: null },
-    );
-    expect(dates).toEqual(['2026-10-05', '2026-10-07', '2026-10-09']);
+    const dates = expandDates(s, { from: '2026-10-01', to: '2026-10-06' }, { untilDate: null });
+    expect(dates).toEqual(['2026-10-01', '2026-10-03', '2026-10-05']);
   });
 });
 
@@ -120,9 +112,10 @@ describe('occursOn', () => {
     expect(occursOn(s, '2026-11-02')).toBe(false);
   });
 
-  it('accepts a Temporal date and honours the group range', () => {
+  it("accepts a Temporal date and honours the group's last day", () => {
     const d = Temporal.PlainDate.from('2026-10-07');
-    expect(occursOn(s, d, { activeFrom: '2026-10-08', activeTo: null })).toBe(false);
+    expect(occursOn(s, d, { untilDate: '2026-10-06' })).toBe(false);
+    expect(occursOn(s, d, { untilDate: '2026-10-07' })).toBe(true);
   });
 });
 

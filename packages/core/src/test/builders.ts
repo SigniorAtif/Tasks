@@ -14,13 +14,11 @@ export function group(fields: Partial<ScheduleGroup> = {}): ScheduleGroup {
     id: 'g',
     name: 'Classes',
     colorToken: 'blue',
-    activeFrom: '2026-01-01',
-    activeTo: null,
+    untilDate: null,
     observesHolidays: true,
     attendance: true,
     attendanceThresholdPct: 75,
     attendanceTrackingFrom: null,
-    archivedAt: null,
     ...fields,
   };
 }

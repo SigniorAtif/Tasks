@@ -108,8 +108,8 @@ export function expand(input: ExpandInput): Occurrence[] {
 /**
  * Overrides whose original date their series no longer generates, for example after a series
  * moved from Mondays to Tuesdays. They're never rendered; the UI shows them before a change
- * that would create them. Group ranges are ignored: an override outside a shortened semester
- * is dormant, not orphaned, and comes back if the semester is extended.
+ * that would create them. The group's last day is ignored: an override after an earlier last
+ * day is dormant, not orphaned, and comes back if the last day moves later.
  */
 export function findOrphans(
   series: readonly Series[],
@@ -216,7 +216,7 @@ function resolve(
   );
 }
 
-/** An extra is exactly what the user placed. Day exceptions and group ranges don't touch it. */
+/** An extra is exactly what the user placed. Day exceptions and the group's last day don't touch it. */
 function resolveExtra(s: Series, ov: ExtraOverride): Resolved {
   const cancelled = ov.status === 'cancelled';
   return withTimes(

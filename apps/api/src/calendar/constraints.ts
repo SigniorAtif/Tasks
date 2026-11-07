@@ -1,8 +1,8 @@
 // When Postgres refuses a write to a calendar table, which field should the
 // client fix? zod catches nearly everything first, but some rules need data
-// the request doesn't carry: a PATCH that sends only `activeTo` is checked
-// against the `activeFrom` already stored, and only the database has both.
-// The constraint names come from migration 0001 (`apps/api/drizzle/`).
+// the request doesn't carry: a PATCH that sends only a series' `untilDate` is
+// checked against the `startDate` already stored, and only the database has both.
+// The constraint names come from the migrations in `apps/api/drizzle/`.
 
 import { pgErrorOf, SQLSTATE } from '../db/pg-errors.ts';
 import { AppError } from '../http/errors.ts';
@@ -20,10 +20,6 @@ const CHECKS: Record<string, FieldProblem[]> = {
   schedule_group_name_length: [{ path: 'name', message: 'must be 1 to 80 characters' }],
   schedule_group_color_token: [
     { path: 'colorToken', message: 'must be one of the palette colours' },
-  ],
-  schedule_group_active_range: [
-    { path: 'activeTo', message: 'must be on or after activeFrom' },
-    { path: 'activeFrom', message: 'must be on or before activeTo' },
   ],
   schedule_group_attendance_threshold_pct: [
     { path: 'attendanceThresholdPct', message: 'must be from 0 to 100' },

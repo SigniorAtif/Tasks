@@ -7,8 +7,8 @@ import type { DateWindow, ISODate, Rule, ScheduleGroup, Series, Weekday } from '
 
 type PlainDate = Temporal.PlainDate;
 
-/** The bounds of the group a series belongs to. Both ends inclusive. */
-export type ActiveRange = Pick<ScheduleGroup, 'activeFrom' | 'activeTo'>;
+/** The group's last day, inclusive. A group has no first day, so this is its only bound. */
+export type GroupLastDay = Pick<ScheduleGroup, 'untilDate'>;
 
 /** ISO weekday numbers, the same numbering as Temporal's `dayOfWeek`: Monday = 1, Sunday = 7. */
 const WEEKDAY_NUMBER: Record<Weekday, number> = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
@@ -88,23 +88,20 @@ export function ruleDates(
 
 /**
  * The dates a series generates inside `window`, clipped to its own start/until dates and,
- * if given, to its group's active range. The phase always comes from the series' start date,
+ * if given, to its group's last day. The phase always comes from the series' start date,
  * never from the clipped start, so a fortnightly lab stays in the same weeks however it's clipped.
  */
 export function seriesDates(
   series: Pick<Series, 'rule' | 'startDate' | 'untilDate'>,
   window: { from: PlainDate; to: PlainDate },
-  group?: ActiveRange,
+  group?: GroupLastDay,
 ): PlainDate[] {
   assertValidRule(series.rule);
   const start = Temporal.PlainDate.from(series.startDate);
-  let lo = later(window.from, start);
+  const lo = later(window.from, start);
   let hi = window.to;
   if (series.untilDate !== null) hi = earlier(hi, Temporal.PlainDate.from(series.untilDate));
-  if (group) {
-    lo = later(lo, Temporal.PlainDate.from(group.activeFrom));
-    if (group.activeTo !== null) hi = earlier(hi, Temporal.PlainDate.from(group.activeTo));
-  }
+  if (group && group.untilDate !== null) hi = earlier(hi, Temporal.PlainDate.from(group.untilDate));
   return ruleDates(series.rule, start, lo, hi);
 }
 
@@ -112,7 +109,7 @@ export function seriesDates(
 export function expandDates(
   series: Pick<Series, 'rule' | 'startDate' | 'untilDate'>,
   window: DateWindow,
-  group?: ActiveRange,
+  group?: GroupLastDay,
 ): ISODate[] {
   const from = Temporal.PlainDate.from(window.from);
   const to = Temporal.PlainDate.from(window.to);
@@ -123,7 +120,7 @@ export function expandDates(
 export function occursOn(
   series: Pick<Series, 'rule' | 'startDate' | 'untilDate'>,
   date: ISODate | PlainDate,
-  group?: ActiveRange,
+  group?: GroupLastDay,
 ): boolean {
   const d = typeof date === 'string' ? Temporal.PlainDate.from(date) : date;
   return seriesDates(series, { from: d, to: d }, group).length === 1;

@@ -54,22 +54,25 @@ export type CancelReason = 'not_held' | 'skipped';
 /** Who cancelled: the user on this one occurrence, or a day exception (holiday, day off). */
 export type CancelOrigin = 'user' | 'holiday';
 
-/** "Classes · Sem 3", "Health". Owns series and decides when they are active. */
+/**
+ * "Classes · Sem 3", "Health": a folder of series. It has no first day, so it
+ * never hides a series' occurrences; only its last day ends them (ADR v0.3).
+ */
 export interface ScheduleGroup {
   id: string;
   name: string;
   /** One of the ten palette colours (`palette.ts`). */
   colorToken: ColorToken;
-  /** First active day, inclusive. Nothing in the group occurs before it. */
-  activeFrom: ISODate;
-  /** Last active day, inclusive. `null` = open-ended. Archiving sets it (D-030). */
-  activeTo: ISODate | null;
+  /**
+   * Last day, inclusive: nothing in the group occurs after it. `null` = open-ended.
+   * Archived is derived from it, never stored: the last day has passed.
+   */
+  untilDate: ISODate | null;
   /** Whether day exceptions (holidays, days off) cancel this group's occurrences. */
   observesHolidays: boolean;
   attendance: boolean;
   attendanceThresholdPct: number;
   attendanceTrackingFrom: ISODate | null;
-  archivedAt: Instant | null;
 }
 
 /** One timing pattern: "DBMS, Mon and Wed at 10:00 for 60 minutes in Asia/Kolkata". */

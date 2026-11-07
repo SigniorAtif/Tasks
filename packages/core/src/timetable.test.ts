@@ -52,8 +52,8 @@ describe('timetableToRows', () => {
           name: 'Classes · Sem 3 (sample)',
           // Everything the file left out takes the create schema's default.
           colorToken: 'blue',
-          activeFrom: '2026-07-13',
-          activeTo: null,
+          // The file's activeFrom is only the classes' default first day: a group has none.
+          untilDate: null,
           observesHolidays: true,
           attendance: true,
           attendanceThresholdPct: 75,
@@ -100,6 +100,13 @@ describe('timetableToRows', () => {
       startTime: '14:00',
       durationMin: 120,
     });
+  });
+
+  it("makes the file's activeTo the group's last day, leaving the classes open-ended", () => {
+    const parsed = timetableFileSchema.parse(file([ds], { activeTo: '2026-11-27' }));
+    const rows = timetableToRows(parsed, counter());
+    expect(rows.groups[0]?.untilDate).toBe('2026-11-27');
+    expect(rows.series[0]).toMatchObject({ startDate: '2026-07-13', untilDate: null });
   });
 
   it('makes rows the API create schemas accept unchanged', () => {
@@ -235,20 +242,16 @@ function slots(
 describe('the sample timetable file', () => {
   const rows = timetableToRows(timetableFileSchema.parse(sample), counter());
   // As the API would store them: the create schemas' output, plus the server-side fields.
-  const groups: ScheduleGroup[] = rows.groups.map((g) => ({
-    ...createGroupSchema.parse(g),
-    archivedAt: null,
-  }));
+  const groups: ScheduleGroup[] = rows.groups.map((g) => createGroupSchema.parse(g));
   const series: Series[] = rows.series.map((s) => {
     const parsed = createSeriesSchema.parse(s);
     return { ...parsed, tzid: parsed.tzid ?? 'Asia/Kolkata', previousSeriesId: null };
   });
 
-  it("has the fixture's two groups with the same ranges and settings", () => {
+  it("has the fixture's two groups with the same last days and settings", () => {
     const settings = (g: ScheduleGroup) => ({
       name: g.name,
-      activeFrom: g.activeFrom,
-      activeTo: g.activeTo,
+      untilDate: g.untilDate,
       observesHolidays: g.observesHolidays,
       attendance: g.attendance,
     });

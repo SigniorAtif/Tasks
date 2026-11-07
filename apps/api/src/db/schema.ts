@@ -187,7 +187,10 @@ export const profile = pgTable('profile', {
 // between rows; RLS is the guard for reading them.
 // ---------------------------------------------------------------------------
 
-/** "Classes · Sem 3", "Health". Decides when its series are active (D-004, D-030). */
+/**
+ * "Classes · Sem 3", "Health": a folder of series (D-004, amended by ADR v0.3).
+ * No first day, so it never hides a series' occurrences; its last day ends them.
+ */
 export const scheduleGroup = pgTable(
   'schedule_group',
   {
@@ -196,16 +199,13 @@ export const scheduleGroup = pgTable(
     name: text('name').notNull(),
     /** One of the ten palette tokens (`COLOR_TOKENS` in core), never a hex value. */
     colorToken: text('color_token').$type<ColorToken>().notNull().default(DEFAULT_COLOR_TOKEN),
-    /** First active day, inclusive. */
-    activeFrom: day('active_from').notNull(),
-    /** Last active day, inclusive. `null` = open-ended. */
-    activeTo: day('active_to'),
+    /** Last day, inclusive. `null` = open-ended. Archived = this day has passed. */
+    untilDate: day('until_date'),
     /** Whether holidays and days off cancel this group's occurrences. */
     observesHolidays: boolean('observes_holidays').notNull().default(true),
     attendance: boolean('attendance').notNull().default(true),
     attendanceThresholdPct: integer('attendance_threshold_pct').notNull().default(75),
     attendanceTrackingFrom: day('attendance_tracking_from'),
-    archivedAt: instant('archived_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt().$onUpdate(() => new Date()),
   },
@@ -215,10 +215,6 @@ export const scheduleGroup = pgTable(
     unique('schedule_group_user_id_id_unique').on(table.userId, table.id),
     check('schedule_group_name_length', sql`char_length(${table.name}) between 1 and 80`),
     check('schedule_group_color_token', sql`${table.colorToken} in (${sqlList(COLOR_TOKENS)})`),
-    check(
-      'schedule_group_active_range',
-      sql`${table.activeTo} is null or ${table.activeTo} >= ${table.activeFrom}`,
-    ),
     check(
       'schedule_group_attendance_threshold_pct',
       sql`${table.attendanceThresholdPct} between 0 and 100`,

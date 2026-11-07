@@ -75,15 +75,12 @@ describe('rules', () => {
 });
 
 describe('groups', () => {
-  it('fills the defaults for a new group', () => {
-    expect(
-      createGroupSchema.parse({ id: ID, name: ' Classes ', activeFrom: '2026-07-13' }),
-    ).toEqual({
+  it('fills the defaults for a new group, which has no first day', () => {
+    expect(createGroupSchema.parse({ id: ID, name: ' Classes ' })).toEqual({
       id: ID,
       name: 'Classes',
       colorToken: 'blue',
-      activeFrom: '2026-07-13',
-      activeTo: null,
+      untilDate: null,
       observesHolidays: true,
       attendance: true,
       attendanceThresholdPct: 75,
@@ -92,7 +89,7 @@ describe('groups', () => {
   });
 
   it('needs a client-generated UUIDv7 id', () => {
-    const base = { name: 'Classes', activeFrom: '2026-07-13' };
+    const base = { name: 'Classes' };
     expect(failedPaths(createGroupSchema, base)).toEqual(['id']);
     // A version-4 UUID: random, so new rows would land all over the index.
     expect(
@@ -100,10 +97,10 @@ describe('groups', () => {
     ).toEqual(['id']);
   });
 
-  it('refuses a range that ends before it starts, and colours outside the palette', () => {
-    const base = { id: ID, name: 'Classes', activeFrom: '2026-07-13' };
-    expect(failedPaths(createGroupSchema, { ...base, activeTo: '2026-07-12' })).toEqual([
-      'activeTo',
+  it('refuses a last day that is not a real date, and colours outside the palette', () => {
+    const base = { id: ID, name: 'Classes' };
+    expect(failedPaths(createGroupSchema, { ...base, untilDate: '2026-02-30' })).toEqual([
+      'untilDate',
     ]);
     expect(failedPaths(createGroupSchema, { ...base, colorToken: '#ff0000' })).toEqual([
       'colorToken',
@@ -111,7 +108,10 @@ describe('groups', () => {
   });
 
   it('lets an update change just one field', () => {
-    expect(updateGroupSchema.parse({ activeTo: '2026-11-18' })).toEqual({ activeTo: '2026-11-18' });
+    expect(updateGroupSchema.parse({ untilDate: '2026-11-18' })).toEqual({
+      untilDate: '2026-11-18',
+    });
+    expect(updateGroupSchema.parse({ untilDate: null })).toEqual({ untilDate: null });
     expect(updateGroupSchema.parse({})).toEqual({});
     expect(failedPaths(updateGroupSchema, { name: '   ' })).toEqual(['name']);
   });

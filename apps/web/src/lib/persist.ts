@@ -23,7 +23,8 @@ import { del, get, set } from 'idb-keyval';
  * A copy saved under another buster is thrown away instead of being restored, so
  * a new version of the app never reads old shapes it doesn't understand.
  */
-export const CACHE_BUSTER = 'v0.2.0';
+// v0.3.0: a group lost `activeFrom`, `activeTo` and `archivedAt` and gained `untilDate`.
+export const CACHE_BUSTER = 'v0.3.0';
 
 /** How long a saved answer stays usable offline: 30 days. Older ones are dropped. */
 export const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
