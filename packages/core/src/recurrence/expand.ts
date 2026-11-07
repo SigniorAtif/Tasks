@@ -89,11 +89,16 @@ export function expand(input: ExpandInput): Occurrence[] {
     out.push(resolve(s, g, original, o, days));
   }
 
-  // Pass 3: extras, such as make-up classes.
+  // Pass 3: extras, such as make-up classes. Only the group's last day hides one.
   for (const o of input.overrides) {
     if (o.kind !== 'extra') continue;
     const s = seriesById.get(o.seriesId);
-    if (s && inWindow(Temporal.PlainDate.from(o.newDate))) out.push(resolveExtra(s, o));
+    if (!s) continue;
+    const date = Temporal.PlainDate.from(o.newDate);
+    const lastDay = groupOf(s).untilDate;
+    const afterLastDay =
+      lastDay !== null && Temporal.PlainDate.compare(date, Temporal.PlainDate.from(lastDay)) > 0;
+    if (inWindow(date) && !afterLastDay) out.push(resolveExtra(s, o));
   }
 
   // Sort by the real moment, then by key so ties come out in the same order every time.
@@ -216,7 +221,7 @@ function resolve(
   );
 }
 
-/** An extra is exactly what the user placed. Day exceptions and the group's last day don't touch it. */
+/** An extra is exactly what the user placed. Day exceptions don't touch it. */
 function resolveExtra(s: Series, ov: ExtraOverride): Resolved {
   const cancelled = ov.status === 'cancelled';
   return withTimes(

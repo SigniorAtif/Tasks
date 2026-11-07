@@ -264,6 +264,18 @@ describe('extras', () => {
     expect(occs[0]?.status).toBe('scheduled');
   });
 
+  it("shows up to its group's last day, and hides after it", () => {
+    const ended = group({ untilDate: '2026-11-27' });
+    const onLastDay = extra('m1', 's', '2026-11-27', '09:00');
+    const afterIt = extra('m2', 's', '2026-11-28', '09:00');
+    const occs = run({
+      groups: [ended],
+      overrides: [onLastDay, afterIt],
+      window: { from: '2026-11-23', to: '2026-11-29' },
+    });
+    expect(keys(occs).filter((k) => k.startsWith('x:'))).toEqual(['x:m1']);
+  });
+
   it('is left out when it falls outside the window', () => {
     const makeUp = extra('m1', 's', '2026-10-20', '09:00');
     expect(byKey(run({ overrides: [makeUp], window: firstWeek }), 'x:m1')).toBeUndefined();
