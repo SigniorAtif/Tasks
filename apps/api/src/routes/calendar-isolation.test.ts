@@ -14,7 +14,7 @@ import type {
 } from '@tasks/core';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { scheduleGroup, series } from '../db/schema.ts';
+import { occurrenceOverride, scheduleGroup, series } from '../db/schema.ts';
 import { withUser } from '../db/user-scope.ts';
 import {
   alice,
@@ -86,6 +86,20 @@ describe("bob, through the API, against alice's calendar", () => {
     // The same answer as an id that doesn't exist: nothing tells bob these are real.
     expect(await alicesRows()).toEqual(before);
     expect((await json<CalendarResponse>(await asAlice.get(WEEK))).occurrences).toHaveLength(3);
+  });
+
+  it("gets 404 for cancelling her occurrences, and her calendar doesn't change", async () => {
+    const { asAlice, asBob, ds } = await twoUsers();
+    const before = await json<CalendarResponse>(await asAlice.get(WEEK));
+
+    const response = await asBob.patch(`/api/v1/occurrences/${ds.id}/2026-10-14`, {
+      status: 'cancelled',
+      cancelReason: 'skipped',
+    });
+    expect(response.status).toBe(404);
+    expect((await json<Problem>(response)).code).toBe('not_found');
+    expect(await testDb.select().from(occurrenceOverride)).toEqual([]);
+    expect(await json<CalendarResponse>(await asAlice.get(WEEK))).toEqual(before);
   });
 
   it('gets 422 on groupId for a series in her group', async () => {

@@ -21,6 +21,7 @@ import { calendarRoute } from './routes/calendar.ts';
 import { groupsRoutes } from './routes/groups.ts';
 import { healthzRoute } from './routes/healthz.ts';
 import { meRoute } from './routes/me.ts';
+import { occurrenceRoutes } from './routes/occurrences.ts';
 import { seriesRoutes } from './routes/series.ts';
 import { staticSite } from './static-site.ts';
 
@@ -64,16 +65,17 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   app.use(`${paths.apiV1}/*`, csrf({ origin: env.BETTER_AUTH_URL }));
   meRoute(app, { db, now });
 
-  // The calendar (v0.2). Its tables have row-level security, so its routes get
+  // The calendar (v0.2, occurrences v0.3). Its tables have row-level security, so its routes get
   // `c.var.asUser` (one transaction as the signed-in user) from `userScope`.
   // `/x/*` covers `/x` itself too.
   const scoped = userScope(db);
-  for (const prefix of [paths.groups, paths.series, paths.calendar]) {
+  for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
     app.use(`${prefix}/*`, scoped);
   }
   groupsRoutes(app);
   seriesRoutes(app, { db });
   calendarRoute(app);
+  occurrenceRoutes(app);
 
   // The built PWA, in production (STATIC_DIR). Last, so it never shadows the API.
   if (env.STATIC_DIR) staticSite(app, env.STATIC_DIR, logger);
