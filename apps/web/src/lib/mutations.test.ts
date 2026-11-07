@@ -1,7 +1,16 @@
 import { QueryClient } from '@tanstack/react-query';
+import type { CalendarResponse } from '@tasks/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { occurrence } from '../calendar/model/test-builders.ts';
 import { ApiError } from './api.ts';
-import { deleteSeries, invalidateAfterWrite, newId, updateSeries } from './mutations.ts';
+import {
+  changeOccurrence,
+  deleteSeries,
+  invalidateAfterWrite,
+  newId,
+  putOccurrence,
+  updateSeries,
+} from './mutations.ts';
 
 /** Makes every `fetch` call answer with a copy of this response. */
 function answerWith(status: number, body?: unknown) {
@@ -84,5 +93,60 @@ describe('deleteSeries', () => {
   it('still fails on any other error', async () => {
     answerWith(500, { code: 'internal_error', title: 'Oops', status: 500, requestId: 'r' });
     await expect(deleteSeries('x')).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('changeOccurrence', () => {
+  it('PATCHes the occurrence by its series and original date, and returns the answer', async () => {
+    const answer = occurrence({ status: 'cancelled', cancelReason: 'skipped' });
+    const fetchMock = vi.fn(async () => Response.json(answer));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await changeOccurrence({
+      seriesId: 's',
+      originalDate: '2026-10-06',
+      change: { status: 'cancelled', cancelReason: 'skipped' },
+    });
+
+    expect(result).toEqual(answer);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/occurrences/s/2026-10-06',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: '{"status":"cancelled","cancelReason":"skipped"}',
+      }),
+    );
+  });
+});
+
+describe('putOccurrence', () => {
+  const week = (from: string, to: string, occurrences = [occurrence()]): CalendarResponse => ({
+    from,
+    to,
+    occurrences,
+  });
+
+  it("puts the server's answer into every cached window that shows it, without refetching", () => {
+    const client = new QueryClient();
+    const other = occurrence({ key: 's:2026-10-07', date: '2026-10-07' });
+    client.setQueryData(
+      ['calendar', '2026-10-05', '2026-10-11'],
+      week('2026-10-05', '2026-10-11', [occurrence(), other]),
+    );
+    client.setQueryData(['calendar', '2026-10-01', '2026-10-31'], week('2026-10-01', '2026-10-31'));
+    const elsewhere = week('2026-10-12', '2026-10-18', []);
+    client.setQueryData(['calendar', '2026-10-12', '2026-10-18'], elsewhere);
+
+    const cancelled = occurrence({ status: 'cancelled', cancelReason: 'not_held' });
+    putOccurrence(client, cancelled);
+
+    const shown = (from: string, to: string) =>
+      client.getQueryData<CalendarResponse>(['calendar', from, to])?.occurrences;
+    expect(shown('2026-10-05', '2026-10-11')).toEqual([cancelled, other]);
+    expect(shown('2026-10-01', '2026-10-31')).toEqual([cancelled]);
+    expect(client.getQueryData(['calendar', '2026-10-12', '2026-10-18'])).toBe(elsewhere);
+    expect(client.getQueryState(['calendar', '2026-10-05', '2026-10-11'])?.isInvalidated).toBe(
+      false,
+    );
   });
 });

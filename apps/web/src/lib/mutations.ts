@@ -1,19 +1,25 @@
 // The writes the screens make, as TanStack Query mutations. A mutation is a
 // request that changes something on the server: it isn't cached like a read,
 // but TanStack Query tracks whether it's running or failed, and what to do
-// once it worked. Here that's always the same: mark the cached reads that the
-// change makes out of date ("invalidate" them), so they're fetched again.
+// once it worked. Usually that's marking the cached reads the change makes out
+// of date ("invalidating" them), so they're fetched again. A change to one
+// occurrence instead gets the occurrence back and puts it straight into the
+// cached calendar weeks, with no refetch.
 //
-// Writes are online-only in v0.2 (D-048): nothing is queued while offline. The
-// screens disable their Save buttons when offline instead.
+// Writes are online-only (D-048): nothing is queued while offline. The screens
+// disable their buttons when offline instead. (#9 queues occurrence changes.)
 
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  type CalendarResponse,
   type CreateGroup,
   type CreateSeries,
+  type ISODate,
+  type Occurrence,
   paths,
   type ScheduleGroup,
   type Series,
+  type UpdateOccurrence,
   type UpdateSeries,
 } from '@tasks/core';
 import { v7 as uuidv7 } from 'uuid';
@@ -79,6 +85,41 @@ export async function deleteSeries(id: string): Promise<void> {
   }
 }
 
+/** A change to one occurrence, named by its series and the date the rule generated (D-022). */
+export interface OccurrenceChange {
+  seriesId: string;
+  originalDate: ISODate;
+  change: UpdateOccurrence;
+}
+
+/**
+ * `PATCH /api/v1/occurrences/:seriesId/:originalDate`: cancel, restore or change the
+ * reason. Answers with the occurrence as the server now computes it. Sending the
+ * same change twice is harmless.
+ */
+export function changeOccurrence({
+  seriesId,
+  originalDate,
+  change,
+}: OccurrenceChange): Promise<Occurrence> {
+  return apiSend<Occurrence>('PATCH', `${paths.occurrences}/${seriesId}/${originalDate}`, change);
+}
+
+/**
+ * Puts an occurrence the server sent into every cached calendar window that
+ * shows it, in place of the old copy. Windows without it are left alone, so
+ * nothing is fetched again.
+ */
+export function putOccurrence(queryClient: QueryClient, occurrence: Occurrence): void {
+  queryClient.setQueriesData<CalendarResponse>({ queryKey: ['calendar'] }, (window) => {
+    if (!window?.occurrences.some((o) => o.key === occurrence.key)) return window;
+    return {
+      ...window,
+      occurrences: window.occurrences.map((o) => (o.key === occurrence.key ? occurrence : o)),
+    };
+  });
+}
+
 // The hooks the screens use. Returning the invalidation from `onSuccess` keeps
 // the mutation "pending" until the refetches of what's on screen are back, so
 // a screen never shows the old data after saying "saved".
@@ -112,5 +153,23 @@ export function useDeleteSeries() {
   return useMutation({
     mutationFn: deleteSeries,
     onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+/**
+ * Cancel, restore or change the reason of one occurrence; the calendar shows the
+ * answer. `onChanged` runs after that. It belongs to the mutation, not to one
+ * `mutate` call, so it runs even if the screen that sent the change has closed.
+ */
+export function useChangeOccurrence(
+  onChanged?: (occurrence: Occurrence, sent: OccurrenceChange) => void,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: changeOccurrence,
+    onSuccess: (occurrence, sent) => {
+      putOccurrence(queryClient, occurrence);
+      onChanged?.(occurrence, sent);
+    },
   });
 }
