@@ -49,6 +49,7 @@ Format: what was decided → why → alternatives considered.
 - **Group properties:** colour, active date range, attendance on/off.
 - **Semester change:** archive the old group, add the new one, and the app shows conflicts with other groups.
 - **Why:** Semester changes become a one-step swap. History and attendance survive because groups are archived, not deleted.
+- **Amended (2026-10-15):** groups keep an optional last day but no start date, and never hide a series' occurrences (ADR v0.3).
 
 ### D-005 · Attendance: default = attended (2026-10-05)
 - **Decision:** Only deviations get marked. The cancel action asks once: "Prof cancelled" or "I skipped."
@@ -118,6 +119,23 @@ Format: what was decided → why → alternatives considered.
   - the web bundle is 558 KB (176 KB compressed), mostly the Temporal polyfill.
 - **Status:** built and tested locally, in a PR stacked on v0.0's. The B6, B7, B10 and B11 defaults are mine to confirm.
 
+### ADR v0.3 · Cancelling one class, and groups as folders (2026-10-15)
+- **Decision:** settled by grilling before any code; the words are in `CONTEXT.md`.
+  - **One occurrence at a time.** Tapping a class opens a sheet for that one occurrence, with a link to edit the whole series. Attendance groups get two buttons with a fixed first word, **Prof** (stored `not_held`) and **Me** (`skipped`), each with a rotating line under it; other groups get one "Not today" with no reason. Restore and Change reason work at any time, and the 8-second Undo is a Restore. An override row is deleted only when every field on it is empty, so a note survives a restore. Any occurrence the calendar can show (±8 weeks), past or future, can be cancelled. Turning attendance on or off never rewrites saved reasons.
+  - **One request.** `PATCH /api/v1/occurrences/:seriesId/:originalDate` with `{status, cancelReason}`. The screen talks about occurrences; the server creates, updates or deletes the override row, and the same request twice gives the same result (D-042).
+  - **Offline cancels.** Only cancel, restore and change reason are queued (D-046). The stripes show at once with a "waiting" mark, and the last change to reach the server wins. A `404` drops the change with a message; network errors and `5xx` retry; a `401` waits for sign-in.
+  - **Groups are folders.** A group has a name, a colour, an attendance setting and an optional last day. It has **no first day** and never hides a series' occurrences: `active_from`, `archived_at` and the `schedule_group_active_range` check are dropped, `active_to` becomes `until_date` (the series' name for the same idea), and the group start clip in `dates.ts` goes. A new series suggests the earliest future first day already in its group, else today. Changing a series' group takes the whole series, past included.
+  - **"Archived" is worked out, not stored.** A group or series is archived once its last day has passed. Archive sets the last day to today, unless it's already earlier. A last day set in the past hides what comes after it and never erases it: the warning gives a count, and moving the date back brings everything back. A series that hasn't started can only be deleted.
+  - **Delete guards history.** Delete asks you to type the name (case, spaces and symbols ignored) and offers "Archive instead". When nothing would be lost, a plain confirm is enough.
+  - **Hand-placed occurrences show where they landed.** Moves and extras are hidden only by their group's last day, never by their series' dates, so a split or a series' last day can't make one vanish. Moves themselves are built in v0.3b.
+  - **Humour with a rule.** Rotating lines in toasts, loading, empty days and the sync badge come from `apps/web/src/lib/quips.ts`, one line per day, plus three easter eggs: every class today cancelled, a rare loading line rolled each time, and a gentle roast after three skips in one day. Stored data and the API stay plain words.
+  - **Scope.** One Playwright test joins (create, cancel with a reason, reload, the stripes stay). Nightly backups move to the server setup. Notes on one occurrence and the rest of v0.3b get their own grilling once v0.3 ships.
+- **Why:** cancelling is what I'll use every day, so it ships first and simply. The brainstorm made a group a semester switch with a start date that hid occurrences (D-004, D-030). In practice "Health" has no dates, and a series that began before its group's start silently lost classes. A folder plus one "stop everything" date covers managing things together, and nothing that already happened can disappear without a warning that says so.
+- **Alternatives considered:** keeping the group's start as a stored default for new series (it goes stale the day the semester starts); archiving the group to change one series' time (every series in it re-created, where a split changes one); a stored `archived_at` flag (two answers that can disagree); erasing overrides when a last day moves earlier (no way back); a long typed sentence to delete; rotating button labels (a mis-tap changes the attendance number); version checks for offline conflicts (the full sync D-047 postpones).
+- **Contradicts:** D-004 and D-030 (a group's active date range) and `docs/brainstorm/01-recurrence.md` §5.7 (a move whose original slot disappears is hidden).
+- **Estimate:** about 16 h with an alarm at 20 h, up from 8 h / 10 h. There's no deadline (D-011); the cap is an alarm, set to the real size.
+- **Status:** decided 2026-10-15, not built yet.
+
 ---
 
 ## 4. Debates & pushback (how I handled feedback)
@@ -145,6 +163,7 @@ Format: what was decided → why → alternatives considered.
 | Mobile capture speed (widgets, share sheet are native-only) | **Open** | PWA first; native wrapper later if needed |
 | Timetable formats vary wildly | Parked | Support KIIT format first if built |
 | The API's database login is a superuser, so RLS stops forgotten filters but not arbitrary SQL | **Open** | A separate non-superuser login for the API before a second real person signs in |
+| Two devices change the same class while one is offline: the last change to reach the server wins, and the other is silently lost | Accepted | One user, and both devices offline at once is rare. Version checks belong to the full sync D-047 postpones (ADR v0.3) |
 
 ---
 
@@ -227,3 +246,8 @@ Format: what was decided → why → alternatives considered.
 - Two bugs found on the way: an impossible date (`2026-02-30`) crashed the calendar window check, and the offline badge pushed the buttons off a phone's title bar.
 
 ![The week view with the made-up sample timetable](docs/journey/v0.2-calendar-sample.png)
+
+### 2026-10-15 · v0.3 grilled before building
+- Grilled cancel/skip and groups question by question before writing code, and started `CONTEXT.md`, a glossary of the words the code and I use.
+- The biggest change: a group lost its start date. It had been hiding a series' classes from before the group began, which is a bug I would have hit the first time I added an old habit to "Health".
+- Split the milestone: v0.3 is built first, and v0.3b (moves, splits, the semester swap, days off) gets its own grilling afterwards.
