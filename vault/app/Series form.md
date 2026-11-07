@@ -35,12 +35,12 @@ The form keeps exactly what the inputs hold, as strings (`''` for an empty box),
 | Subject | text; its placeholder shows the title | empty, meaning "same as the title" | `subject` only if you typed one (on create); the server copies the title (B8) |
 | Location | text: "C-301" | empty | `location`, or `null` when blank |
 | Group | `<select>` of your groups that aren't archived, plus "New group…" | your first group, or "New group" if you have none | `groupId` |
-| New group | name, colour (10 swatches), "Group starts on" | blue, today | a separate `POST /api/v1/groups` first |
+| New group | name, colour (10 swatches). No first day: since v0.3 a group is a folder and has none | blue | a separate `POST /api/v1/groups` first |
 | Days | Mon–Sun toggle buttons, Monday first (B11) | none | `rule.byDay`, always Monday first |
 | Repeats | every 1 to 4 weeks | every week | `rule.interval` (`rule.freq` is always `weekly`) |
 | Starts at | `<input type="time">` | empty | `startTime` `"08:00"` |
 | Duration in minutes | number box, plus "1 hour" and "2 hours" | 60 | `durationMin` as a number |
-| First day | `<input type="date">` | today in your zone | `startDate` |
+| First day | `<input type="date">` | the earliest first day still to come in the chosen group, else today in your zone (below) | `startDate` |
 | Last day | date, optional | empty | `untilDate`, or `null`: until the group ends |
 
 The "Sent as" column, in code:
@@ -71,6 +71,46 @@ What to notice:
 "Today in your zone" uses your profile's zone, not the phone's. At 1:30 AM in Kolkata it's already the 14th, even on a laptop set to London, where it's still the 13th (`todayIn` in `form-values.ts`).
 
 Time zone isn't a field: the server uses your profile's zone for a new series.
+
+### The first day suggests the group's earliest future first day
+
+Adding a semester means adding about twenty classes, and every one starts on the same day, say Mon 4 Jan. Typing that date twenty times is how a typo gets in. So a new class's first day starts out as the earliest first day **in its group that is still to come**: after the first class is saved with 4 Jan, the next nineteen suggest 4 Jan by themselves. When nothing in the group starts later (a running semester, or a brand-new group), the suggestion is today.
+
+It's worked out on the phone from the series list it already holds (`GET /api/v1/series`), so it costs no request and works offline:
+
+*From `apps/web/src/series/form-values.ts`:*
+```ts
+export function suggestedFirstDay(
+  groupId: string,
+  seriesList: SeriesFirstDays,
+  today: ISODate,
+): ISODate {
+  const upcoming = seriesList
+    .filter((s) => s.groupId === groupId && s.startDate >= today)
+    .map((s) => s.startDate)
+    .sort();
+  return upcoming[0] ?? today;
+}
+```
+
+What to notice:
+- `s.startDate >= today` compares two `YYYY-MM-DD` strings. That's safe because the format puts the biggest unit first, so text order is date order ([[Dates, times and instants]]). The same trick makes `.sort()` sort by date.
+- `>=`, not `>`: a series starting today still counts. On the semester's first day, "today" is the right answer anyway.
+- `upcoming[0] ?? today`: an empty list has no `[0]`, which is `undefined`, and `??` swaps in today.
+
+Changing the group changes the suggestion too, but only while you haven't typed your own date. `withGroupChosen` checks whether the first day still equals the **old** group's suggestion. If it does, you never touched it, so it follows the new group. If it doesn't, it's yours, and it stays.
+
+*From `apps/web/src/series/form-values.ts`:*
+```ts
+  const untouched = values.startDate === suggestedFirstDay(values.groupId, seriesList, today);
+  return {
+    ...values,
+    groupId,
+    startDate: untouched ? suggestedFirstDay(groupId, seriesList, today) : values.startDate,
+  };
+```
+
+Editing an existing class never suggests anything: its first day is the one it has.
 
 ## One schema, checked twice
 

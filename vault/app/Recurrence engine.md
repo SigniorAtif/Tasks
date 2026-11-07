@@ -39,7 +39,7 @@ flowchart LR
 
 - **Daily, every N days.** Count from the series start. Instead of walking day by day, jump straight to the first aligned day in the window (`Math.ceil(daysSinceStart / N)` steps), so the loop costs one step per occurrence.
 - **Weekly, every N weeks on some weekdays.** Weeks are counted from the **Monday of the series' start week** (the *anchor*). Find the window's first Monday. If it's an "off" week, skip ahead to the next "on" week. Then emit the chosen weekdays of every N-th week.
-- **Clipping.** The effective range is *series start..until* ∩ *group active range* ∩ *window*, all inclusive. The phase always comes from the series start, never from the clipped start, so if the semester's group starts a week later, a fortnightly lab still falls in the same weeks.
+- **Clipping.** The effective range is *series first day..last day* ∩ *up to the group's last day* ∩ *window*, all inclusive. A group has **no first day** (ADR v0.3): it is a folder, so it never hides a series' early classes. Make "Health" on 15 Oct, put "Run, since 1 Oct" in it, and 1–14 Oct still show. Only the group's last day cuts anything off. The phase always comes from the series' first day, never from the clipped start, so if the window starts in an "off" week, a fortnightly lab still falls in the same weeks.
 
 The first two bullets are `ruleDates`. It gets the rule, the `anchor` (the series start) and the already-clipped range `lo..hi`:
 
@@ -88,17 +88,16 @@ The third bullet, clipping, is `seriesDates`. Notice that `start` (not `lo`) is 
 ```ts
   assertValidRule(series.rule);
   const start = Temporal.PlainDate.from(series.startDate);
-  let lo = later(window.from, start);
+  const lo = later(window.from, start);
   let hi = window.to;
   if (series.untilDate !== null) hi = earlier(hi, Temporal.PlainDate.from(series.untilDate));
-  if (group) {
-    lo = later(lo, Temporal.PlainDate.from(group.activeFrom));
-    if (group.activeTo !== null) hi = earlier(hi, Temporal.PlainDate.from(group.activeTo));
-  }
+  if (group && group.untilDate !== null) hi = earlier(hi, Temporal.PlainDate.from(group.untilDate));
   return ruleDates(series.rule, start, lo, hi);
 ```
 
 `later` and `earlier` pick the later or the earlier of two dates. An intersection of ranges is just "the latest start and the earliest end", and if that leaves `lo` after `hi`, `ruleDates` returns nothing.
+
+Notice that `lo` is now a `const`: only two things can set the start, the window and the series' own first day. Until v0.3 there was a third line, `lo = later(lo, group.activeFrom)`, and that line was the bug ADR v0.3 removed. A series older than its group lost every class from before the group was made, silently. The end, `hi`, still has three limits: the window, the series' last day, and the group's last day (`untilDate`, the same name the series uses for the same idea).
 
 A worked example (test E3): every 2 weeks on Monday, starting **Tuesday** 6 Oct. The anchor week is Mon 5 Oct, which is "on", but 5 Oct is before the start. So the first class is Mon 19 Oct, then 2 Nov, 16 Nov and 30 Nov.
 
@@ -108,7 +107,7 @@ The input is groups, series, overrides, day exceptions and a date window, and it
 
 1. **Generated dates in the window.** For each series, each date from step 1 gets its override (looked up by key) and the day layer, then times. If an override moved it *out* of the window, it's dropped here.
 2. **Moved in from outside.** An occurrence originally on 19 Oct but moved to 10 Oct belongs in the week of 5–11 Oct, yet pass 1 never saw it, because its original date isn't in the window. Pass 2 scans overrides whose *new* date is in the window and whose original isn't.
-3. **Extras.** Make-up classes, exactly where the user put them, untouched by holidays or group ranges.
+3. **Extras.** Make-up classes, exactly where the user put them, untouched by holidays. The one thing that hides an extra is its group's last day: a make-up class dated after the semester ended doesn't show.
 
 Here are the three loops, with the middle of passes 2 and 3 cut (pass 2 is shown whole, line by line, in [[v0.1 in plain words]]):
 
@@ -134,18 +133,23 @@ Here are the three loops, with the middle of passes 2 and 3 cut (pass 2 is shown
     out.push(resolve(s, g, original, o, days));
   }
 
-  // Pass 3: extras, such as make-up classes.
+  // Pass 3: extras, such as make-up classes. Only the group's last day hides one.
   for (const o of input.overrides) {
     if (o.kind !== 'extra') continue;
     const s = seriesById.get(o.seriesId);
-    if (s && inWindow(Temporal.PlainDate.from(o.newDate))) out.push(resolveExtra(s, o));
+    if (!s) continue;
+    const date = Temporal.PlainDate.from(o.newDate);
+    const lastDay = groupOf(s).untilDate;
+    const afterLastDay =
+      lastDay !== null && Temporal.PlainDate.compare(date, Temporal.PlainDate.from(lastDay)) > 0;
+    if (inWindow(date) && !afterLastDay) out.push(resolveExtra(s, o));
   }
 ```
 
 What to notice:
 - `modified` is a `Map` from occurrence key to override, built once before the loops. Pass 1 finds a date's override with one lookup, `modified.get(occurrenceKey(...))`, instead of searching the whole list every time.
 - Pass 1 pushes only if `inWindow(occ.date)`, and pass 2 only if the original date is *outside* the window. Together they make sure a moved class appears exactly once, wherever you look from.
-- Pass 3 calls `resolveExtra`, not `resolve`, so no day exception or group range is consulted at all.
+- Pass 3 calls `resolveExtra`, not `resolve`, so no day exception is consulted at all. It checks only the group's last day, by hand, because an extra's date doesn't come from the rule, so `seriesDates` never sees it. `Temporal.PlainDate.compare(a, b)` answers `-1`, `0` or `1`, like a sort comparator: `> 0` means "the extra's date is after the last day". The last day itself still shows, because the range is inclusive.
 
 Then it sorts by real start time, with the key as a tie-breaker, so the order is always the same.
 
@@ -301,7 +305,7 @@ An orphan is an override whose date its series no longer generates (the series m
   });
 ```
 
-`occursOn` is called without the group, on purpose: an override outside a shortened semester is *dormant*, not orphaned, and it comes back if the semester is extended. `(o): o is ModifiedOverride` is a *type guard*: it tells TypeScript that whatever passes the filter is a `ModifiedOverride`, so the result is typed `ModifiedOverride[]`.
+`occursOn` is called without the group, on purpose: an override after the group's last day is *dormant*, not orphaned, and it comes back if the last day moves later. `(o): o is ModifiedOverride` is a *type guard*: it tells TypeScript that whatever passes the filter is a `ModifiedOverride`, so the result is typed `ModifiedOverride[]`.
 
 ## Trace it yourself
 

@@ -8,7 +8,7 @@ The v0.2 routes that put your timetable on the home screen: groups ("Classes · 
 
 | Request | On success | When it goes wrong |
 |---|---|---|
-| `GET /api/v1/groups` | `200 { groups: [...] }`, oldest `activeFrom` first, then by name | |
+| `GET /api/v1/groups` | `200 { groups: [...] }`, archived ones too, sorted by name (a group has no first day to sort by since v0.3) | |
 | `POST /api/v1/groups` | `201` + the new group + a `Location` header. The same `id` again: `200` + the group as it is now, nothing changed | `400` not JSON · `422` a field is wrong · `409` the id belongs to someone else's row |
 | `GET /api/v1/groups/:id` | `200` + the group | `404` no such group, someone else's, or `:id` isn't a UUID |
 | `PATCH /api/v1/groups/:id` | `200` + the changed group (only the fields you sent change) | `404` · `400` · `422`, including a rule that needs the stored row (below) |
@@ -148,8 +148,8 @@ Each row is turned into the contract's shape on the way out, field by field, in 
 | In Postgres | In the JSON | Why |
 |---|---|---|
 | `start_time` = `08:00:00` (`time`) | `"startTime": "08:00"` | The contract's `WallTime` is `HH:MM` |
-| `archived_at` = a `Date` (`timestamptz`) | `"archivedAt": "2026-10-12T04:30:00.000Z"` or `null` | Instants go out in UTC with a `Z` (D-035) |
-| `active_from` = `2026-07-13` (`date`) | `"activeFrom": "2026-07-13"` | Already a plain date string |
+| `confirmed_at` = a `Date` (`timestamptz`), on an override | `"confirmedAt": "2026-10-12T04:30:00.000Z"` or `null` | Instants go out in UTC with a `Z` (D-035) |
+| `until_date` = `2026-11-27` (`date`), on a group | `"untilDate": "2026-11-27"` | Already a plain date string |
 | `user_id`, `created_at`, `updated_at` | (left out) | Not in the contract. Mapping field by field means a column added later never leaks out by accident |
 | an override row, `kind` = `extra` | `{ kind: 'extra', originalDate: null, newDate, newStartTime }` | Core's `OccurrenceOverride` is a union on `kind` |
 
@@ -239,16 +239,18 @@ What to notice:
 
 ## Refused writes become 422s that name the field
 
-zod checks every body first. But some rules need the stored row, which only the database has. Example: the semester group runs `2026-07-13` to `2026-11-27`, and you send `PATCH { "activeFrom": "2026-12-01" }` alone. zod sees one valid date. Postgres compares it with the stored `active_to`, and the CHECK `schedule_group_active_range` refuses it (SQLSTATE `23514`).
+zod checks every body first. But some rules need the stored row, which only the database has. Example: a series runs from `2026-07-13` to `2026-11-27`, and you send `PATCH /api/v1/series/<id>` with `{ "startDate": "2026-12-01" }` alone. zod sees one valid date. Postgres compares it with the stored `until_date`, and the CHECK `series_until_date` refuses it (SQLSTATE `23514`).
 
-`calendar/constraints.ts` turns that into a `422`. It reads the error's code and constraint name (`db/pg-errors.ts` finds Postgres' error inside Drizzle's wrapper), looks the constraint up in a table, and names a field. A rule about two fields lists both sides, and the side you actually sent gets the blame. So the answer is `{ "path": "activeFrom", "message": "must be on or before activeTo" }`, not a message about `activeTo`, which you never touched.
+(Until v0.3 the classic example was a group's first and last day. A group has no first day any more, so that check, `schedule_group_active_range`, was dropped in migration `0003`. The series' check works the same way.)
+
+`calendar/constraints.ts` turns that into a `422`. It reads the error's code and constraint name (`db/pg-errors.ts` finds Postgres' error inside Drizzle's wrapper), looks the constraint up in a table, and names a field. A rule about two fields lists both sides, and the side you actually sent gets the blame. So the answer is `{ "path": "startDate", "message": "must be on or before untilDate" }`, not a message about `untilDate`, which you never touched.
 
 *From `apps/api/src/calendar/constraints.ts` and `apps/api/src/db/pg-errors.ts` (shortened):*
 ```ts
 // apps/api/src/calendar/constraints.ts
-  schedule_group_active_range: [
-    { path: 'activeTo', message: 'must be on or after activeFrom' },
-    { path: 'activeFrom', message: 'must be on or before activeTo' },
+  series_until_date: [
+    { path: 'untilDate', message: 'must be on or after startDate' },
+    { path: 'startDate', message: 'must be on or before untilDate' },
   ],
   // … (inside rejectedWrite)
   const pg = pgErrorOf(error);
@@ -270,14 +272,14 @@ zod checks every body first. But some rules need the stored row, which only the 
 ```
 
 What to notice:
-- `sent` is `Object.keys(changes)`, the fields the `PATCH` carried: here `['activeFrom']`. `sides.find(…)` picks the side whose `path` you sent, and `?? sides[0]` falls back to the first side if you sent neither.
+- `sent` is `Object.keys(changes)`, the fields the `PATCH` carried: here `['startDate']`. `sides.find(…)` picks the side whose `path` you sent, and `?? sides[0]` falls back to the first side if you sent neither.
 - `pg?.constraint` is optional chaining: `undefined` instead of a crash when there's no Postgres error at all.
 - `return undefined` means "not a constraint problem". `guardedWrite` then rethrows the original error, and it becomes a 500.
 - The `for` loop walks the `cause` chain, because Drizzle's error wraps the driver's `DatabaseError`, which is the one carrying `code` and `constraint`.
 
 | Postgres says | SQLSTATE | We answer |
 |---|---|---|
-| a CHECK failed (`series_until_date`, `schedule_group_active_range`, …) | `23514` | `422`, the field from the table in `constraints.ts` |
+| a CHECK failed (`series_until_date`, `series_duration_min`, …) | `23514` | `422`, the field from the table in `constraints.ts` |
 | the composite foreign key `series_group_fk` failed: no group `(you, groupId)` | `23503` | `422` on `groupId`: "must be one of your groups" |
 | a constraint not in the table (added later, forgotten here) | `23514`/`23503` | `422` with the constraint's name in `detail` |
 | anything else | | stays a `500`, logged with the stack: a bug, not your input |
@@ -351,4 +353,4 @@ What to notice:
 - `PATCH /api/v1/series/<id>` with `{ "untilDate": "2026-07-01" }` on a series starting `2026-07-13`. Which layer refuses it, with which SQLSTATE, and which field does the `422` name? What if you sent `{ "startDate": "2026-12-01" }` to a series ending `2026-11-27` instead?
 - Break it: in `packages/core/src/schemas.ts`, delete the line `if (!isRealDate(from) || !isRealDate(to)) return;`. Which API test fails, with which status, and why does zod let it happen?
 - Why does `expand()` run after `COMMIT` and not inside `asUser`? What would a slow `expand()` inside the transaction hold on to?
-- A group `PATCH` sends both `activeFrom` and `activeTo`, and `schedule_group_active_range` refuses it. Using the `rejectedWrite` excerpt, which field does the `422` name, and why that one and not the other?
+- A series `PATCH` sends both `startDate` and `untilDate`, and `series_until_date` refuses it. Using the `rejectedWrite` excerpt, which field does the `422` name, and why that one and not the other?

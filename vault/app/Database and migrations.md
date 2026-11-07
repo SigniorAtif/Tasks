@@ -78,7 +78,7 @@ erDiagram
 | `auth_verification` | short-lived secret | Better Auth | Holds the OAuth `state` and PKCE verifier for 10 minutes during sign-in ([[OAuth sign-in]]) |
 | `profile` | user | our code | `tzid` (default `Asia/Kolkata`), `day_boundary` (default `04:00`) |
 
-### The calendar tables (v0.2)
+### The calendar tables (v0.2; groups changed in v0.3)
 
 ```mermaid
 erDiagram
@@ -90,8 +90,7 @@ erDiagram
     uuid user_id FK
     text name
     text color_token
-    date active_from
-    date active_to
+    date until_date "null = open-ended"
   }
   series {
     uuid id PK
@@ -116,7 +115,7 @@ erDiagram
 
 | Table | One row per | Notes |
 |---|---|---|
-| `schedule_group` | group ("Classes · Sem 3") | `color_token` must be one of the ten palette names; `active_to` null = open-ended |
+| `schedule_group` | group ("Classes · Sem 3") | `color_token` must be one of the ten palette names; `until_date` is the group's last day, null = open-ended. No first day since migration `0003` (below) |
 | `series` | repeating class ("DS, Wednesdays 10:00, 60 min") | `rule` is JSON (`{"freq": "weekly", "interval": 1, "byDay": ["WE"]}`); `start_time` is a wall-clock time in `tzid`, never an instant |
 | `occurrence_override` | thing said about one occurrence | Unique on `(series_id, original_date)`; empty until v0.3's cancel button |
 
@@ -241,7 +240,7 @@ flowchart LR
 ```
 
 1. Edit `src/db/schema.ts`.
-2. `pnpm --filter @tasks/api db:generate --name add-reminders` writes the next file, e.g. `drizzle/0003_add-reminders.sql`.
+2. `pnpm --filter @tasks/api db:generate --name add_reminders` writes the next file, e.g. `drizzle/0004_add_reminders.sql`.
 3. **Read the SQL line by line.** It's what will run on your real data. Look for a `DROP` you didn't mean, a `NOT NULL` column added to a table that already has rows (it fails), or a missing index.
 4. `pnpm db:migrate`, run the tests, and commit the schema change, the SQL and `meta/` together.
 
@@ -280,9 +279,52 @@ CREATE POLICY series_owner ON series
 
 To Postgres, `--> statement-breakpoint` is just a comment (anything after `--`); to Drizzle, it's the cut between two statements. What the function and the policy mean is in [[Row-level security in our database]].
 
+### A rename drizzle-kit has to ask about: migration `0003`
+
+In v0.3 a group stopped having a first day (ADR v0.3). In `schema.ts` that was three edits to `scheduleGroup`: delete `activeFrom` and `archivedAt`, and turn `activeTo: day('active_to')` into `untilDate: day('until_date')`, the name the series already uses for its own last day.
+
+Run `db:generate` after that and drizzle-kit stops to ask a question. It compares `schema.ts` with the last snapshot in `drizzle/meta/` and sees one column gone (`active_to`) and one new (`until_date`). That could mean two very different things:
+
+| drizzle-kit's guess | The SQL | What happens to the data |
+|---|---|---|
+| a **rename** | `RENAME COLUMN "active_to" TO "until_date"` | Every semester keeps its last day; only the label changes |
+| a **drop and an add** | `DROP COLUMN "active_to"` then `ADD COLUMN "until_date" date` | Every last day is deleted, and the new column starts empty |
+
+It can't tell which you meant, so it asks, with an arrow-key menu. That menu needs a **TTY**, a real terminal you can type into. Our agent's shell has none, so `db:generate` stopped with "Interactive prompts require a TTY terminal". In your own terminal you'd pick "rename" and get the SQL below written for you.
+
+Without a terminal, the way through was the custom route from above:
+1. `db:generate --custom --name groups_without_first_day` writes an empty `0003_groups_without_first_day.sql`, the journal entry, and `meta/0003_snapshot.json`. That snapshot is a copy of the previous one, so it still has the old columns.
+2. Write the SQL by hand.
+3. Edit the snapshot to match the new schema: drop the two columns and the check, and rename `active_to`.
+4. Run `db:generate` again. "No schema changes, nothing to migrate" proves the snapshot and `schema.ts` agree, so the next migration will be computed from the right starting point.
+
+*From `apps/api/drizzle/0003_groups_without_first_day.sql`:*
+```sql
+ALTER TABLE "schedule_group" DROP CONSTRAINT "schedule_group_active_range";--> statement-breakpoint
+ALTER TABLE "schedule_group" DROP COLUMN "active_from";--> statement-breakpoint
+ALTER TABLE "schedule_group" DROP COLUMN "archived_at";--> statement-breakpoint
+-- The series' column for the same idea is `until_date`, so the group's matches it.
+ALTER TABLE "schedule_group" RENAME COLUMN "active_to" TO "until_date";
+```
+
+What to notice:
+- The check goes first. `schedule_group_active_range` compared `active_to` with `active_from`; once `active_from` is gone, the check has nothing to compare.
+- Two of these lines **delete data** on purpose: every group's first day and archive time. That is the "read the SQL line by line" step earning its keep: each `DROP` here is meant.
+- The rename keeps every value. An old group that ended on 27 Nov still ends on 27 Nov.
+
+**The rule this migration breaks, once.** D-066 says migrations are **expand-only**: they add, never remove. The reason is rollback. `deploy.sh` migrates the database, starts the new app, and if the health check fails, it starts the *old* app again. The database stays migrated: nothing un-runs a migration. So the old app must still work against the new tables. An added column is harmless to old code, which never asks for it. A dropped column is not: the old app's `select` names `active_from`, and Postgres answers "column does not exist" on every request.
+
+The safe way is **expand/contract**, over two releases:
+1. **Expand.** Add `until_date`, copy `active_to` into it, and make the new app read and write `until_date`. The old columns stay, so the old app still runs if you roll back.
+2. **Contract**, a release later, once nobody will roll back past step 1. Drop `active_from`, `active_to` and `archived_at`.
+
+v0.3 did it in one step because nothing is deployed yet: there's no server and no older app to roll back to, and the only copy of the data is on this laptop, where the seed can rebuild it. ADR v0.3's "Contradicts" line records the exception. Once the server holds your real semester, a change like this gets the two releases.
+
 ## Check yourself
 - You delete Alice's row from `auth_user` in psql. Which other rows disappear, and which rule makes it happen?
 - `auth_session.token` has a unique constraint. Besides preventing duplicates, why does that make every API request faster?
 - You add `week_starts smallint not null` to `profile` and generate a migration. It works on the test database but fails in production. Why, and what would you change?
 - Why is `drizzle/` committed to git, when it's generated from `schema.ts`?
 - A bug makes the API insert a series with your `user_id` but Bob's `group_id`. Which rule refuses it, and would it still be refused if row-level security were switched off?
+- drizzle-kit asks whether `until_date` is a rename of `active_to`. You pick "create column" by mistake and deploy. What happens to every group's last day, and which line of the generated SQL should have stopped you?
+- After migration `0003`, the server's new app fails its health check and `deploy.sh` rolls back to the old app. What does the old app's first `GET /api/v1/groups` answer, and why? How would expand/contract have avoided it?

@@ -49,6 +49,8 @@ The trade-off: a `409` tells the sender that the id exists somewhere. That's acc
 
 A `PATCH` sends only what changes, so zod can't compare a new `activeFrom` with the stored `activeTo`; only the database has both. Without the mapping, the client would get a `500` for a plain input mistake. Blaming the field you sent means the form can put the red text under the box you just edited.
 
+*Since v0.3:* a group has no first day (ADR v0.3), so the group check in this example was dropped in migration `0003`. The decision stands, and the series' `series_until_date` (`untilDate >= startDate`) is now the example: [[Calendar API]] walks through it.
+
 What lost: reading the row first and validating the merged result in code (a second query, and a race with a parallel edit, and the CHECK has to exist anyway); and returning a generic `422` (the form couldn't say which box is wrong).
 
 ## PATCH edits a series in place, past occurrences too, until v0.3b

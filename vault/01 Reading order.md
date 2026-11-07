@@ -48,6 +48,7 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 ## Path 4: v0.3, cancelling and groups (being built)
 
 1. [[Cancel and group choices]] (a decision): what was settled before any code, with the examples that settled it. The app notes follow as the milestone is built.
+2. Groups lost their first day (ticket #7). No new note: the change runs through existing ones. Read [[Recurrence engine]] (clipping, and extras after a group's last day), then [[Database and migrations]] (migration `0003`: a rename drizzle-kit has to ask about, and the expand-only rule it breaks once), then [[Series form]] (the first day suggested from the group).
 
 ## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
 

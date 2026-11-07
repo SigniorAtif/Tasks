@@ -33,15 +33,16 @@ One file describes one or more groups and their weekly class slots, the way a pr
 |---|---|---|---|
 | top | `format`, `version` | yes | Always `"tasks.timetable"` and `1`. Say what the file is before anything else is read |
 | top | `tzid` | yes | The zone every time in the file is in. A timetable without a zone is ambiguous |
-| group | `name`, `activeFrom` | yes | "Classes · Sem 3", first day of the semester |
-| group | `activeTo`, `colorToken`, `observesHolidays`, `attendance`, `attendanceThresholdPct`, `attendanceTrackingFrom` | no | Same defaults as `POST /api/v1/groups`: open-ended, `blue`, `true`, `true`, `75`, none |
+| group | `name`, `activeFrom` | yes | "Classes · Sem 3", and the first day of the semester. Since v0.3 `activeFrom` is only the classes' default first day: a group has no first day, so it isn't stored on the group |
+| group | `activeTo` | no | The group's last day, stored as its `untilDate`. Default: open-ended |
+| group | `colorToken`, `observesHolidays`, `attendance`, `attendanceThresholdPct`, `attendanceTrackingFrom` | no | Same defaults as `POST /api/v1/groups`: `blue`, `true`, `true`, `75`, none |
 | class | `title`, `day`, `start`, `end` | yes | `day` is `MO`…`SU`; `end` must be after `start` on the same day |
 | class | `subject` | no | What attendance counts by (B8). Defaults to the title |
 | class | `location` | no | `"C-301"`, `"Lab 5"`. Blank or missing = none |
 | class | `everyWeeks` | no | `2` = every other week, counted from the week of `from`. Default `1` |
-| class | `from`, `until` | no | First and last day this slot runs. Default: the group's `activeFrom`, and "until the group ends" |
+| class | `from`, `until` | no | First and last day this slot runs. Default: the group line's `activeFrom`, and "until the group's last day" |
 
-The field rules aren't written twice. The group fields **are** `createGroupSchema`'s fields, and `title`, `subject` and `location` are `createSeriesSchema`'s. So a file can never hold a value the API's own `POST` would refuse (an 81-character title, a colour outside the palette).
+The field rules aren't written twice. The group fields **are** `createGroupSchema`'s fields (apart from the two dates, which the file names its own way and keeps for the old files' sake: no format version bump), and `title`, `subject` and `location` are `createSeriesSchema`'s. So a file can never hold a value the API's own `POST` would refuse (an 81-character title, a colour outside the palette).
 
 *From `packages/core/src/timetable.ts` (shortened):*
 ```ts
@@ -81,9 +82,9 @@ What to notice:
 ```ts
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 // … (inside timetableToRows)
-  for (const { classes, ...fields } of file.groups) {
+  for (const { classes, activeFrom, activeTo, ...fields } of file.groups) {
     const groupId = newId();
-    groups.push({ id: groupId, ...fields });
+    groups.push({ id: groupId, ...fields, untilDate: activeTo });
     for (const row of classes) {
       seriesRows.push({
         id: newId(),
@@ -92,7 +93,7 @@ const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.
         subject: row.subject ?? row.title,
         location: row.location,
         rule: { freq: 'weekly', interval: row.everyWeeks, byDay: [row.day] },
-        startDate: row.from ?? fields.activeFrom,
+        startDate: row.from ?? activeFrom,
         untilDate: row.until ?? null,
         startTime: row.start,
         durationMin: minutesOf(row.end) - minutesOf(row.start),
@@ -103,7 +104,7 @@ const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.
 ```
 
 What to notice:
-- `{ classes, ...fields }` splits each group in two: its `classes` list, and everything else (`name`, `activeFrom`, …) in `fields`, which is exactly a group's create body.
+- `{ classes, activeFrom, activeTo, ...fields }` splits each group line into four: its `classes` list, the two dates, and everything else (`name`, `colorToken`, …) in `fields`. That `...fields` is the "rest" pattern: it collects whatever wasn't named. `fields` plus `untilDate: activeTo` is exactly a group's create body; `activeFrom` never reaches the group, it only fills in `startDate` for a class line with no `from` of its own.
 - `byDay: [row.day]`: one day per series, always. `minutesOf('16:00') - minutesOf('14:00')` is `960 - 840 = 120`.
 - `groupId` is made before the classes, so each series can point at its group before either exists in the database. The ids are the client's job ([[Idempotency and retries]]).
 

@@ -54,7 +54,8 @@ In our app, the persister and its two guards:
 ```ts
 import { del, get, set } from 'idb-keyval';
 // …
-export const CACHE_BUSTER = 'v0.2.0';
+// v0.3.0: a group lost `activeFrom`, `activeTo` and `archivedAt` and gained `untilDate`.
+export const CACHE_BUSTER = 'v0.3.0';
 // …
 export const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // …
@@ -72,7 +73,7 @@ const persister = createPersister({ get, set, del });
 What to notice:
 - idb-keyval's `get`, `set` and `del` are all the persister needs, because the whole cache is one value under one key.
 - `maxAge` is 30 days (days × hours × minutes × seconds × milliseconds), not the library's 24 hours, so last month's weeks still open on the bus.
-- `buster` is a plain string. A new app version with a different string throws the old copy away instead of misreading it.
+- `buster` is a plain string. A new app version with a different string throws the old copy away instead of misreading it. v0.3 is the first real use: groups lost their first day, so a phone still holding v0.2's groups (with `activeFrom`, and no `untilDate`) would have drawn the group picker from fields that no longer exist. Bumping `v0.2.0` to `v0.3.0` makes that phone start clean and fetch the new shape. The cost is one cold start: until it's back online, the phone shows nothing rather than something wrong.
 
 ## "offline · last synced 14:02"
 
