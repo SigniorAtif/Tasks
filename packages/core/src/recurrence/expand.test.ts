@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cancel, dayOff, extra, group, modified, move, series } from '../test/builders.ts';
 import type { Occurrence } from '../types.ts';
-import { type ExpandInput, expand, findOrphans } from './expand.ts';
+import { type ExpandInput, expand, findOrphans, occurrenceOn } from './expand.ts';
 
 // A Mon/Wed/Fri 10:00 class in Asia/Kolkata (UTC+05:30), starting Mon 5 Oct 2026.
 const dbms = series();
@@ -415,6 +415,36 @@ describe('bad input fails loudly', () => {
     for (const tzid of ['+05:30', '-04:00']) {
       expect(() => run({ series: [series({ tzid })], window: firstWeek })).toThrow(/IANA/);
     }
+  });
+});
+
+describe('occurrenceOn: one occurrence by its original date', () => {
+  const one = (originalDate: string, fields: Partial<Parameters<typeof occurrenceOn>[0]> = {}) =>
+    occurrenceOn(
+      { series: dbms, group: classes, override: undefined, dayExceptions: [], ...fields },
+      originalDate,
+    );
+
+  it('computes exactly what expand() shows, wherever the occurrence was moved to', () => {
+    const skipped = cancel('s', '2026-10-07', 'skipped');
+    const moved = move('s', '2026-10-09', '2026-10-10', '12:00');
+    const holiday = dayOff('2026-10-05');
+    const week = run({ overrides: [skipped, moved], dayExceptions: [holiday], window: firstWeek });
+
+    expect(one('2026-10-05', { dayExceptions: [holiday] })).toEqual(byKey(week, 's:2026-10-05'));
+    expect(one('2026-10-07', { override: skipped })).toEqual(byKey(week, 's:2026-10-07'));
+    expect(one('2026-10-09', { override: moved })).toEqual(byKey(week, 's:2026-10-09'));
+    expect(one('2026-10-09', { override: moved })?.date).toBe('2026-10-10');
+  });
+
+  it("is undefined for a date the series never generates: off its rule, before its first day, after its group's last day", () => {
+    expect(one('2026-10-06')).toBeUndefined();
+    expect(one('2026-10-02')).toBeUndefined();
+    expect(one('2026-10-09', { group: group({ untilDate: '2026-10-07' }) })).toBeUndefined();
+  });
+
+  it('rejects a raw offset, like expand()', () => {
+    expect(() => one('2026-10-05', { series: series({ tzid: '+05:30' }) })).toThrow(RangeError);
   });
 });
 

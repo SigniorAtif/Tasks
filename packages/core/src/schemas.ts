@@ -227,9 +227,32 @@ export const calendarQuerySchema = z
     }
   });
 
+// ---------------------------------------------------------------------------
+// One occurrence
+// ---------------------------------------------------------------------------
+
+/**
+ * `PATCH /api/v1/occurrences/:seriesId/:originalDate`. Cancel with
+ * `{ status: 'cancelled', cancelReason }`, where the reason is `not_held` (Prof),
+ * `skipped` (Me) or `null` (Not today); restore with `{ status: null, cancelReason: null }`.
+ * The server doesn't check the reason against the group's attendance setting: that
+ * setting only decides which buttons the sheet shows.
+ */
+export const updateOccurrenceSchema = z
+  .object({
+    /** `null` = inherit from the series: scheduled again. */
+    status: z.enum(['cancelled']).nullable(),
+    cancelReason: z.enum(['not_held', 'skipped']).nullable(),
+  })
+  .refine(({ status, cancelReason }) => cancelReason === null || status === 'cancelled', {
+    path: ['cancelReason'],
+    message: 'must be null unless status is cancelled',
+  });
+
 // What callers send (before defaults and normalising), for the PWA's forms and tests.
 export type CreateGroup = z.input<typeof createGroupSchema>;
 export type UpdateGroup = z.input<typeof updateGroupSchema>;
 export type CreateSeries = z.input<typeof createSeriesSchema>;
 export type UpdateSeries = z.input<typeof updateSeriesSchema>;
 export type CalendarQuery = z.input<typeof calendarQuerySchema>;
+export type UpdateOccurrence = z.input<typeof updateOccurrenceSchema>;

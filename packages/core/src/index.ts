@@ -19,7 +19,13 @@ export {
   occursOn,
   untilDateForCount,
 } from './recurrence/dates.ts';
-export { type ExpandInput, expand, findOrphans } from './recurrence/expand.ts';
+export {
+  type ExpandInput,
+  expand,
+  findOrphans,
+  type OccurrenceInput,
+  occurrenceOn,
+} from './recurrence/expand.ts';
 export { extraKey, occurrenceKey } from './recurrence/keys.ts';
 export {
   type SeriesChanges,
@@ -40,8 +46,10 @@ export {
   MAX_CALENDAR_DAYS,
   ruleSchema,
   type UpdateGroup,
+  type UpdateOccurrence,
   type UpdateSeries,
   updateGroupSchema,
+  updateOccurrenceSchema,
   updateSeriesSchema,
   wallTimeSchema,
 } from './schemas.ts';
