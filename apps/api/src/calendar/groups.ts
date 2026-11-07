@@ -18,14 +18,14 @@ export type GroupChanges = z.output<typeof updateGroupSchema>;
 const mine = (scope: UserScope, id: string) =>
   and(eq(scheduleGroup.userId, scope.userId), eq(scheduleGroup.id, id));
 
-/** Every group, archived ones too: oldest `activeFrom` first, then by name. */
+/** Every group, archived ones too, sorted by name. */
 export async function listGroups(scope: UserScope): Promise<ScheduleGroup[]> {
   const rows = await scope.tx
     .select()
     .from(scheduleGroup)
     .where(eq(scheduleGroup.userId, scope.userId))
-    // The id last, so two groups with the same start and name keep a fixed order.
-    .orderBy(asc(scheduleGroup.activeFrom), asc(scheduleGroup.name), asc(scheduleGroup.id));
+    // The id last, so two groups with the same name keep a fixed order.
+    .orderBy(asc(scheduleGroup.name), asc(scheduleGroup.id));
   return rows.map(toGroup);
 }
 

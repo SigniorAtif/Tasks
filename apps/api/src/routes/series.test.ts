@@ -132,7 +132,7 @@ async function someoneElsesSeries(): Promise<string> {
   if (!someone) throw new Error('insert returned nothing');
   const [theirs] = await testDb
     .insert(scheduleGroup)
-    .values({ userId: someone.id, name: 'Health', activeFrom: '2026-07-01' })
+    .values({ userId: someone.id, name: 'Health' })
     .returning();
   if (!theirs) throw new Error('insert returned nothing');
   const id = newId();
@@ -153,7 +153,7 @@ async function someoneElsesSeries(): Promise<string> {
 
 /** A second group for the same client (the first one is made by `withGroup`). */
 async function withGroupFor(client: Client): Promise<{ group: ScheduleGroup }> {
-  const response = await client.post(GROUPS, groupBody({ name: 'Health', activeTo: null }));
+  const response = await client.post(GROUPS, groupBody({ name: 'Health', untilDate: null }));
   return { group: await json<ScheduleGroup>(response) };
 }
 

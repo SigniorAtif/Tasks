@@ -89,11 +89,16 @@ export function expand(input: ExpandInput): Occurrence[] {
     out.push(resolve(s, g, original, o, days));
   }
 
-  // Pass 3: extras, such as make-up classes.
+  // Pass 3: extras, such as make-up classes. Only the group's last day hides one.
   for (const o of input.overrides) {
     if (o.kind !== 'extra') continue;
     const s = seriesById.get(o.seriesId);
-    if (s && inWindow(Temporal.PlainDate.from(o.newDate))) out.push(resolveExtra(s, o));
+    if (!s) continue;
+    const date = Temporal.PlainDate.from(o.newDate);
+    const lastDay = groupOf(s).untilDate;
+    const afterLastDay =
+      lastDay !== null && Temporal.PlainDate.compare(date, Temporal.PlainDate.from(lastDay)) > 0;
+    if (inWindow(date) && !afterLastDay) out.push(resolveExtra(s, o));
   }
 
   // Sort by the real moment, then by key so ties come out in the same order every time.
@@ -108,8 +113,8 @@ export function expand(input: ExpandInput): Occurrence[] {
 /**
  * Overrides whose original date their series no longer generates, for example after a series
  * moved from Mondays to Tuesdays. They're never rendered; the UI shows them before a change
- * that would create them. Group ranges are ignored: an override outside a shortened semester
- * is dormant, not orphaned, and comes back if the semester is extended.
+ * that would create them. The group's last day is ignored: an override after an earlier last
+ * day is dormant, not orphaned, and comes back if the last day moves later.
  */
 export function findOrphans(
   series: readonly Series[],
@@ -216,7 +221,7 @@ function resolve(
   );
 }
 
-/** An extra is exactly what the user placed. Day exceptions and group ranges don't touch it. */
+/** An extra is exactly what the user placed. Day exceptions don't touch it. */
 function resolveExtra(s: Series, ov: ExtraOverride): Resolved {
   const cancelled = ov.status === 'cancelled';
   return withTimes(

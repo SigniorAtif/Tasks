@@ -5,6 +5,8 @@
 // Rules for changing this file inside /api/v1: only add things (new fields,
 // new codes). Clients ignore fields they don't know and treat an unknown error
 // code like `internal_error`.
+// One exception so far: ADR v0.3 removed the group's `activeFrom`, `activeTo` and
+// `archivedAt`, while the only client was our PWA, served from the same image.
 
 import type {
   IanaZone,
@@ -82,7 +84,7 @@ export interface Me {
 //   404 `not_found`. Nobody can learn which ids other people use.
 // ---------------------------------------------------------------------------
 
-/** `GET /api/v1/groups`: every group, archived ones too, oldest `activeFrom` first. */
+/** `GET /api/v1/groups`: every group, archived ones too, sorted by name. */
 export interface GroupList {
   groups: ScheduleGroup[];
 }

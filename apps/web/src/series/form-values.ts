@@ -48,7 +48,7 @@ export interface SeriesFormValues {
   /** An existing group's id, or `NEW_GROUP`. */
   groupId: string;
   /** Only used when `groupId` is `NEW_GROUP`. */
-  newGroup: { name: string; colorToken: ColorToken; activeFrom: string };
+  newGroup: { name: string; colorToken: ColorToken };
   days: Weekday[];
   /** Every N weeks, 1 to 4. */
   interval: number;
@@ -69,7 +69,6 @@ export const FIELD_ORDER = [
   'groupId',
   'groupName',
   'groupColor',
-  'groupActiveFrom',
   'days',
   'interval',
   'startTime',
@@ -88,7 +87,6 @@ export const LABELS: Record<FieldName, string> = {
   groupId: 'Group',
   groupName: 'Group name',
   groupColor: 'Colour',
-  groupActiveFrom: 'Group starts on',
   days: 'Days',
   interval: 'Repeats',
   startTime: 'Starts at',
@@ -127,27 +125,79 @@ export function todayIn(tzid: IanaZone, epochMs: number = Date.now()): ISODate {
     .toString();
 }
 
+/**
+ * A group is archived once its last day is before today. A stand-in until the
+ * shared helper in core, which also honours the profile's day boundary (#11).
+ */
+export function isArchived(group: Pick<ScheduleGroup, 'untilDate'>, today: ISODate): boolean {
+  return group.untilDate !== null && group.untilDate < today;
+}
+
 /** The groups the "Group" select offers: every one not archived, plus the series' own. */
 export function selectableGroups(
   groups: readonly ScheduleGroup[],
+  today: ISODate,
   currentGroupId?: string,
 ): ScheduleGroup[] {
-  return groups.filter((group) => group.archivedAt === null || group.id === currentGroupId);
+  return groups.filter((group) => !isArchived(group, today) || group.id === currentGroupId);
+}
+
+/** Where each series sits and when it starts: all a first-day suggestion needs. */
+export type SeriesFirstDays = readonly Pick<Series, 'groupId' | 'startDate'>[];
+
+/**
+ * The first day a new series in this group suggests: the earliest first day of a
+ * series already in it that is still to come, else today. Adding a semester's
+ * twenty classes then means typing its first day once.
+ */
+export function suggestedFirstDay(
+  groupId: string,
+  seriesList: SeriesFirstDays,
+  today: ISODate,
+): ISODate {
+  const upcoming = seriesList
+    .filter((s) => s.groupId === groupId && s.startDate >= today)
+    .map((s) => s.startDate)
+    .sort();
+  return upcoming[0] ?? today;
+}
+
+/**
+ * A new class put in another group. Its first day follows that group's
+ * suggestion, unless the user already changed it from the old group's.
+ */
+export function withGroupChosen(
+  values: SeriesFormValues,
+  groupId: string,
+  seriesList: SeriesFirstDays,
+  today: ISODate,
+): SeriesFormValues {
+  const untouched = values.startDate === suggestedFirstDay(values.groupId, seriesList, today);
+  return {
+    ...values,
+    groupId,
+    startDate: untouched ? suggestedFirstDay(groupId, seriesList, today) : values.startDate,
+  };
 }
 
 /** A blank form for a new class. With no groups yet, it starts on "New group". */
-export function blankValues(today: ISODate, groups: readonly ScheduleGroup[]): SeriesFormValues {
+export function blankValues(
+  today: ISODate,
+  groups: readonly ScheduleGroup[],
+  seriesList: SeriesFirstDays = [],
+): SeriesFormValues {
+  const groupId = selectableGroups(groups, today)[0]?.id ?? NEW_GROUP;
   return {
     title: '',
     subject: '',
     location: '',
-    groupId: selectableGroups(groups)[0]?.id ?? NEW_GROUP,
-    newGroup: { name: '', colorToken: DEFAULT_COLOR_TOKEN, activeFrom: today },
+    groupId,
+    newGroup: { name: '', colorToken: DEFAULT_COLOR_TOKEN },
     days: [],
     interval: 1,
     startTime: '',
     durationMin: '60',
-    startDate: today,
+    startDate: suggestedFirstDay(groupId, seriesList, today),
     untilDate: '',
   };
 }
@@ -157,14 +207,14 @@ export function blankValues(today: ISODate, groups: readonly ScheduleGroup[]): S
  * every week, which is the same thing for "every day" (the form only makes
  * weekly rules); it's only sent back if the user changes the days.
  */
-export function valuesFromSeries(series: Series, today: ISODate): SeriesFormValues {
+export function valuesFromSeries(series: Series): SeriesFormValues {
   const { rule } = series;
   return {
     title: series.title,
     subject: series.subject === series.title ? '' : series.subject,
     location: series.location ?? '',
     groupId: series.groupId,
-    newGroup: { name: '', colorToken: DEFAULT_COLOR_TOKEN, activeFrom: today },
+    newGroup: { name: '', colorToken: DEFAULT_COLOR_TOKEN },
     days: rule.freq === 'weekly' ? [...rule.byDay] : WEEKDAYS.map((w) => w.day),
     interval: rule.freq === 'weekly' ? rule.interval : 1,
     // Postgres may send `HH:MM:SS`; the time input and the schema want `HH:MM`.
@@ -202,8 +252,8 @@ function seriesFields(values: SeriesFormValues, groupId: string) {
 
 /** `POST /api/v1/groups` for the inline "New group" fields. */
 export function toCreateGroup(values: SeriesFormValues, id: string): CreateGroup {
-  const { name, colorToken, activeFrom } = values.newGroup;
-  return { id, name, colorToken, activeFrom };
+  const { name, colorToken } = values.newGroup;
+  return { id, name, colorToken };
 }
 
 /** `POST /api/v1/series`. `subject` only when the user typed one; the server copies the title. */
@@ -273,7 +323,6 @@ const SERIES_PATHS: Record<string, FieldName> = {
 const GROUP_PATHS: Record<string, FieldName> = {
   name: 'groupName',
   colorToken: 'groupColor',
-  activeFrom: 'groupActiveFrom',
 };
 
 function fieldForPath(path: string, paths: Record<string, FieldName>): FieldName | undefined {
@@ -287,7 +336,6 @@ function fieldForPath(path: string, paths: Record<string, FieldName>): FieldName
 /** Schema messages name other fields by their JSON names; say what the screen says. */
 const FIELD_WORDS: Record<string, string> = {
   startDate: 'the first day',
-  activeFrom: 'the day the group starts',
 };
 
 /**
@@ -296,7 +344,7 @@ const FIELD_WORDS: Record<string, string> = {
  * label in front: "Title must not be empty". Others are just capitalised.
  */
 export function fieldMessage(field: FieldName, message: string): string {
-  const text = message.replace(/\b(startDate|activeFrom)\b/g, (word) => FIELD_WORDS[word] ?? word);
+  const text = message.replace(/\bstartDate\b/g, (word) => FIELD_WORDS[word] ?? word);
   if (/^(must|is|has)\b/.test(text)) return `${LABELS[field]} ${text}`;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

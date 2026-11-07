@@ -70,16 +70,12 @@ export const seriesWith = (id: string, groupId: string): fc.Arbitrary<Series> =>
       }),
     );
 
-/** Two groups: one observes holidays, one doesn't. Their active ranges vary. */
+/** Two groups: one observes holidays, one doesn't. Their last days vary. */
 export const groups: fc.Arbitrary<ScheduleGroup[]> = fc
-  .tuple(
-    dayInSpan(0, 30),
-    fc.option(dayInSpan(60), { nil: null }),
-    fc.option(dayInSpan(60), { nil: null }),
-  )
-  .map(([from, toG, toH]) => [
-    group({ id: 'g', activeFrom: from, activeTo: toG, observesHolidays: true }),
-    group({ id: 'h', activeFrom: SPAN.from, activeTo: toH, observesHolidays: false }),
+  .tuple(fc.option(dayInSpan(60), { nil: null }), fc.option(dayInSpan(60), { nil: null }))
+  .map(([untilG, untilH]) => [
+    group({ id: 'g', untilDate: untilG, observesHolidays: true }),
+    group({ id: 'h', untilDate: untilH, observesHolidays: false }),
   ]);
 
 /** A random override on one of the series' real dates, or occasionally a stray one. */

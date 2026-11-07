@@ -12,8 +12,8 @@ import { expand } from './expand.ts';
 
 const daily = { freq: 'daily', interval: 1 } as const;
 
-// The group starts early so the historical dates below aren't clipped away.
-const always = group({ activeFrom: '2000-01-01' });
+// A group has no first day, so the historical dates below are never clipped away.
+const always = group();
 
 function occurrences(s: Series, from: string, to: string) {
   return expand({

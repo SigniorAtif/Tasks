@@ -95,10 +95,7 @@ describe('the first migration', () => {
 const weekly: Rule = { freq: 'weekly', interval: 1, byDay: ['MO'] };
 
 async function insertGroup(userId: string, name = 'Classes') {
-  const [group] = await testDb
-    .insert(scheduleGroup)
-    .values({ userId, name, activeFrom: '2026-07-13' })
-    .returning();
+  const [group] = await testDb.insert(scheduleGroup).values({ userId, name }).returning();
   if (!group) throw new Error('insert returned nothing');
   return group;
 }
@@ -130,6 +127,19 @@ async function asUser<T>(userId: string | null, fn: (tx: Database) => Promise<T>
 }
 
 describe('the calendar tables', () => {
+  it('give a group a last day and no first day (ADR v0.3)', async () => {
+    const { rows: columns } = await testPool.query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'schedule_group'
+          and column_name like any (array['active%', 'archived%', 'until%'])`,
+    );
+    expect(columns.map((row) => row.column_name)).toEqual(['until_date']);
+    const { rows: checks } = await testPool.query(
+      `select 1 from pg_constraint where conname = 'schedule_group_active_range'`,
+    );
+    expect(checks).toEqual([]);
+  });
+
   it('refuse a rule the engine cannot run', async () => {
     const alice = await insertUser('alice@example.com');
     const group = await insertGroup(alice.id);
@@ -235,7 +245,7 @@ describe('row-level security on the calendar tables', () => {
     // Inserting a row that claims to be Bob's fails the WITH CHECK. Drizzle wraps
     // Postgres' error; the original is its `cause`.
     const refused = await asUser(alice.id, (tx) =>
-      tx.insert(scheduleGroup).values({ userId: bob.id, name: 'x', activeFrom: '2026-07-13' }),
+      tx.insert(scheduleGroup).values({ userId: bob.id, name: 'x' }),
     ).catch((error: unknown) => error);
     expect((refused as Error).cause).toMatchObject({
       code: '42501',
