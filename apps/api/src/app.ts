@@ -45,7 +45,9 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   // out, like layers of an onion. The request context goes first so that
   // every later step (and every error) has a request id to log and return.
   app.use(requestContext(logger));
-  app.use(secureHeaders());
+  // HSTS is left to Caddy (deploy/Caddyfile), which sends it over HTTPS only and
+  // without includeSubDomains. Hono's default would add a second, different one.
+  app.use(secureHeaders({ strictTransportSecurity: false }));
   app.use(bodyLimit({ maxSize: MAX_BODY_BYTES }));
 
   // Public.

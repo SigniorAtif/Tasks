@@ -1,15 +1,15 @@
-# Checks every pull request (and every push to a release branch). Branch protection on
-# main requires these jobs to pass, so a PR with a type error, a failing test or a leaked
-# secret can't be merged. The five jobs run side by side; the slowest takes ~3 minutes.
+# Checks every pull request. Branch protection on main requires these jobs to pass, so a
+# PR with a type error, a failing test or a leaked secret can't be merged. The five jobs
+# run side by side; the slowest takes ~3 minutes.
 #
 # Third-party actions are pinned to a full commit SHA (the comment says which release):
 # a tag like v7 can be moved to different code later, a commit SHA can't.
 name: CI
 
+# Pull requests only. Each push to a PR's branch starts a run already; a push trigger on
+# release/** as well ran every job twice for a PR from a release branch.
 on:
   pull_request:
-  push:
-    branches: ["release/**"]
 
 # The token CI gets can read the code and nothing else.
 permissions:
@@ -17,7 +17,7 @@ permissions:
 
 # A new push to the same PR cancels the run for the push before it.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 # Naming bash explicitly also turns on pipefail: a failure anywhere in `a | b` fails the step.

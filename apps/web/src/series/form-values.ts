@@ -366,10 +366,11 @@ export function checkGroup(input: CreateGroup): Problems {
 }
 
 /**
- * "The last day is before the first" on its own. zod runs a check that compares
- * two fields only once every field is valid, so with an empty title as well the
- * full check wouldn't mention the dates yet. Checking just the two dates with the
- * same schema shows every problem at once instead of one round at a time.
+ * "The last day is before the first" on its own. zod skips a check that compares
+ * two fields when any field has the wrong type, and an empty duration box arrives
+ * as NaN, which zod counts as the wrong type. Then the full check wouldn't mention
+ * the dates yet. Checking just the two dates with the same schema shows every
+ * problem at once instead of one round at a time.
  */
 function checkDateOrder(input: { startDate?: string; untilDate?: string | null }): Problems {
   const dates = { startDate: input.startDate, untilDate: input.untilDate };
