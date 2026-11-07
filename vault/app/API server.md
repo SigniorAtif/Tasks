@@ -132,7 +132,7 @@ The same order in `createApp`, line by line (the numbers in the comments are the
 
   // …
   const scoped = userScope(db);
-  for (const prefix of [paths.groups, paths.series, paths.calendar]) {
+  for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
     app.use(`${prefix}/*`, scoped); // 8a
   }
   groupsRoutes(app); // 8b

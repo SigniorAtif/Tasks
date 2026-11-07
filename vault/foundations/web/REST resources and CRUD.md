@@ -94,18 +94,18 @@ The `404` for "not yours" comes from one helper, so every route says it the same
 
 *From `apps/api/src/http/row-id.ts`:*
 ```ts
-export function rowId(raw: string, what: 'group' | 'series'): string {
+export function rowId(raw: string, what: ResourceKind): string {
   if (!uuid.safeParse(raw).success) throw noSuchRow(what);
   return raw;
 }
 
 /** The 404 for a row that doesn't exist or belongs to someone else: the two look the same. */
-export function noSuchRow(what: 'group' | 'series'): AppError {
+export function noSuchRow(what: ResourceKind): AppError {
   return new AppError('not_found', { detail: `No ${what} with that id.` });
 }
 ```
 
-A `:id` that isn't even a UUID (`/api/v1/series/hello`) gets the same `404` as a real id that's someone else's, because no row could have it. Without `rowId`, Postgres would fail to convert `hello` to a `uuid`, and that would surface as a `500`.
+`ResourceKind` is `'group' | 'series' | 'occurrence'`: the word the 404 names. A `:id` that isn't even a UUID (`/api/v1/series/hello`) gets the same `404` as a real id that's someone else's, because no row could have it. Without `rowId`, Postgres would fail to convert `hello` to a `uuid`, and that would surface as a `500`.
 
 ## Lists come wrapped in an object
 

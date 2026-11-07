@@ -33,12 +33,12 @@ This note is the map: what each file does, and what happens when you open the ap
 | **Routes** | |
 | `src/routes/__root.tsx` | The frame around every screen. Most screens get a phone-width column; a route that sets `staticData: { wide: true }` (the calendar) gets the full width. Also the "Page not found" screen |
 | `src/routes/login.tsx` | `/login`: the Google button and its error messages |
-| `src/routes/index.tsx` | `/`: the calendar, with the "+ Add class" button, the offline badge and the account menu in its title bar. Tapping a class opens `/series/<its series id>` |
+| `src/routes/index.tsx` | `/`: the calendar, with the "+ Add class" button, the offline badge and the account menu in its title bar. Tapping a class opens its sheet ([[Cancelling one occurrence]]) |
 | `src/routes/series.new.tsx`, `series.$seriesId.tsx` | The class form, new and edit ([[Series form]]). `$seriesId` in a file name means "this part of the URL is a value" |
 | **Data** | |
 | `src/lib/api.ts` | The one way to call our API: `apiGet` for reads, `apiSend` for `POST`/`PATCH`/`DELETE`. Turns error responses into typed errors |
 | `src/lib/queries.ts` | The reads, one definition each: `meQuery`, `healthzQuery`, `groupsQuery`, `seriesListQuery`, `calendarQuery(window)`. Each has a cache key (`['calendar', '2026-10-12', '2026-10-18']`) |
-| `src/lib/mutations.ts` | The writes: create a group, create, change and delete a series. A new row's id (UUIDv7) is made once per save and reused if the same save is retried; after success, each one marks the calendar and series as out of date, so they're fetched again |
+| `src/lib/mutations.ts` | The writes: create a group, create, change and delete a series, and change one occurrence (whose answer goes straight into the cached weeks instead of a refetch). A new row's id (UUIDv7) is made once per save and reused if the same save is retried; after success, each one marks the calendar and series as out of date, so they're fetched again |
 | `src/lib/query-client.ts` | TanStack Query's settings: when to retry, `offlineFirst` for reads, fail-fast for writes, keep answers in memory as long as they're saved |
 | `src/lib/persist.ts` | Saves the cache to IndexedDB and restores it at start-up; `forgetCachedData` wipes both on sign-out ([[Offline reads]]) |
 | `src/lib/sync-status.ts`, `use-sync-status.ts`, `use-online.ts` | Works out "offline · last synced 2:02 PM" for the badge, and whether the form may save |
@@ -49,9 +49,9 @@ This note is the map: what each file does, and what happens when you open the ap
 | `src/lib/use-now.ts` | Left over from v0.0's ticking clock; nothing uses it. Deleted on branch `chore/remove-unused-use-now`, which ships with the next release's PR |
 | `src/lib/pwa.ts` | Registers the service worker ([[PWAs and service workers]]) |
 | **Screens' parts** | |
-| `src/calendar/` | The calendar: `CalendarScreen` (title bar, navigation, data), `TimeGrid` (the grid), `OccurrenceBlock` (one block), and `model/` (the pure maths: dates, segments, layout, formatting, palette). See [[Calendar grid]] |
+| `src/calendar/` | The calendar: `CalendarScreen` (title bar, navigation, data, the open sheet and the toast), `TimeGrid` (the grid), `OccurrenceBlock` (one block), `OccurrenceSheet` (cancel, restore, change reason), and `model/` (the pure maths: dates, segments, layout, formatting, palette, the sheet's buttons). See [[Calendar grid]] and [[Cancelling one occurrence]] |
 | `src/series/` | The class form and its pieces. See [[Series form]] |
-| `src/components/` | Small pieces: `Logo`, `GoogleIcon`, `Avatar`, `AccountMenu` (the avatar's pop-up: name, Sign out, deployed commit), `SignOutButton`, `DeployedCommit`, `SyncBadge`, `PendingScreen` (spinner), `ErrorScreen` (offline and error states) |
+| `src/components/` | Small pieces: `Logo`, `GoogleIcon`, `Avatar`, `AccountMenu` (the avatar's pop-up: name, Sign out, deployed commit), `SignOutButton`, `DeployedCommit`, `SyncBadge`, `PendingScreen` (spinner), `ErrorScreen` (offline and error states), `Toast` (a message that goes by itself, with an optional button such as Undo) |
 | `src/**/*.test.ts` | Tests for the pure pieces (149, under two seconds) |
 
 ## From opening the app to seeing your week

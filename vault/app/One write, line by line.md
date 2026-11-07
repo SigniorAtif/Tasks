@@ -184,7 +184,7 @@ sequenceDiagram
   app.use(`${paths.apiV1}/*`, csrf({ origin: env.BETTER_AUTH_URL }));
   // …
   const scoped = userScope(db);
-  for (const prefix of [paths.groups, paths.series, paths.calendar]) {
+  for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
     app.use(`${prefix}/*`, scoped);
   }
   groupsRoutes(app);

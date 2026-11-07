@@ -15,6 +15,7 @@ The v0.2 routes that put your timetable on the home screen: groups ("Classes · 
 | `DELETE /api/v1/groups/:id` | `204`, no body. Its series and their overrides go too | `404` |
 | the same five for `/api/v1/series` | Same, sorted by title. A create without `tzid` takes your profile's zone | Also `422` on `groupId` when the group isn't one of yours |
 | `GET /api/v1/calendar?from=2026-10-12&to=2026-10-18` | `200 { from, to, occurrences: [...] }`, sorted by start | `422` naming `from` or `to`: missing, not a real date, `to` before `from`, or wider than 62 days |
+| `PATCH /api/v1/occurrences/:seriesId/:originalDate` (v0.3) | `200` + the occurrence as the engine now computes it, after a cancel, a change of reason or a restore | `404` no such series, someone else's, or a date it never produces · `422` a reason without a cancel. See [[Cancelling one occurrence]] |
 
 Two rules apply to all of them:
 - **No session, no answer:** `401`, from `requireSession`, before any of this code runs ([[Auth]]).
@@ -69,7 +70,7 @@ Step by step, with the files open:
    ```ts
    // apps/api/src/app.ts
      const scoped = userScope(db);
-     for (const prefix of [paths.groups, paths.series, paths.calendar]) {
+     for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
        app.use(`${prefix}/*`, scoped);
      }
    // apps/api/src/http/user-scope.ts

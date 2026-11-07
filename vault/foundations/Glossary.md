@@ -28,6 +28,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | backoff | Waiting longer before each retry (1 s, 2 s, 4 s …) so a struggling server isn't hammered | [[Idempotency and retries]] |
 | Better Auth | The library that handles Google sign-in, sessions and cookies inside our API | [[Auth]], [[API stack choices]] |
 | Biome | Linter + formatter: finds mistakes and tidies code without running it (`pnpm check`) | [[Tooling choices]] |
+| Bottom sheet | A panel that slides up from the bottom of a phone screen, near your thumb; our occurrence sheet on a phone | [[Dialogs and toasts]] |
 | branch protection | A GitHub rule that blocks merging into `main` unless chosen CI jobs pass | [[CI and CD]] |
 | branded type | A type with a marker property only one module can name, so only that module can make values of it; ours is `UserScope` | [[Row-level security in our database]] |
 | branding (types) | A type only one function can create, like `UserScope` from `withUser` | [[TypeScript essentials]], [[Row-level security in our database]] |
@@ -78,6 +79,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | dehydrate / hydrate | Turn TanStack Query's cache into plain data to save it / put saved data back into the cache | [[Offline reads]] |
 | deploy | Putting a new version on the server; ours is `deploy/deploy.sh` | [[Deploy and CI]] |
 | depth (overlap) | The most calendar blocks happening at one moment; the fewest columns any layout can use | [[Interval partitioning]] |
+| `<dialog>`, `showModal()` | The browser's built-in dialog element; opened as a modal it moves focus in, makes the page behind inert and closes on Escape | [[Dialogs and toasts]] |
 | digest | A fingerprint of an image's exact content (`@sha256:…`), unlike a movable tag | [[Containers and images]] |
 | discriminated union | "One of several shapes", told apart by one field (`freq`, `kind`) | [[TypeScript essentials]], [[Core types]] |
 | display zone | The zone the calendar draws in: your `profile.tzid`, never the phone's own setting | [[Calendar grid]] |
@@ -92,6 +94,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | environment variable | A named setting handed to a program at start (`PORT=3000`) | [[Environment variables and config]] |
 | erasableSyntaxOnly | Our setting that allows only TypeScript that can be deleted to get JavaScript, because Node runs `.ts` by stripping types | [[TypeScript essentials]], [[TypeScript checking vs running]] |
 | eviction | The browser deleting a site's stored data to free space, without asking | [[IndexedDB and offline storage]] |
+| `excluded` | Inside `on conflict … do update`, the row the insert tried to write | [[Upserts and row locks]] |
 | expand / contract | Migration style: add new things first, remove old ones later, so rollbacks stay safe | [[Database migrations]] |
 | expansion (layout) | After columns are assigned, a block stretches right over columns that are free for its whole time | [[Interval partitioning]] |
 | fast-forward / `--no-ff` | Merge styles; `--no-ff` always records a merge commit, keeping the branch visible | [[Local workflow]] |
@@ -142,6 +145,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | least privilege | Give each part only the permissions its job needs, so a bug can do only that much damage | [[Roles and privileges]] |
 | linter / formatter | Finds suspicious code / rewrites layout consistently | [[Tooling choices]] |
 | literal type | A type that is one exact value, like `'not_held'` | [[TypeScript essentials]] |
+| Live region | An element (`role="status"`) whose new text screen readers announce; it must be in the page before the text arrives | [[Dialogs and toasts]] |
 | live region (`role="status"`, `role="alert"`) | An element whose text a screen reader announces when it changes; `status` waits politely, `alert` interrupts | [[Offline reads]], [[Series form]] |
 | localhost guard | The seed refuses to run unless `DATABASE_URL` and `BETTER_AUTH_URL` both point at this machine | [[Timetable files and seeding]] |
 | localStorage / sessionStorage | Small, synchronous text-only browser storage, per origin / per tab | [[IndexedDB and offline storage]] |
@@ -166,9 +170,11 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `nullif(x, '')` | Turns empty text into `NULL`; guards RLS policies against the empty-setting trap | [[Row-level security]] |
 | OAuth | The standard behind "Sign in with Google": Google vouches for you, and the app never sees your Google password | [[OAuth sign-in]] |
 | object store | IndexedDB's version of a table: keys mapped to structured values | [[IndexedDB and offline storage]] |
+| Occurrence sheet | What tapping a class opens: one occurrence's details, and Prof / Me / Not today, Restore, Change reason | [[Cancelling one occurrence]] |
 | oklch / oklab | Colour spaces where equal number steps look equal to the eye; we mix in oklab so hues don't drift | [[CSS variables]] |
 | `Omit` / `Partial` / `Pick` / `Record` | Helpers that build one type from another (fewer fields, optional fields, exact keys) | [[TypeScript essentials]] |
 | `on conflict (id) do nothing` | An insert that silently skips an id that already exists; with a lookup after it, our creates answer 201, 200 or 409 | [[Calendar API]], [[Idempotency and retries]] |
+| `on conflict … do update` | An upsert: insert the row, or update the one already holding that unique key, in one statement | [[Upserts and row locks]] |
 | `onlineManager` | TanStack Query's idea of whether the device is online, from the browser's `online` / `offline` events; starts as online | [[Offline reads]] |
 | optional field (`?`) | A field that may be missing entirely; we use `\| null` instead for stored data | [[TypeScript essentials]], [[Core types]] |
 | origin | Scheme + host + port (`https://tasks.ahmedatif.in`); browsers' unit of trust | [[Origin]] |
@@ -196,6 +202,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `private/` | The git-ignored folder in the main repo for real personal data, like your real timetable | [[Timetable files and seeding]] |
 | privilege | One permission on one object: `SELECT` on a table, `USAGE` on a schema | [[Roles and privileges]] |
 | problem+json | Our one error-body shape (RFC 9457) with a stable `code` | [[Error responses]] |
+| Prof, Me, Not today | The cancel buttons: Prof = not held, Me = skipped (attendance groups); Not today = no reason (other groups) | [[Cancelling one occurrence]] |
 | proxy (dev server) | Vite forwarding `/api` to the API so the browser sees one origin | [[Dev server proxy]] |
 | psql | Postgres's command-line client: `docker compose exec db psql -U tasks tasks` | [[Postgres and SQL basics]] |
 | PWA | A website your phone can install like an app | [[PWAs and service workers]] |
@@ -212,6 +219,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | role | Postgres's single kind of account; "users" are roles that can log in, "groups" are roles others join | [[Roles and privileges]] |
 | rollback | Going back to the previous version after a failed deploy | [[Deploy and CI]] |
 | route / routing | Matching a URL path to code: Hono on the server, TanStack Router in the app | [[API server]], [[Single-page apps and routing]] |
+| Row lock | Taken by an update or delete on a row and held until the transaction ends; others wanting that row wait | [[Upserts and row locks]] |
 | `safeParse` | zod's "check and tell me": returns `{ success, data }` or `{ success, error }`, never throws | [[Validating input with schemas]] |
 | salt | Random data mixed into a password hash so equal passwords hash differently | [[Hashing and signing]] |
 | `satisfies` | Checks a value against a type without losing the value's exact type | [[TypeScript essentials]] |
@@ -228,6 +236,8 @@ Every technical term used in this vault and the code: one line each, plus the no
 | session | A row in `auth_session` saying "this cookie belongs to this user until …" | [[Cookies and sessions]] |
 | `SET` / `SET LOCAL` / `set_config` | Change a setting for the connection / until the transaction ends / the same, as a function that takes `$1` | [[Transactions]] |
 | `SET ROLE` / `SET LOCAL ROLE` | Act as another role from now / until the transaction ends | [[Roles and privileges]] |
+| `setQueriesData` | TanStack Query: write new data into every cached query whose key starts with a prefix, without fetching | [[Cancelling one occurrence]] |
+| Snapshot (database) | The state of the database one statement (READ COMMITTED) reads; every part of a statement sees the same one | [[Upserts and row locks]] |
 | SPA | A single-page app: one HTML page, JavaScript swaps the screens | [[Single-page apps and routing]] |
 | SQL / SQL injection | The language for asking Postgres / an attack that sneaks SQL in through a value | [[Postgres and SQL basics]] |
 | SQLSTATE | Postgres' five-character error code, stable unlike the message: `23505` unique, `23503` foreign key, `23514` check, `42501` not allowed | [[Calendar API]] |
@@ -249,12 +259,18 @@ Every technical term used in this vault and the code: one line each, plus the no
 | timetable file | The hand-writable JSON (`"format": "tasks.timetable"`, `"version": 1`) of groups and their class slots | [[Timetable files and seeding]] |
 | `timetableToRows` | Pure function: a checked timetable file → the rows `POST /api/v1/groups` and `/series` take | [[Timetable files and seeding]] |
 | TLS | The encryption under HTTPS, with certificates proving the server's identity | [[Reverse proxies and TLS]] |
+| Toast | A short message at the screen's edge that goes away by itself, sometimes with one button such as Undo | [[Dialogs and toasts]] |
+| Top layer | A layer the browser draws above the whole page; a modal `<dialog>` goes there, so no `z-index` covers it | [[Dialogs and toasts]] |
 | transaction | Statements that all happen or none do (`BEGIN` … `COMMIT` / `ROLLBACK`) | [[Transactions]], [[Postgres and SQL basics]] |
 | type alias | A second name for a type: `ISODate = string`; documents, doesn't enforce | [[TypeScript essentials]], [[Core types]] |
 | type checker (`tsc`) | The program that reads the types and reports mistakes before anything runs (`pnpm typecheck`) | [[TypeScript essentials]], [[TypeScript checking vs running]] |
 | type stripping | Node deleting TypeScript's annotations so it can run `.ts` files directly | [[TypeScript checking vs running]] |
+| Undo | Taking back the last cancel from its toast; it sends exactly what Restore sends | [[Dialogs and toasts]], [[Cancelling one occurrence]] |
 | union type (`\|`) | "One of these": `'not_held' \| 'skipped'` | [[TypeScript essentials]] |
+| Unique constraint | A rule that no two rows share a value (or set of values); ours: one override per (series, original date) | [[Upserts and row locks]] |
 | `unknown` | "Could be anything; prove what it is first"; for data from outside | [[TypeScript essentials]] |
+| Upsert | Insert-or-update as one step, so two requests racing for the same key can't both insert | [[Upserts and row locks]] |
+| `useEffectEvent` | React: wraps a function so an effect calls its latest version without restarting when it changes | [[Dialogs and toasts]] |
 | `UserScope` | The scoped transaction plus whose it is; only `withUser` makes one, and every calendar repository function takes it | [[Row-level security in our database]] |
 | `USING` / `WITH CHECK` | The two halves of a policy: which existing rows you can see and touch / which new rows you may write | [[Row-level security]] |
 | UUID / UUIDv4 | A 128-bit id written as 32 hex digits; v4 is fully random, so not in time order | [[Idempotency and retries]] |

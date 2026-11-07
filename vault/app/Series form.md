@@ -2,7 +2,7 @@
 
 > **Background:** [[REST resources and CRUD]] · [[Validating input with schemas]] · [[Idempotency and retries]] · [[Server state and caching]] · [[Single-page apps and routing]]
 
-The screen where you type in a class: "Data Structures, Monday, Wednesday and Friday at 8 AM, one hour, room C-301". `/series/new` adds one, and `/series/<id>` changes or deletes one (the calendar opens it when you tap a block). A **series** is one timing pattern of a class ([[Core types]]), and the calendar expands it into the blocks you see ([[Recurrence engine]]). Why it's built this way: [[Offline and form choices]].
+The screen where you type in a class: "Data Structures, Monday, Wednesday and Friday at 8 AM, one hour, room C-301". `/series/new` adds one, and `/series/<id>` changes or deletes one (the occurrence sheet's "Edit all" link opens it). A **series** is one timing pattern of a class ([[Core types]]), and the calendar expands it into the blocks you see ([[Recurrence engine]]). Why it's built this way: [[Offline and form choices]].
 
 ## Predict first
 

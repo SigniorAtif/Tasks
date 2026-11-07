@@ -2,7 +2,7 @@
 
 > **Background:** [[Dates, times and instants]] · [[Time zones and daylight saving]] · [[Interval partitioning]] · [[Responsive layouts]] · [[CSS variables]] · [[Server state and caching]]
 
-The home screen of v0.2: your week as a timetable, hours down the side, one column per day, one coloured block per class. On your phone it shows one day with a Mon–Sun strip on top; on a laptop it shows the whole week. It's **render-only**: it draws what the server computed and reports taps, but it can't change anything yet (cancelling arrives in v0.3). Why it's built this way and not with a library: [[Calendar grid choices]].
+The home screen of v0.2: your week as a timetable, hours down the side, one column per day, one coloured block per class. On your phone it shows one day with a Mon–Sun strip on top; on a laptop it shows the whole week. The grid itself is **render-only**: it draws what the server computed and reports taps. What a tap does belongs to the screen around it: since v0.3 it opens the occurrence sheet, where you cancel or restore that one class ([[Cancelling one occurrence]]). Why it's built this way and not with a library: [[Calendar grid choices]].
 
 ## Predict first
 
@@ -139,7 +139,7 @@ What to notice:
 
 What to notice:
 - `|| undefined`: React leaves out an attribute whose value is `undefined`, so `data-over-cancelled` is either there or not, which is exactly what the CSS selector `[data-over-cancelled]` tests.
-- `data-reason` is how CSS tells "Skipped" (dashed, coloured stripes) from "Cancelled" (grey stripes) for blocks with the same `data-status`.
+- `data-reason` is how CSS tells skipped (dashed, coloured stripes) from not held (grey stripes) for blocks with the same `data-status`. A cancel with no reason gets `not_held` here, so it draws like "not held".
 - Every value in `style` is a number from the model (minutes, columns), never pixels. `cssVars` only exists to keep TypeScript happy ([[CSS variables]]). `groupColor` turns the token into `var(--palette-violet)`, or grey for an unknown group.
 
 5. **CSS → pixels.** `time-grid.css` does the arithmetic ([[CSS variables]]): `top: calc(var(--start) * var(--px-per-min) * 1px)`. On a laptop `--px-per-min` is 1.2 (72 px an hour), so the club's top is 630 × 1.2 = 756 px into the column, and its height is `max(22px, 60 × 1.2 px − 2px)` = 70 px. Its width is `span / cols` of the lane (85% here).
@@ -211,8 +211,8 @@ States differ by **pattern, border and words**, never only by colour, so they st
 | State | Fill | Edge | Words | Example in the sample week |
 |---|---|---|---|---|
 | Scheduled | group colour at 20% over the surface | 3 px solid, group colour | title, time, room | Data Structures, Mon 8:00 |
-| Not held (holiday or prof) | grey with grey diagonal stripes | faded group colour | title ~~struck through~~, a "Cancelled" pill | the three classes on Tue 20 Oct, "Holiday (example)" |
-| Skipped (my choice) | faint group tint with group-coloured stripes | **dashed**, group colour | struck through, "Skipped" pill | OOP (Java), Thu 22 Oct |
+| Not held (holiday or prof) | grey with grey diagonal stripes | faded group colour | title ~~struck through~~, a "Prof cancelled" pill (a holiday's own label from v0.3b; "Cancelled" for a cancel with no reason) | the three classes on Tue 20 Oct, "Holiday (example)" |
+| Skipped (my choice) | faint group tint with group-coloured stripes | **dashed**, group colour | struck through, "I skipped" pill | OOP (Java), Thu 22 Oct |
 | Moved | as scheduled | as scheduled | "MOVED" | Discrete Mathematics, moved to Sat 24 Oct |
 | Extra (make-up) | as scheduled | as scheduled | "EXTRA" | OOP (Java), Sat 24 Oct 12:00 |
 
