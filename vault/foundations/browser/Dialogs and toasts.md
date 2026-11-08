@@ -53,7 +53,7 @@ A toast says "done" and gets out of the way: "Data Structures · I skipped   Und
 | A mis-tap | Caught before it happens | Fixed with one more tap |
 | What you learn | To tap "Yes" without reading | That mistakes are cheap |
 
-Undo only works when taking the action back is safe and exact. Ours is: Undo sends the same request as **Restore**, which puts the occurrence back exactly as it was, note included.
+Undo only works when taking the action back is safe and exact. Ours is: Undo queues the same change as **Restore**, which puts the occurrence back exactly as it was, note included.
 
 What a good toast needs:
 
@@ -77,19 +77,22 @@ One trap: `dismiss` comes from the parent screen, which makes a new function eve
 
 ## A mutation that outlives its screen
 
-The sheet sends the cancel and offers Undo when the server answers. What if you close the sheet with Escape while the request is still out? The sheet is gone, but the answer still comes back.
+In ticket #8 the sheet sent the cancel itself and offered Undo when the server answered. What if you closed the sheet with Escape while the request was still out? The sheet is gone, but the answer still comes back.
 
 TanStack Query ([[Server state and caching]]) gives two places to say "when this succeeds":
 
 - On the **hook**, `useMutation({ onSuccess })`. This belongs to the mutation itself and runs whenever it finishes, whether or not the screen that started it is still there.
 - On the **call**, `mutate(variables, { onSuccess })`. This belongs to that screen, and runs only while it's still on the page.
 
-Our first version offered Undo from the call. The review caught it: close the sheet mid-request, and the class got its stripes but no Undo. The offer moved to the hook. Closing the sheet is still the call's job, since there's nothing to close once it's gone.
+Our first version offered Undo from the call. The review caught it: close the sheet mid-request, and the class got its stripes but no Undo. The offer moved to the hook.
+
+Since ticket #9 the question doesn't come up for our sheet. A change is queued and shows at once, so the screen offers Undo the moment you tap, before any request is sent (`queueChange` in `CalendarScreen`, [[Cancelling one occurrence]]), and Undo queues a Restore like any other change, offline too. What happens when the server answers moved to a third place: the client itself (`setMutationDefaults`), which outlives every screen and even a reload ([[Mutations and offline queues]]). The two kinds of callback still matter for every other write, such as the series form's Save.
 
 ## Where you'll meet these
 
 - [[Cancelling one occurrence]]: the sheet, the actions it shows, and the Undo toast.
 - [[Calendar grid]]: the blocks you tap to open it.
+- [[Offline cancels]]: the toast that says a waiting change was refused, even when it happened while you were on another screen.
 
 ## Check yourself
 

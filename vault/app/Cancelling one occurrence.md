@@ -2,7 +2,7 @@
 
 > **Background:** [[Upserts and row locks]] · [[Transactions]] · [[Idempotency and retries]] · [[Server state and caching]] · [[Dialogs and toasts]]
 
-The first thing v0.3 lets you *change* from the calendar. Tap a class and a sheet opens for that one occurrence. In a group that tracks attendance you cancel it with **Prof** (it didn't happen: not held) or **Me** (it happened, you didn't go: skipped). In a group without attendance, one **Not today** cancels it with no reason. The class stays on the calendar, striped, with the reason in words. **Restore** and **Change reason** work at any time, and an 8-second **Undo** catches a mis-tap. Ticket #8; why the words and buttons are what they are: [[Cancel and group choices]].
+The first thing v0.3 lets you *change* from the calendar. Tap a class and a sheet opens for that one occurrence. In a group that tracks attendance you cancel it with **Prof** (it didn't happen: not held) or **Me** (it happened, you didn't go: skipped). In a group without attendance, one **Not today** cancels it with no reason. The class stays on the calendar, striped, with the reason in words. **Restore** and **Change reason** work at any time, and an 8-second **Undo** catches a mis-tap. Ticket #8; why the words and buttons are what they are: [[Cancel and group choices]]. Since ticket #9 all of it works offline too: the change goes into a queue, shows at once, and reaches the server when the signal does ([[Offline cancels]]).
 
 ## Predict first
 
@@ -21,8 +21,9 @@ You tap **Me** on Wednesday's Data Structures. What row, if any, does the server
 | `apps/web/src/calendar/model/sheet.ts` | `sheetActions`: which buttons the sheet shows. Pure, tested in Node |
 | `apps/web/src/calendar/OccurrenceSheet.tsx` | The sheet: a native `<dialog>`, bottom sheet on a phone, centred from 768 px |
 | `apps/web/src/components/Toast.tsx` | The app's first toast, with one optional button |
-| `apps/web/src/lib/mutations.ts` | `changeOccurrence`, `putOccurrence`, `useChangeOccurrence` |
-| `apps/web/src/calendar/CalendarScreen.tsx` | Holds which sheet is open and the toast; Undo lives here |
+| `apps/web/src/lib/mutations.ts` | `changeOccurrence` (the request) and `putOccurrence` (its answer into the cached weeks) |
+| `apps/web/src/lib/occurrence-queue.ts` | Since #9: queues the change and sends it when it can ([[Offline cancels]]) |
+| `apps/web/src/calendar/CalendarScreen.tsx` | Holds which sheet is open and the toast; queues the change and offers Undo (`queueChange`) |
 
 ## From tap to stripes
 
@@ -30,17 +31,20 @@ You tap **Me** on Wednesday's Data Structures. What row, if any, does the server
 sequenceDiagram
     participant U as You
     participant S as Sheet
+    participant Q as Screen
     participant A as API
     participant D as Postgres
-    participant C as Cached weeks
     U->>S: tap a class, then Me
-    S->>A: PATCH occurrences/(series)/(date)
+    S->>Q: the change, then close
+    Q->>U: stripes and Undo, at once
+    Q->>A: PATCH occurrences/(series)/(date)
     A->>D: read the series and group
     A->>D: upsert, then delete if empty
-    A-->>S: 200, the occurrence as it now is
-    S->>C: put it in the cached weeks
-    S->>U: close, toast with Undo
+    A-->>Q: 200, the occurrence
+    Q->>Q: put it in the cached weeks
 ```
+
+The stripes come before the request: since ticket #9 the screen draws a queued change at once, on top of the cached weeks. With no signal the `PATCH` waits in the queue, and [[Offline cancels]] follows that path. This note follows the request itself.
 
 ## The request
 
@@ -114,7 +118,7 @@ After the write, the route doesn't build the answer by hand. It asks the engine:
 
 `occurrenceOn` runs the same layers `expand()` runs, for one date. So the answer is byte for byte what `GET /api/v1/calendar` would show, and a test checks exactly that, including for an occurrence moved to another day.
 
-The phone then puts that answer straight into its cache, in every cached week that shows it:
+The phone then puts that answer straight into its cache, in every cached week that shows it. The queued change's `onSuccess` calls this ([[Offline cancels]]):
 
 *From `apps/web/src/lib/mutations.ts`:*
 ```ts
@@ -133,22 +137,19 @@ Until now every write *invalidated* the calendar ([[Server state and caching]]):
 
 ## The sheet: which buttons
 
-Which buttons show is one pure function of three things: the occurrence, its group's attendance setting, and any change still on its way to the server.
+Which buttons show is one pure function of two things: the occurrence, and its group's attendance setting. The occurrence is the one the calendar shows, with any queued change already applied ([[Offline cancels]]).
 
 *From `apps/web/src/calendar/model/sheet.ts`:*
 ```ts
-  const status = pending ? (pending.status ?? 'scheduled') : occ.status;
-  const reason = pending ? (pending.cancelReason ?? null) : occ.cancelReason;
-
-  if (status !== 'cancelled') {
+  if (occ.status !== 'cancelled') {
     return { ...NOTHING, cancel: group.attendance ? [PROF, ME] : [NOT_TODAY] };
   }
   return {
-    state: reasonInWords(reason, group.attendance),
+    state: reasonInWords(occ.cancelReason, group.attendance),
     cancel: [],
     restore: RESTORE,
     changeReason: group.attendance
-      ? [PROF, ME].filter((b) => b.change.cancelReason !== reason)
+      ? [PROF, ME].filter((b) => b.change.cancelReason !== occ.cancelReason)
       : [],
   };
 ```
@@ -166,26 +167,41 @@ What to notice:
 - **A saved reason is shown as saved.** Turn a group's attendance off and its "I skipped" still reads "I skipped". Settings never rewrite history.
 - **No reason is never guessed.** A Not today cancel in a group that later tracks attendance reads "No reason given", and Change reason offers both Prof and Me. The calendar keeps drawing it like "not held".
 - **Prof and Me keep their first word.** Under each sits a small line ("Class didn't happen", "I didn't go"); ticket #15 makes the line rotate, never the word, so the right button is found at 8 am without reading.
-- **A change in flight shows as done.** While the request is out, the sheet already shows the state it will leave, with every button disabled.
+- **A waiting change shows as done.** The sheet gets the class as the calendar draws it, queued change applied, so a skip that hasn't reached the server yet already offers Restore. A line under the state says "Waiting to sync: saved on this phone, not yet on the server." No button is ever disabled: a second change just queues behind the first. (In ticket #8 the sheet took the change in flight as a third argument, `pending`, and disabled every button while it was out. Ticket #9 removed both.)
 
 The sheet itself is a native `<dialog>` opened with `showModal()`: focus, Escape and the inert page behind come from the browser ([[Dialogs and toasts]]). "Edit all Data Structures…" at the bottom links to the series form, which is what tapping a class used to do.
 
 ## Undo
 
-After every cancel (not after Change reason, not after Restore) a toast says "Data Structures · I skipped" with **Undo**. Undo sends exactly Restore's body. It's greyed out offline, because writes are online-only until ticket #9 queues them.
+After every cancel of a class that was on (not after Change reason, not after Restore) a toast says "Data Structures · I skipped" with **Undo**. Undo queues exactly Restore's change, and like every change here it works offline.
 
-The offer is made from the mutation hook, not from the `mutate` call:
+The screen makes the offer the moment you tap, not when the server answers:
 
-*From `apps/web/src/calendar/OccurrenceSheet.tsx`:*
+*From `apps/web/src/calendar/CalendarScreen.tsx`:*
 ```tsx
-  const mutation = useChangeOccurrence((updated, sent) => {
-    if (sent.change.status === 'cancelled' && occurrence.status !== 'cancelled') {
-      onCancelled(updated);
-    }
-  });
+  const queueChange = (occ: Occurrence, change: UpdateOccurrence) => {
+    const { seriesId, originalDate, title } = occ;
+    if (originalDate === null) return;
+    queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change });
+    if (change.status !== 'cancelled' || occ.status === 'cancelled') return;
+    setToast({
+      text: `${title} · ${statusLabel(applyChange(occ, change))}`,
+      action: {
+        label: 'Undo',
+        onClick: () =>
+          queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change: RESTORE }),
+      },
+    });
+  };
 ```
 
-The first version used the call's own `onSuccess`, which TanStack Query skips once the screen that made the call is gone. The review spotted it: close the sheet with Escape while the request is out, and you got the stripes without the Undo. [[Dialogs and toasts]] explains the two kinds of callback.
+What to notice:
+- The sheet only hands over the change (its `onChange` prop) and closes itself. The screen queues it.
+- The early `return` keeps the toast to one case: a cancel (`change.status === 'cancelled'`) of a class that wasn't cancelled already. A restore, or a new reason on a class that's already cancelled, offers no Undo.
+- The toast's words come from `applyChange`, the same local guess the calendar draws, because the server hasn't answered yet.
+- Undo on a skip that's still waiting queues a Restore behind it. The server gets both, in order, and ends restored.
+
+In ticket #8 the offer came later, when the server answered, and where it was made mattered. The first version made it from the `mutate` call's own `onSuccess`, which TanStack Query skips once the screen that made the call is gone. The review spotted it: close the sheet with Escape while the request is out, and you got the stripes without the Undo. The offer moved to the mutation hook, and Undo was greyed out offline. Ticket #9 made both moot: the change shows at once, so the offer can be made at once. [[Dialogs and toasts]] explains the two kinds of callback.
 
 ## What the tests prove
 
@@ -199,7 +215,7 @@ Over HTTP against a real Postgres (`apps/api/src/routes/occurrences.test.ts`):
 - 422 for a reason without a cancel, and for unknown values;
 - in `calendar-isolation.test.ts`, bob's `PATCH` on alice's class: 404, and her calendar unchanged.
 
-In plain Node: the action table above (`sheet.test.ts`), the reason words (`format.test.ts`), and `putOccurrence` writing into the right weeks without refetching (`mutations.test.ts`). The core suite checks `occurrenceOn` against `expand()`.
+In plain Node: the action table above (`sheet.test.ts`), the reason words (`format.test.ts`), and `putOccurrence` writing into the right weeks without refetching (`mutations.test.ts`). The core suite checks `occurrenceOn` against `expand()`. The queue's own tests are in [[Offline cancels]].
 
 ## Check yourself
 
@@ -207,4 +223,4 @@ In plain Node: the action table above (`sheet.test.ts`), the reason words (`form
 2. You restore a class whose override also holds a note. What happens to the row?
 3. Why can the phone skip refetching the week after a cancel, when every series write refetches?
 4. A Health run was cancelled with Not today, then Health turned attendance on. What does the sheet show?
-5. Why does the Undo offer live on the hook rather than on `mutate`?
+5. Why is Undo offered the moment you tap, rather than when the server answers? What would go wrong offline if it waited?
