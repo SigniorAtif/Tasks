@@ -176,7 +176,8 @@ What to notice:
 export interface TimeGridProps {
   days: ISODate[];                 // 1 (Day view) or 7 (Week view)
   zone: IanaZone;                  // the display zone
-  occurrences: Occurrence[];       // what the server computed
+  occurrences: readonly Occurrence[]; // the server's answer, queued changes applied
+  waitingKeys?: ReadonlySet<OccurrenceKey>; // blocks that get the waiting mark
   groups: Record<string, GridGroup>; // id → name and colour token
   nowMs: number;                   // the server-corrected now
   pxPerMin?: number;               // zoom
@@ -184,7 +185,7 @@ export interface TimeGridProps {
 }
 ```
 
-An **adapter boundary** is a small, fixed interface between your code and a part you might swap out. The screen and the data code only ever talk to the grid through these seven props. If the custom grid ever blocks the dogfood for days, D-076's fallback is FullCalendar: you'd write a `FullCalendarGrid` that takes the *same* props and translates them, and nothing else in the app changes. That's also why the props stay small. Every prop is something a replacement would have to support too.
+An **adapter boundary** is a small, fixed interface between your code and a part you might swap out. The screen and the data code only ever talk to the grid through these eight props. If the custom grid ever blocks the dogfood for days, D-076's fallback is FullCalendar: you'd write a `FullCalendarGrid` that takes the *same* props and translates them, and nothing else in the app changes. That's also why the props stay small. Every prop is something a replacement would have to support too. The eighth, `waitingKeys`, arrived with ticket #9: the occurrences whose change hasn't reached the server yet, which a replacement would have to mark too ([[Offline cancels]]). `occurrences` became `readonly` at the same time, because the screen now hands over a list it computed (the cached week with the queued changes applied) and the grid must never change it.
 
 *Inside* the boundary: segments, layout, colours, the now line, the scroll position. *Outside*: which days to show, fetching, the clock, what a tap does.
 

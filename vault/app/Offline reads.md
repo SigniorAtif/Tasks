@@ -4,6 +4,8 @@
 
 You're on the bus to KIIT with no signal, and you open the app to check which room your 10:00 class is in. Since v0.2, the app opens with your name, your groups, your classes and every week you looked at in the last 30 days, drawn from a copy saved on the phone. A small pill says **"offline · last synced 2:02 PM"**, so you know it's the server's last answer and not a fresh one. Changing anything (adding a class, moving one) still needs a connection in v0.2 (D-048).
 
+Since v0.3, one kind of change works offline after all: cancelling, restoring or changing the reason of one class is queued on the phone and sent when the signal returns. That has its own note, [[Offline cancels]]; this one is about reading.
+
 The general ideas (where a browser can keep data, quotas, why `navigator.onLine` lies) are in [[IndexedDB and offline storage]]. This note is how *our* code does it. Why it's built this way and not another: [[Offline and form choices]].
 
 ## Predict first
@@ -16,7 +18,7 @@ All in `apps/web/src/`.
 
 | File | What it does |
 |---|---|
-| `lib/persist.ts` | The saved copy. `restoreQueryCache(queryClient)` puts it back at start-up and keeps saving after every change; `shouldPersistQuery` decides what goes in; `lastGoodAnswers` saves a query whose refetch failed as its last good answer; `forgetCachedData(queryClient)` deletes both copies on sign-out. Constants: `CACHE_BUSTER = 'v0.2.0'`, `CACHE_MAX_AGE_MS` (30 days), `RESTORE_TIMEOUT_MS` (1 s) |
+| `lib/persist.ts` | The saved copy. `restoreQueryCache(queryClient)` puts it back at start-up and keeps saving after every change; `shouldPersistQuery` decides what goes in; `lastGoodAnswers` saves a query whose refetch failed as its last good answer; `forgetCachedData(queryClient)` deletes everything, in memory and on the device, on sign-out. Constants: `CACHE_BUSTER = 'v0.3.0'`, `CACHE_MAX_AGE_MS` (30 days), `RESTORE_TIMEOUT_MS` (1 s). Since v0.3 it also keeps a second copy, the queue of waiting changes ([[Offline cancels]]) |
 | `lib/query-client.ts` | TanStack Query's settings: `networkMode: 'offlineFirst'`, `gcTime: Infinity`, the retry rule, and writes that fail fast instead of waiting |
 | `main.tsx` | Awaits `restoreQueryCache` **before** drawing the router |
 | `lib/require-session.ts` | `requireSession(queryClient)`, the `beforeLoad` of the series screens: is someone signed in? Offline, the restored user counts |
@@ -53,7 +55,7 @@ sequenceDiagram
 ```
 
 1. **The shell.** The service worker answers with the `index.html`, JavaScript and CSS it precached ([[PWAs and service workers]]). No network needed.
-2. **The restore.** `main.tsx` calls `restoreQueryCache(queryClient)` and **waits** for it. It reads one value from IndexedDB, the key `tasks-query-cache` in idb-keyval's database `keyval-store`: the whole cache as one JSON string. If the copy was saved by another app version (a different `buster`) or more than 30 days ago (`maxAge`), it's deleted instead. Otherwise, every saved query is put back into memory. TanStack Query calls this **hydrating** the cache; the opposite, turning the cache into plain data to save, is **dehydrating**.
+2. **The restore.** `main.tsx` calls `restoreQueryCache(queryClient)` and **waits** for it. It reads one value from IndexedDB, the key `tasks-query-cache` in idb-keyval's database `keyval-store`: the whole cache as one JSON string. (Since v0.3 it reads a second value beside it, `tasks-queued-changes`, the changes waiting to be sent: [[Offline cancels]].) If the copy was saved by another app version (a different `buster`) or more than 30 days ago (`maxAge`), it's deleted instead. Otherwise, every saved query is put back into memory. TanStack Query calls this **hydrating** the cache; the opposite, turning the cache into plain data to save, is **dehydrating**.
 
 *From `apps/web/src/lib/persist.ts`:*
 ```ts
@@ -61,44 +63,48 @@ export async function restoreQueryCache(
   queryClient: QueryClient,
   timeoutMs: number = RESTORE_TIMEOUT_MS,
 ): Promise<void> {
-  const [, restored] = persistQueryClient({
-    queryClient,
-    persister,
-    buster: CACHE_BUSTER,
-    maxAge: CACHE_MAX_AGE_MS,
-    dehydrateOptions,
-  });
+  // A failed restore has already deleted the broken copy; start without it.
+  const restored = Promise.all(
+    copies.map((copy) => {
+      const [stop, restoring] = persistQueryClient({ queryClient, ...copy });
+      stopSaving.push(stop);
+      return restoring.catch(() => undefined);
+    }),
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, timeoutMs);
   });
-  // A failed restore has already deleted the broken copy; start from an empty cache.
-  await Promise.race([restored.catch(() => undefined), timeout]);
+  await Promise.race([restored, timeout]);
   clearTimeout(timer);
 }
 ```
 
 What to notice:
-- `persistQueryClient` does both jobs: it restores the copy now, and from then on saves the cache after every change. It returns a pair, and `[, restored]` skips the first item and keeps the second, a promise that settles when the restore is done.
+- `copies` is the list of saved copies, each with its own persister, `buster`, `maxAge` and `dehydrateOptions` (`savedCopies` in the same file). The first is the reads, this note's subject. The second, since v0.3, is the queue of waiting changes ([[Offline cancels]]).
+- `persistQueryClient` does both jobs for one copy: it restores it now, and from then on saves it after every change. It returns a pair, `[stop, restoring]`: a function that stops the saving, and a promise that settles when the restore is done. The `stop` functions are kept so that handing the app to another tab can stop this one saving ([[Offline cancels]]).
 - `buster` and `maxAge` are the two checks of this step. Another version's copy, or one older than 30 days, is deleted instead of restored.
-- `Promise.race` waits for whichever finishes first: the restore, or the 1-second timer (the wait explained below). `.catch(() => undefined)` turns a failed restore into "carry on with an empty cache", so this function never fails.
+- `.catch(() => undefined)` turns a failed restore into "carry on without that copy", and `Promise.all` waits for both copies. `Promise.race` then waits for whichever finishes first: both restores, or the 1-second timer (the wait explained below). So this function never fails.
 
 3. **The router draws.** Only now. The `/` route's `beforeLoad` (and `requireSession` on the series screens) calls `ensureQueryData(meQuery)`, which returns what's cached without asking the server, so your user is there. If the restore had run *after* the first draw, `beforeLoad` would have found an empty cache, tried the network, and shown "You're offline" instead of your name.
 
 *From `apps/web/src/main.tsx` and `apps/web/src/lib/require-session.ts` (shortened):*
 ```tsx
 // apps/web/src/main.tsx
-await restoreQueryCache(queryClient);
-
-createRoot(root).render(
+async function startApp() {
   // …
-);
+  await restoreQueryCache(queryClient);
+  // …
+  root.render(
+    // …
+  );
+}
 
 // apps/web/src/lib/require-session.ts
     await queryClient.ensureQueryData(meQuery);
 ```
 
-The `await` at the top level of `main.tsx` pauses the whole file, so `render`, and with it the router and every `beforeLoad`, only runs once the cache is back. By then `ensureQueryData` finds `['me']` in the cache and makes no request.
+`startApp` is an `async` function, and its `await` pauses it until the cache is back, so `root.render`, and with it the router and every `beforeLoad`, only runs after that. By then `ensureQueryData` finds `['me']` in the cache and makes no request. (Since v0.3, `startApp` itself runs only once this tab is the one running the app: [[Offline cancels]].)
 
 4. **The screen.** It draws from the restored answers. Each screen then refetches what it shows, because the answers are "stale" ([[Server state and caching]]). With no signal, the fetch fails at once with a `NetworkError` (`lib/api.ts`).
 5. **The badge.** The newest fetch of `me` or a calendar week got no answer, so `<SyncBadge />` says "offline · last synced 2:02 PM". 2:02 PM is when the server last answered (`dataUpdatedAt`, saved with each answer), shown in your profile's zone (`Asia/Kolkata`).
@@ -118,7 +124,7 @@ The `await` at the top level of `main.tsx` pauses the whole file, so `render`, a
 | The whole copy is dropped if saved more than 30 days ago | `maxAge` on restore | A copy that old would mislead more than help |
 | The whole copy is dropped if saved by another version | `buster: CACHE_BUSTER` | Bump `'v0.2.0'` when a cached shape changes (a renamed field in `Me`, say), so a new app never misreads old data |
 | Saved at most once a second | `throttleTime: 1_000` | A refetch of ten queries is one write, not ten |
-| Writes in progress are never saved | `shouldDehydrateMutation: () => false` | Writes are online-only in v0.2 (D-048) |
+| No write goes into this copy | `shouldDehydrateMutation: () => false` | Writes are online-only (D-048). The one exception, a change to one occurrence, has its own copy ([[Offline cancels]]) |
 
 *From `apps/web/src/lib/persist.ts` (shortened):*
 ```ts
@@ -135,10 +141,9 @@ export function shouldPersistQuery(
   );
 }
 
-/** What goes into the saved copy. */
+/** What goes into the saved reads: the queries above, and no mutation. */
 export const dehydrateOptions = {
   shouldDehydrateQuery: (query: Query) => shouldPersistQuery(query),
-  // Writes are online-only in v0.2 (D-048): no queued mutation is ever saved.
   shouldDehydrateMutation: () => false,
 };
 // …
@@ -161,7 +166,7 @@ What to notice:
 
 *From `apps/web/src/lib/query-client.ts` (shortened):*
 ```ts
-  return new QueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         // …
@@ -233,7 +238,7 @@ What to notice:
 
 A detail that matters: TanStack Query's `onlineManager` starts out believing it's **online**, and changes its mind only on the browser's `offline` event. On a cold open in aeroplane mode no event fires, so it still believes "online", tries, retries twice (about 3 s), then gives up. That's why the badge doesn't rely on `onlineManager` alone (next section).
 
-Writes are different: `mutations: { networkMode: 'always' }`. The default would hold a write made offline and send it later, maybe after you'd left the screen. In v0.2, a write either goes now or fails with a `NetworkError` that the form shows.
+Writes are different: `mutations: { networkMode: 'always' }`. The default would hold a write made offline and send it later, maybe after you'd left the screen. A write either goes now or fails with a `NetworkError` that the form shows. The one exception since v0.3, a change to one occurrence, sets `'online'` on purpose and waits ([[Offline cancels]]).
 
 ## The badge
 
@@ -256,7 +261,7 @@ flowchart TD
 
 *From `apps/web/src/lib/sync-status.ts`:*
 ```ts
-export function syncStatus(queries: readonly CachedQuery[], browserOnline: boolean): SyncStatus {
+export function syncStatus(queries: readonly CachedQuery[], browserOnline: boolean): Connection {
   let lastSyncedAt: number | null = null;
   let newest: Outcome | null = null;
   for (const query of queries) {
@@ -274,7 +279,7 @@ export function syncStatus(queries: readonly CachedQuery[], browserOnline: boole
 }
 ```
 
-`WATCHED_KEYS` is `'calendar'` and `'me'`, and every other query is skipped. `latestOutcome` (just above it in the file) turns one query into `{ at, result }`: `'no-answer'` when its error is a `NetworkError`, `'error'` for any other failure, `'ok'` for a success. A query still retrying gets `at: Infinity`, so it always counts as newest. The last three lines are the flowchart: the browser's word, or the newest outcome, decides.
+`WATCHED_KEYS` is `'calendar'` and `'me'`, and every other query is skipped. `latestOutcome` (just above it in the file) turns one query into `{ at, result }`: `'no-answer'` when its error is a `NetworkError`, `'error'` for any other failure, `'ok'` for a success. A query still retrying gets `at: Infinity`, so it always counts as newest. The last three lines are the flowchart: the browser's word, or the newest outcome, decides. The return type, `Connection`, is the two answers the query cache can give, `state` and `lastSyncedAt`. Since v0.3 the badge has a third, how many changes are waiting, which comes from the queue instead ([[Offline cancels]]).
 
 - **The time** is 12-hour (B11), in `profile.tzid` from the cached `me`, through `Intl.DateTimeFormat` with `hourCycle: 'h12'`. When it wasn't today in that zone, it gets the date too: "12 Oct, 2:02 PM". It's built from parts (`hour`, `minute`, `dayPeriod`) instead of taken whole, because newer versions of the browser's date library put an invisible narrow space before "PM", which would make the tests differ by machine.
 - **Accessibility:** the pill sits in a `role="status"` element, a polite **live region**: a screen reader announces its text when it changes, without moving the focus. The element stays in the page even when empty, because live regions added or un-hidden at the last moment often aren't announced.
@@ -289,12 +294,13 @@ export function syncStatus(queries: readonly CachedQuery[], browserOnline: boole
   const read = () => syncStatus(queryClient.getQueryCache().getAll(), online);
   const state = useSyncExternalStore(subscribe, () => read().state);
   const lastSyncedAt = useSyncExternalStore(subscribe, () => read().lastSyncedAt);
-  return { state, lastSyncedAt };
+  return { state, lastSyncedAt, waitingChanges };
 ```
 
 What to notice:
 - `useSyncExternalStore(subscribe, snapshot)`: React calls `subscribe` to hear about changes, and after each one calls `snapshot`. It re-renders only if the result differs (`!==`) from last time.
 - That's why there are two calls, each returning a plain string or number. One call returning `{ state, lastSyncedAt }` would build a new object every time, which is never `===` the last one, so React would re-render on every cache event.
+- `waitingChanges` arrived in v0.3: the number of changes waiting to be sent, counted from the queue by `useQueuedChanges` higher up in the same hook, so the badge can say "2 changes waiting" ([[Offline cancels]]).
 
 The series form uses the same `useSyncStatus()` to turn Save off, so the badge and the button always agree ([[Series form]]).
 
@@ -302,7 +308,7 @@ Where it goes: in the calendar's title bar (`src/routes/index.tsx`), and in the 
 
 ## Signing out
 
-`forgetCachedData(queryClient)` empties the cache in memory (`queryClient.clear()`) **and** deletes the saved copy (`persister.removeClient()`). Without the second half, the next person to open the app on that phone would see your timetable, offline, without signing in. A save already scheduled by the clear may still land afterwards, but it holds an empty cache, so nothing of yours survives either way. If IndexedDB is broken, the delete fails quietly: there was most likely nothing saved, and the sign-out on the server already worked.
+`forgetCachedData(queryClient)` empties the cache in memory (`queryClient.clear()`) **and** deletes the saved copies (`removeClient()` on each persister). Without the second half, the next person to open the app on that phone would see your timetable, offline, without signing in. A save already scheduled by the clear may still land afterwards, but it holds an empty cache, so nothing of yours survives either way. If IndexedDB is broken, the delete fails quietly: there was most likely nothing saved, and the sign-out on the server already worked.
 
 *From `apps/web/src/lib/persist.ts`:*
 ```ts
@@ -310,22 +316,26 @@ export async function forgetCachedData(queryClient: QueryClient): Promise<void> 
   queryClient.clear();
   // A save already scheduled by the clear may still land after this; it holds
   // an empty cache, so nothing of the user's survives either way.
-  try {
-    await persister.removeClient();
-  } catch {
-    // IndexedDB is broken, so it most likely never held a copy. Signing out on
-    // the server already worked; don't make the button fail over this.
-  }
+  await Promise.all(
+    copies.map(async (copy) => {
+      try {
+        await copy.persister.removeClient();
+      } catch {
+        // IndexedDB is broken, so it most likely never held a copy. Signing out
+        // on the server already worked; don't make the button fail over this.
+      }
+    }),
+  );
 }
 ```
 
-`removeClient` deletes the one IndexedDB value, `tasks-query-cache`. `catch {` with no `(error)` swallows the failure on purpose.
+`removeClient` deletes one IndexedDB value, and there's one per copy: `tasks-query-cache`, and since v0.3 `tasks-queued-changes`. `queryClient.clear()` empties the mutation cache too, so the waiting changes go with everything else, which is why the button warns first when any are queued ([[Offline cancels]]). `catch {` with no `(error)` swallows the failure on purpose.
 
 The sign-out button (`src/components/SignOutButton.tsx`) calls `await forgetCachedData(queryClient)` after the server has ended the session. (Its first version only called `queryClient.clear()`, which left the saved copy on the phone. That was fixed when the slices were joined.)
 
 ## What doesn't work offline yet, and why
 
-- **Any change:** adding, editing or deleting a class, or making a group. Save and Delete are greyed out with "You're offline. Changes need a connection." D-048 keeps v0.2's writes online-only, because a form like this one changes many fields and maybe creates a group first, and checking that against stale data offline is where bugs hide. v0.3 adds the first offline write, cancelling or skipping one class, as a **paused mutation** that's saved and replayed when you're back online. That needs `setMutationDefaults`, so a replayed write still knows which request to send after a reload (D-046).
+- **Any change:** adding, editing or deleting a class, or making a group. Save and Delete are greyed out with "You're offline. Changes need a connection." D-048 keeps v0.2's writes online-only, because a form like this one changes many fields and maybe creates a group first, and checking that against stale data offline is where bugs hide. v0.3 added the first offline write, cancelling or skipping one class, as a **paused mutation** that's saved and replayed when you're back online, with `setMutationDefaults` so a replayed write still knows which request to send after a reload (D-046). How it works: [[Offline cancels]].
 - **A week you never opened** (or not in the last 30 days): nothing was saved, so the calendar can't show it.
 - **Anything newer than the last sync:** a class moved at 3 PM still shows at its old time until a refetch works. The badge is the warning.
 - **Storage the browser takes back:** low disk space on Android, or 7 days without opening the site in Safari unless it's installed ([[IndexedDB and offline storage]]). The server still has everything, and the next open with a network fills the copy again.
@@ -336,7 +346,7 @@ Unit tests cover the filter, the adapter against an in-memory map, a save-and-re
 
 ## Check yourself
 
-- **Predict:** you move `await restoreQueryCache(queryClient)` in `main.tsx` to after `createRoot(...).render(...)`. What do you see when you open the app in aeroplane mode, and why? (Hint: what does `ensureQueryData` find?)
+- **Predict:** you move `await restoreQueryCache(queryClient)` in `main.tsx` to after `root.render(...)`. What do you see when you open the app in aeroplane mode, and why? (Hint: what does `ensureQueryData` find?)
 - **Trace:** you're on KIIT Wi-Fi before logging in to the portal, and `navigator.onLine` is `true`. Follow the `me` refetch: how many tries, what error, and what do the badge and the Save button show?
 - **Break it:** delete `gcTime: Number.POSITIVE_INFINITY` from `lib/query-client.ts`. You look at next week, close the app, and open it an hour later, offline. Is next week still there? What if you open it 3 minutes later?
 - **Break it:** change `shouldPersistQuery` back to `query.state.status === 'success' && ...`. Open the app offline twice in a row. What does the second open show, and which test fails?

@@ -128,7 +128,7 @@ D-042 holds it back until such a request exists (v3). Every v0.2 create carries 
 
 - **Retry only what can help:** no answer, or a 5xx. Never a 4xx, because the same request gets the same refusal ([[Error responses]]).
 - **Wait between tries, longer each time.** This is **backoff**. TanStack Query's default delay doubles each time (1 s, then 2 s, then 4 s, up to 30 s), so a struggling server isn't hammered. Our app gives up after two retries (below), so in practice it waits 1 s and then 2 s.
-- **Retry automatically only what's idempotent.** TanStack Query retries reads by default but never writes (its mutation default is zero retries). The offline queue replays writes instead, and that's safe only because our writes are idempotent.
+- **Retry automatically only what's idempotent.** TanStack Query retries reads by default but never writes (its mutation default is zero retries). The offline queue replays writes instead, and that's safe only because our writes are idempotent. Since v0.3 it does: a cancel waiting in the queue is retried with backoff, 1 s, 2 s, 4 s and so on up to 30 s apart, for as long as the failure is one that time can fix ([[Offline cancels]]).
 
 In our app, the rule for reads is one function:
 
@@ -147,7 +147,7 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 What to notice:
 - An `ApiError` below 500 is a 4xx: the server answered and refused, so asking again can't help.
 - A `NetworkError` while the phone says it's offline isn't retried either. The screen says "You're offline" at once instead of spinning, and the query is fetched again when the connection returns.
-- `failureCount < 2` means the first try plus at most two retries. It's set under `queries` only; `mutations` keep TanStack's default of zero retries.
+- `failureCount < 2` means the first try plus at most two retries. It's set under `queries` only; `mutations` keep TanStack's default of zero retries, except the queued cancels, which set their own rule ([[Mutations and offline queues]]).
 
 ## Check yourself
 - Trace the club-meeting story with `on conflict (id) do nothing`: two requests with the same id. How many rows exist at the end, and what status does each request get?

@@ -75,26 +75,35 @@ flowchart TD
 Say you tap the Tasks icon on your phone at 9:15 on a Wednesday, already signed in.
 
 1. **The shell loads.** The service worker hands over `index.html`, the JS and the CSS from its cache, without waiting for the network. (On the first visit ever, they come from the server.)
-2. **`main.tsx` runs.** It registers the service worker, which also checks for a newer deploy. Then it puts back the copy of the cache saved in IndexedDB last time, so your user and the weeks you looked at are in memory before anything draws. Then it draws the router.
+2. **`main.tsx` runs.** It registers the service worker, which also checks for a newer deploy. Since v0.3 it then makes sure no other tab is running the app ([[Offline cancels]]). Then it puts back the copy of the cache saved in IndexedDB last time, so your user and the weeks you looked at are in memory before anything draws. Then it draws the router.
 
 *From `apps/web/src/main.tsx` (shortened):*
 ```tsx
 registerServiceWorker();
 
-// …
-await restoreQueryCache(queryClient);
+async function startApp() {
+  // …
+  await restoreQueryCache(queryClient);
+  // …
+  root.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+}
 
-createRoot(root).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// …
+runInOneTab({
+  start: () => void startApp(),
+  // …
+});
 ```
 
 What to notice:
-- `await` at the top level of the file: the whole file pauses on that line until the saved cache is back, or a second has passed. Only then does `render` draw anything.
+- `runInOneTab` calls `start`, and so `startApp`, only once this tab holds the one-tab lock. A second tab shows "Tasks is open in another tab" instead ([[Offline cancels]]).
+- Inside `startApp`, `await` pauses on that line until the saved cache is back, or a second has passed. Only then does `render` draw anything.
 - `QueryClientProvider` hands the one cache to every component below it, and `RouterProvider` draws whichever screen matches the address bar. The same `queryClient` also goes to every route as `context` (`router.ts`).
 - `StrictMode` is React's development checker (it draws each component twice in `pnpm dev`, to catch bugs). It does nothing in the production build.
 
@@ -157,20 +166,22 @@ What to notice:
 
 **Saving a class:** the form checks your input with the shared rules, sends `POST /api/v1/series` through `apiSend`, and on success marks every cached calendar week as out of date, so the week on screen is fetched again with the new class in it. Every step, from the tap to the database and back: [[One write, line by line]].
 
-**Signing out** (avatar → Sign out): `authClient.signOut()` deletes the session on the server. Then `forgetCachedData` wipes the cache in memory **and** the copy in IndexedDB, so the next person to use the phone finds nothing of yours, not even offline. Then the router goes to `/login`. If the server can't be reached, the screen says so and you stay signed in, instead of pretending.
+**Signing out** (avatar → Sign out): `authClient.signOut()` deletes the session on the server. Then `forgetCachedData` wipes the cache in memory **and** the copies in IndexedDB, so the next person to use the phone finds nothing of yours, not even offline. Then the router goes to `/login`. If the server can't be reached, the screen says so and you stay signed in, instead of pretending. Since v0.3 it also warns first when changes are still waiting to be sent, because signing out loses them ([[Offline cancels]]).
 
 *From `apps/web/src/components/SignOutButton.tsx` (shortened):*
 ```tsx
   async function signOut() {
     setBusy(true);
-    setFailed(false);
+    setFailed(null);
     try {
       // Deletes the session on the server and clears the cookie.
       const { error } = await authClient.signOut();
       if (error) throw error;
     } catch {
-      // Still signed in on the server: say so rather than pretend.
-      setFailed(true);
+      // Still signed in on the server: say so rather than pretend. Offline,
+      // forgetting only this phone's copy would leave the session open for
+      // whoever brings the phone back online, so nothing is forgotten.
+      setFailed(navigator.onLine ? 'refused' : 'offline');
       setBusy(false);
       return;
     }
@@ -181,7 +192,7 @@ What to notice:
 ```
 
 What to notice:
-- The order is the point: the server first. If that fails, `return` leaves before anything is forgotten, so the cache still matches the session you still have, and the button says "Couldn't sign out".
+- The order is the point: the server first. If that fails, `return` leaves before anything is forgotten, so the cache still matches the session you still have. The message says why: with no signal, "You're offline. Signing out needs the server, so nothing was deleted."; with a signal, "Couldn't sign out. Try again."
 - Only after the server agreed: `forgetCachedData` (memory and IndexedDB), then `/login`.
 - `replace: true` swaps the current history entry instead of adding one, so the phone's Back button can't take you back to the calendar.
 

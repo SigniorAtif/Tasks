@@ -36,7 +36,7 @@ To look inside: Chrome DevTools → **Application** → **IndexedDB**.
 - **Safari** (any iPhone browser) deletes a site's stored data after 7 days without a visit, unless the site is installed on the home screen (D-048).
 - And the user can always clear site data in settings.
 
-So browser storage is a **cache, never the only copy**. For us that's fine: the server has everything, and losing the cache only makes the next open slower. (From v0.3, writes waiting to be sent will be the exception. Losing those loses a change, which is why the plan asks for persistent storage then.)
+So browser storage is a **cache, never the only copy**. For us that's fine: the server has everything, and losing the cache only makes the next open slower. (Since v0.3, writes waiting to be sent are the exception: losing those loses a change ([[Offline cancels]]). The plan asks for persistent storage for them; the app doesn't request it yet.)
 
 ## Why API data goes in IndexedDB, through TanStack Query
 
@@ -59,21 +59,32 @@ export const CACHE_BUSTER = 'v0.3.0';
 // …
 export const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // …
-const persister = createPersister({ get, set, del });
+export function savedCopies(
+  store: KeyValueStore,
+  { cacheBuster = CACHE_BUSTER, throttleTime = 1_000 } = {},
+) {
+  return [
+    {
+      persister: createPersister(store, throttleTime),
+      buster: cacheBuster,
+      maxAge: CACHE_MAX_AGE_MS,
+      dehydrateOptions,
+    },
+    // … the second copy, the queue of waiting changes
+  ];
+}
 // …
-  const [, restored] = persistQueryClient({
-    queryClient,
-    persister,
-    buster: CACHE_BUSTER,
-    maxAge: CACHE_MAX_AGE_MS,
-    dehydrateOptions,
-  });
+const deviceStore: KeyValueStore = { get, set, del };
+const copies = savedCopies(deviceStore);
 ```
 
 What to notice:
-- idb-keyval's `get`, `set` and `del` are all the persister needs, because the whole cache is one value under one key.
+- idb-keyval's `get`, `set` and `del` are all the persister needs, because the whole cache is one value under one key. `deviceStore` bundles the three; the tests pass an in-memory map with the same three functions instead.
+- Each saved copy is a persister plus its two guards. `restoreQueryCache` hands each one to TanStack's `persistQueryClient`, which restores it at startup and saves it after every change ([[Offline reads]]).
+- `cacheBuster` is a parameter with `CACHE_BUSTER` as its default, so a test can pretend a new version bumped it.
 - `maxAge` is 30 days (days × hours × minutes × seconds × milliseconds), not the library's 24 hours, so last month's weeks still open on the bus.
 - `buster` is a plain string. A new app version with a different string throws the old copy away instead of misreading it. v0.3 is the first real use: groups lost their first day, so a phone still holding v0.2's groups (with `activeFrom`, and no `untilDate`) would have drawn the group picker from fields that no longer exist. Bumping `v0.2.0` to `v0.3.0` makes that phone start clean and fetch the new shape. The cost is one cold start: until it's back online, the phone shows nothing rather than something wrong.
+- The second copy in the list holds the changes waiting to be sent, under its own key and its own version string, so a `buster` bump never throws one away ([[Offline cancels]]).
 
 ## "offline · last synced 14:02"
 
