@@ -18,6 +18,7 @@ import {
   type AsyncStorage,
   type PersistedClient,
   persistQueryClient,
+  persistQueryClientSave,
 } from '@tanstack/react-query-persist-client';
 import { del, get, set } from 'idb-keyval';
 import { isQueuedChange } from './occurrence-queue.ts';
@@ -229,6 +230,29 @@ export async function restoreQueryCache(
   });
   await Promise.race([restored, timeout]);
   clearTimeout(timer);
+}
+
+/** Stops writing the saved copies: another tab owns them now (one-tab.ts). */
+export function stopSavingCopies(): void {
+  for (const stop of stopSaving.splice(0)) stop();
+}
+
+/**
+ * For handing the app to another tab (one-tab.ts): stops saving, then writes
+ * both copies once more. Written at once, not up to a second later as usual
+ * (`throttleTime`), so the other tab reads exactly what this one had, and this
+ * tab never writes over what the other saves next.
+ */
+export async function handOverSavedCopies(
+  queryClient: QueryClient,
+  store: KeyValueStore = deviceStore,
+): Promise<void> {
+  stopSavingCopies();
+  await Promise.all(
+    savedCopies(store, { throttleTime: 0 }).map((copy) =>
+      persistQueryClientSave({ queryClient, ...copy }),
+    ),
+  );
 }
 
 /**

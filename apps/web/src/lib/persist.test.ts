@@ -12,6 +12,7 @@ import {
   CACHE_MAX_AGE_MS,
   createPersister,
   dehydrateOptions,
+  handOverSavedCopies,
   type KeyValueStore,
   lastGoodAnswers,
   savedCopies,
@@ -229,6 +230,20 @@ describe('the queue of occurrence changes', () => {
 
     const after = await restore(store, 'v9.9.9');
     expect(after.getQueryData(['me'])).toBeUndefined();
+    expect(queuedChanges(after)).toEqual([{ ...CHANGE, waiting: true }]);
+  });
+
+  it('hands over to another tab with both copies written at once, not a second later', async () => {
+    const store = memoryStore();
+    const before = createQueryClient();
+    before.setQueryData(['me'], { user: { name: 'Alice' } });
+    onlineManager.setOnline(false);
+    queueOccurrenceChange(before, CHANGE);
+
+    await handOverSavedCopies(before, store);
+
+    const after = await restore(store);
+    expect(after.getQueryData(['me'])).toEqual({ user: { name: 'Alice' } });
     expect(queuedChanges(after)).toEqual([{ ...CHANGE, waiting: true }]);
   });
 

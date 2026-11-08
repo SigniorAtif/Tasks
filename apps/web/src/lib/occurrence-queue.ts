@@ -23,6 +23,11 @@
 //   stops showing it, the weeks are fetched again, and the screen says so.
 //   An error from the app itself is dropped the same way, since a change that
 //   can never be sent would hold every change behind it.
+//
+// The queue lives in one tab: the app runs in one tab at a time (one-tab.ts),
+// because two tabs would each save their own queue over the other's, and a
+// change made offline in one could vanish. Sending a change twice would be
+// harmless (the request is idempotent, D-042); losing one isn't.
 
 import type { Mutation, QueryClient } from '@tanstack/react-query';
 import type { Occurrence } from '@tasks/core';
