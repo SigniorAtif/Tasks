@@ -6,7 +6,6 @@
 
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { ApiError, NetworkError } from './api.ts';
-import { registerOccurrenceChanges } from './occurrence-queue.ts';
 
 /**
  * Whether a failed request is worth trying again. A 4xx answer won't change if
@@ -25,7 +24,7 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 }
 
 export function createQueryClient(): QueryClient {
-  const queryClient = new QueryClient({
+  return new QueryClient({
     defaultOptions: {
       queries: {
         retry: shouldRetry,
@@ -44,15 +43,12 @@ export function createQueryClient(): QueryClient {
         gcTime: Number.POSITIVE_INFINITY,
       },
       mutations: {
-        // Writes are online-only (D-048). The default ('online') would hold a
-        // write made offline and send it later, maybe after the user has left
-        // the screen. Sending it at once fails fast with a NetworkError, which
-        // the form shows. The one exception, occurrence changes, is queued on
-        // purpose and sets its own (occurrence-queue.ts).
+        // Writes are online-only in v0.2 (D-048). The default ('online') would
+        // hold a write made offline and send it later, maybe after the user
+        // has left the screen. Sending it at once fails fast with a
+        // NetworkError, which the form shows.
         networkMode: 'always',
       },
     },
   });
-  registerOccurrenceChanges(queryClient);
-  return queryClient;
 }

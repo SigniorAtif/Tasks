@@ -21,18 +21,13 @@ export const Route = createFileRoute('/login')({
   validateSearch: (search: Record<string, unknown>): LoginSearch => ({
     error: typeof search.error === 'string' && search.error !== '' ? search.error : undefined,
   }),
-  // Already signed in? Skip the login screen. Asks the server, never the
-  // cache: the user saved on the phone outlives an expired session, and
-  // trusting it sent the app back to the calendar, whose 401 sent it here
-  // again, round and round on a blank page. Any failure (no session, offline)
-  // means "show the login screen", so it isn't retried.
+  // Already signed in? Skip the login screen. Any failure (no session,
+  // offline) means "show the login screen", so it isn't retried.
   beforeLoad: async ({ context }) => {
-    const signedIn = await context.queryClient
-      .fetchQuery({ ...meQuery, retry: false, staleTime: 0 })
-      .then(
-        () => true,
-        () => false,
-      );
+    const signedIn = await context.queryClient.ensureQueryData({ ...meQuery, retry: false }).then(
+      () => true,
+      () => false,
+    );
     if (signedIn) throw redirect({ to: '/' });
   },
   component: LoginScreen,

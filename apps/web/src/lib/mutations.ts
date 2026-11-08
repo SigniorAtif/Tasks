@@ -6,9 +6,8 @@
 // occurrence instead gets the occurrence back and puts it straight into the
 // cached calendar weeks, with no refetch.
 //
-// Writes are online-only (D-048): nothing is queued while offline, and the
-// screens disable their buttons instead. The one exception is a change to one
-// occurrence, which is queued (occurrence-queue.ts) so it works with no signal.
+// Writes are online-only (D-048): nothing is queued while offline. The screens
+// disable their buttons when offline instead. (#9 queues occurrence changes.)
 
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -154,5 +153,23 @@ export function useDeleteSeries() {
   return useMutation({
     mutationFn: deleteSeries,
     onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+/**
+ * Cancel, restore or change the reason of one occurrence; the calendar shows the
+ * answer. `onChanged` runs after that. It belongs to the mutation, not to one
+ * `mutate` call, so it runs even if the screen that sent the change has closed.
+ */
+export function useChangeOccurrence(
+  onChanged?: (occurrence: Occurrence, sent: OccurrenceChange) => void,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: changeOccurrence,
+    onSuccess: (occurrence, sent) => {
+      putOccurrence(queryClient, occurrence);
+      onChanged?.(occurrence, sent);
+    },
   });
 }

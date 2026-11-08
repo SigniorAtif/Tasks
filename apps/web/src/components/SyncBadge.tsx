@@ -6,9 +6,8 @@ import { useSyncStatus } from '../lib/use-sync-status.ts';
 
 /**
  * A small pill, "offline · last synced 2:02 PM", shown while the screen is
- * drawn from the copy saved on the device instead of a fresh answer (D-046),
- * or while changes wait for the server ("2 changes waiting"). Nothing at all
- * while online, up to date and with nothing waiting. The rules are in
+ * drawn from the copy saved on the device instead of a fresh answer (D-046).
+ * Nothing at all while online and up to date. The rules are in
  * src/lib/sync-status.ts; this only draws.
  */
 export function SyncBadge() {

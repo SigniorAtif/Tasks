@@ -1,8 +1,7 @@
 // What the "offline · last synced 2:02 PM" badge says (D-046), worked out from
-// the query cache and the queue of changes. Pure functions, so the rules can be
-// tested without a browser.
+// the query cache. Pure functions, so the rules can be tested without a browser.
 //
-// Three questions:
+// Two questions:
 // 1. Are we offline? The browser's own flag (`navigator.onLine`, which TanStack
 //    Query's `onlineManager` follows) only knows whether the phone has *a*
 //    network. On campus Wi-Fi that needs a login page it says "online" while
@@ -10,9 +9,6 @@
 //    the calendar or the user failed with no answer at all, we're offline.
 // 2. When did we last hear from the server? The newest successful fetch of the
 //    calendar or the user, restored ones included.
-// 3. How many of my changes is it still waiting to hear? The queued
-//    occurrence changes marked as waiting (occurrence-queue.ts), counted by
-//    the caller.
 
 import type { Query } from '@tanstack/react-query';
 import type { IanaZone } from '@tasks/core';
@@ -37,12 +33,7 @@ export interface SyncStatus {
   state: 'synced' | 'offline' | 'failing';
   /** The newest successful fetch, in epoch ms. `null` if nothing was ever fetched. */
   lastSyncedAt: number | null;
-  /** Waiting changes: queued occurrence changes the server doesn't have yet (`isWaiting`). */
-  waitingChanges: number;
 }
-
-/** Questions 1 and 2, the ones the query cache answers. */
-export type Connection = Pick<SyncStatus, 'state' | 'lastSyncedAt'>;
 
 /** The reads that show whether the calendar on screen is current. */
 const WATCHED_KEYS: ReadonlySet<unknown> = new Set(['calendar', 'me']);
@@ -63,8 +54,8 @@ function latestOutcome(state: CachedQuery['state']): Outcome | null {
   return null;
 }
 
-/** Reads whether we're in touch with the server, and since when, from the cached queries. */
-export function syncStatus(queries: readonly CachedQuery[], browserOnline: boolean): Connection {
+/** Reads the badge's two answers from the cached queries. */
+export function syncStatus(queries: readonly CachedQuery[], browserOnline: boolean): SyncStatus {
   let lastSyncedAt: number | null = null;
   let newest: Outcome | null = null;
   for (const query of queries) {
@@ -115,18 +106,10 @@ export function formatSyncedAt(epochMs: number, now: number, tzid?: IanaZone): s
   return `${part('day')} ${part('month')}, ${time}`;
 }
 
-/**
- * The badge's text, or `null` when there's nothing to say (online, up to date,
- * nothing waiting): `offline · 3 changes waiting · last synced 2:02 PM`.
- */
+/** The badge's text, or `null` when there's nothing to say (online and up to date). */
 export function syncBadgeText(status: SyncStatus, now: number, tzid?: IanaZone): string | null {
-  const parts: string[] = [];
-  if (status.state !== 'synced') parts.push(status.state === 'offline' ? 'offline' : "can't sync");
-  const waiting = status.waitingChanges;
-  if (waiting > 0) parts.push(`${waiting} ${waiting === 1 ? 'change' : 'changes'} waiting`);
-  if (parts.length === 0) return null;
-  if (status.state !== 'synced' && status.lastSyncedAt !== null) {
-    parts.push(`last synced ${formatSyncedAt(status.lastSyncedAt, now, tzid)}`);
-  }
-  return parts.join(' · ');
+  if (status.state === 'synced') return null;
+  const head = status.state === 'offline' ? 'offline' : "can't sync";
+  if (status.lastSyncedAt === null) return head;
+  return `${head} · last synced ${formatSyncedAt(status.lastSyncedAt, now, tzid)}`;
 }

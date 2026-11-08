@@ -3,9 +3,6 @@
 // Change reason), plus a link to edit the whole series. Which buttons show is
 // decided by `sheetActions` (model/sheet.ts).
 //
-// A button hands its change to the screen, which queues it (it works offline,
-// #9), and the sheet closes at once: the calendar already shows the change.
-//
 // A native <dialog> opened with showModal(): the browser keeps focus inside it,
 // Escape closes it, and the calendar behind can't be tapped. index.css makes it
 // a bottom sheet on a phone and a dialog in the middle of the screen from 768 px.
@@ -13,28 +10,27 @@
 import { Link } from '@tanstack/react-router';
 import type { IanaZone, Occurrence, ScheduleGroup, UpdateOccurrence } from '@tasks/core';
 import { useEffect, useId, useRef } from 'react';
+import { describeError } from '../lib/api.ts';
+import { useChangeOccurrence } from '../lib/mutations.ts';
+import { useOnline } from '../lib/use-online.ts';
 import { longDayLabel, timeRangeLabel } from './model/format.ts';
 import { type CancelButton, sheetActions } from './model/sheet.ts';
 
 export function OccurrenceSheet({
   occurrence,
-  waiting,
   group,
   zone,
   onClose,
-  onChange,
+  onCancelled,
 }: {
-  /** As the calendar shows it: with any queued change already applied. */
   occurrence: Occurrence;
-  /** A change to it hasn't reached the server yet. */
-  waiting: boolean;
   /** Its group. Until the groups have loaded, the sheet offers no actions. */
   group: Pick<ScheduleGroup, 'attendance'> | undefined;
   zone: IanaZone;
-  /** The sheet closed, by a button, Escape, a tap outside it, or after an action. */
+  /** The sheet closed, by a button, Escape, a tap outside it, or after an action worked. */
   onClose: () => void;
-  /** An action was tapped: queue this change. The sheet then closes itself. */
-  onChange: (change: UpdateOccurrence) => void;
+  /** A class that was on is now cancelled: the screen offers Undo. */
+  onCancelled: (cancelled: Occurrence) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -51,11 +47,25 @@ export function OccurrenceSheet({
     return () => sheet.removeEventListener('click', closeOnBackdrop);
   }, []);
 
-  const actions = group ? sheetActions(occurrence, group) : null;
+  const online = useOnline();
+  // The Undo offer belongs to the mutation, not to this `mutate` call, so it still
+  // comes if the sheet is closed while the request is out.
+  const mutation = useChangeOccurrence((updated, sent) => {
+    if (sent.change.status === 'cancelled' && occurrence.status !== 'cancelled') {
+      onCancelled(updated);
+    }
+  });
+  const pending = mutation.isPending ? mutation.variables.change : undefined;
+  const actions = group ? sheetActions(occurrence, group, pending) : null;
+  const { originalDate } = occurrence;
+  const disabled = !online || mutation.isPending;
 
-  const send = (change: UpdateOccurrence) => {
-    onChange(change);
-    dialog.current?.close();
+  const send = (body: UpdateOccurrence) => {
+    if (originalDate === null) return;
+    mutation.mutate(
+      { seriesId: occurrence.seriesId, originalDate, change: body },
+      { onSuccess: () => dialog.current?.close() },
+    );
   };
 
   const time = timeRangeLabel(Date.parse(occurrence.start), Date.parse(occurrence.end), zone);
@@ -103,16 +113,16 @@ export function OccurrenceSheet({
         {actions?.state && (
           <p className="flex items-center gap-2 text-sm font-medium">{actions.state}</p>
         )}
-        {waiting && (
-          <p className="text-sm text-amber-800 dark:text-amber-300">
-            Waiting to sync: saved on this phone, not yet on the server.
-          </p>
-        )}
 
         {actions && actions.cancel.length > 0 && (
           <div className="grid auto-cols-fr grid-flow-col gap-2">
             {actions.cancel.map((button) => (
-              <ReasonButton key={button.word} button={button} onClick={() => send(button.change)} />
+              <ReasonButton
+                key={button.word}
+                button={button}
+                disabled={disabled}
+                onClick={() => send(button.change)}
+              />
             ))}
           </div>
         )}
@@ -120,8 +130,9 @@ export function OccurrenceSheet({
         {actions?.restore && (
           <button
             type="button"
+            disabled={disabled}
             onClick={() => actions.restore && send(actions.restore)}
-            className="rounded-xl bg-indigo-600 px-4 py-2.5 font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            className="rounded-xl bg-indigo-600 px-4 py-2.5 font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400"
           >
             Restore
           </button>
@@ -135,11 +146,23 @@ export function OccurrenceSheet({
                 <ReasonButton
                   key={button.word}
                   button={button}
+                  disabled={disabled}
                   onClick={() => send(button.change)}
                 />
               ))}
             </div>
           </div>
+        )}
+
+        {!online && (
+          <p role="status" className="text-sm text-amber-800 dark:text-amber-300">
+            You're offline. Cancelling works again once you're back online.
+          </p>
+        )}
+        {mutation.isError && (
+          <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+            {describeError(mutation.error).title}. {describeError(mutation.error).message}
+          </p>
         )}
 
         <Link
@@ -155,12 +178,21 @@ export function OccurrenceSheet({
 }
 
 /** Prof, Me or Not today: the word in large type, its small line under it. */
-function ReasonButton({ button, onClick }: { button: CancelButton; onClick: () => void }) {
+function ReasonButton({
+  button,
+  disabled,
+  onClick,
+}: {
+  button: CancelButton;
+  disabled: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className="flex flex-col items-center rounded-xl px-3 py-2.5 ring-1 ring-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:ring-slate-700 dark:hover:bg-slate-800"
+      className="flex flex-col items-center rounded-xl px-3 py-2.5 ring-1 ring-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 dark:ring-slate-700 dark:hover:bg-slate-800"
     >
       <span className="text-base font-semibold">{button.word}</span>
       {button.line && (

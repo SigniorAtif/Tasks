@@ -5,10 +5,9 @@
 // ever talks to the grid through these props, so the grid could be swapped
 // for a library such as FullCalendar by writing a component that takes the
 // same props, without touching the screen or the data code. Keep the props
-// small: anything added here is something a replacement would also need
-// (since #9, that includes drawing the "waiting" mark on `waitingKeys`).
+// small: anything added here is something a replacement would also need.
 
-import type { IanaZone, ISODate, Occurrence, OccurrenceKey, ScheduleGroup } from '@tasks/core';
+import type { IanaZone, ISODate, Occurrence, ScheduleGroup } from '@tasks/core';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cssVars } from './css-vars.ts';
 import { initialScrollMinute, minuteOfDayIn, todayIn } from './model/dates.ts';
@@ -26,13 +25,8 @@ export interface TimeGridProps {
   days: ISODate[];
   /** The display zone: the user's `profile.tzid`. Never the phone's own zone. */
   zone: IanaZone;
-  /**
-   * What to draw: the server's answer with any queued changes applied.
-   * Occurrences outside `days` are ignored.
-   */
-  occurrences: readonly Occurrence[];
-  /** Occurrences with a waiting change (one the server doesn't have yet): their blocks get a mark. */
-  waitingKeys?: ReadonlySet<OccurrenceKey>;
+  /** What the server computed. Occurrences outside `days` are ignored. */
+  occurrences: Occurrence[];
   /** Groups by id, for colours and names. A missing group draws in neutral grey. */
   groups: Record<string, GridGroup>;
   /** The server-corrected "now" in epoch ms (`serverNow` in lib/time.ts): the now line and today. */
@@ -50,7 +44,6 @@ export function TimeGrid({
   days,
   zone,
   occurrences,
-  waitingKeys,
   groups,
   nowMs,
   pxPerMin = 1,
@@ -123,7 +116,6 @@ export function TimeGrid({
                 block={block}
                 zone={zone}
                 group={groups[block.occ.groupId]}
-                waiting={waitingKeys?.has(block.occ.key) ?? false}
                 pxPerMin={pxPerMin}
                 onOpen={onOpen}
               />

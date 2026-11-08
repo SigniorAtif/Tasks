@@ -17,9 +17,12 @@ export interface ToastMessage {
  */
 export function Toast({
   message,
+  actionDisabled = false,
   onDismiss,
 }: {
   message: ToastMessage | null;
+  /** Greys out the action, such as Undo while offline (writes are online-only, D-048). */
+  actionDisabled?: boolean;
   onDismiss: () => void;
 }) {
   // The latest `onDismiss`, without restarting the timer when the screen re-renders.
@@ -41,11 +44,12 @@ export function Toast({
           {message.action && (
             <button
               type="button"
+              disabled={actionDisabled}
               onClick={() => {
                 message.action?.onClick();
                 onDismiss();
               }}
-              className="shrink-0 rounded-lg px-3 py-1.5 font-semibold text-indigo-300 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-indigo-300 dark:text-indigo-700 dark:hover:bg-slate-900/10 dark:focus-visible:outline-indigo-700"
+              className="shrink-0 rounded-lg px-3 py-1.5 font-semibold text-indigo-300 hover:bg-white/10 focus-visible:outline-2 disabled:opacity-50 focus-visible:outline-indigo-300 dark:text-indigo-700 dark:hover:bg-slate-900/10 dark:focus-visible:outline-indigo-700"
             >
               {message.action.label}
             </button>
