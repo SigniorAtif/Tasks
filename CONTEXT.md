@@ -82,6 +82,10 @@ _Avoid_: unknown, other
 Taking back a cancel, so the occurrence happens again; restoring one on a day off overrules the day off.
 _Avoid_: un-cancel, reschedule
 
+**Waiting change**:
+A cancel, restore or reason change made on the phone that the server doesn't have yet. It shows at once, marked "waiting to sync", and reaches the server when the signal does; signing out loses it.
+_Avoid_: pending, unsynced, offline change
+
 ### Changing the timetable
 
 **Move**:
