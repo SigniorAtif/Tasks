@@ -45,6 +45,8 @@ The trade-off: if the phone (offline) says "skipped" and the laptop says "Prof c
 
 What lost: no stripes until the server confirms. An offline cancel would look like it did nothing, and you'd tap it again.
 
+How it was built, and where the build moved away from this plan (the stripes drawn on top of the cache, a `401` that retries, one tab at a time, sign-out offline): [[Offline cancel choices]].
+
 ## A group is a folder, with no first day
 
 A group holds a name, a colour, an attendance setting and an optional **last day**. It has no first day. Each series has its own first and last day, and only those (plus the group's last day) decide where its classes appear.
