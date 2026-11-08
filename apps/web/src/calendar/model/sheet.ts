@@ -1,7 +1,7 @@
 // What the occurrence sheet offers. Tapping a class opens a sheet for that one
-// occurrence; which buttons it shows depends on the occurrence's state, its
-// group's attendance setting, and any change still on its way to the server.
-// Kept apart from React, so the rules are tested in Node.
+// occurrence; which buttons it shows depends on the occurrence's state (with
+// any queued change already applied, model/queued.ts) and its group's
+// attendance setting. Kept apart from React, so the rules are tested in Node.
 
 import type { CancelReason, Occurrence, ScheduleGroup, UpdateOccurrence } from '@tasks/core';
 import { reasonLabel } from './format.ts';
@@ -57,24 +57,19 @@ const NOTHING: SheetActions = { state: null, cancel: [], restore: null, changeRe
 export function sheetActions(
   occ: Pick<Occurrence, 'status' | 'cancelReason' | 'originalDate'>,
   group: Pick<ScheduleGroup, 'attendance'>,
-  pending?: UpdateOccurrence,
 ): SheetActions {
   // An extra has no original date to name it by; changing one arrives with extras in v0.3b.
   if (occ.originalDate === null) return NOTHING;
 
-  // A change on its way shows as done, so the sheet never offers to undo what's in flight.
-  const status = pending ? (pending.status ?? 'scheduled') : occ.status;
-  const reason = pending ? (pending.cancelReason ?? null) : occ.cancelReason;
-
-  if (status !== 'cancelled') {
+  if (occ.status !== 'cancelled') {
     return { ...NOTHING, cancel: group.attendance ? [PROF, ME] : [NOT_TODAY] };
   }
   return {
-    state: reasonInWords(reason, group.attendance),
+    state: reasonInWords(occ.cancelReason, group.attendance),
     cancel: [],
     restore: RESTORE,
     changeReason: group.attendance
-      ? [PROF, ME].filter((b) => b.change.cancelReason !== reason)
+      ? [PROF, ME].filter((b) => b.change.cancelReason !== occ.cancelReason)
       : [],
   };
 }
