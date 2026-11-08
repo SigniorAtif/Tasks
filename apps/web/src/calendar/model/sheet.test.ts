@@ -97,23 +97,6 @@ describe('sheetActions', () => {
     });
   });
 
-  describe('with a change still on its way to the server', () => {
-    it('shows the class as the change will leave it', () => {
-      expect(shown(sheetActions(scheduled, { attendance: true }, ME))).toEqual({
-        state: 'I skipped',
-        cancel: [],
-        restore: true,
-        changeReason: ['Prof'],
-      });
-      expect(shown(sheetActions(cancelled('skipped'), { attendance: true }, RESTORE))).toEqual({
-        state: null,
-        cancel: ['Prof', 'Me'],
-        restore: false,
-        changeReason: [],
-      });
-    });
-  });
-
   it('offers nothing on an extra class, which has no date of its own to change yet', () => {
     const extra = occurrence({ key: 'x:o1', originalDate: null, extra: true });
     expect(shown(sheetActions(extra, { attendance: true }))).toEqual({

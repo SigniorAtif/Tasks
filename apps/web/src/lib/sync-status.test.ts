@@ -105,22 +105,42 @@ describe('formatSyncedAt', () => {
 
 describe('syncBadgeText', () => {
   it('says nothing when synced', () => {
-    expect(syncBadgeText({ state: 'synced', lastSyncedAt: T }, T, 'Asia/Kolkata')).toBeNull();
+    expect(
+      syncBadgeText({ state: 'synced', lastSyncedAt: T, waitingChanges: 0 }, T, 'Asia/Kolkata'),
+    ).toBeNull();
   });
 
   it('says offline and when it last synced', () => {
-    expect(syncBadgeText({ state: 'offline', lastSyncedAt: T }, T + MIN, 'Asia/Kolkata')).toBe(
-      'offline · last synced 2:02 PM',
-    );
+    expect(
+      syncBadgeText(
+        { state: 'offline', lastSyncedAt: T, waitingChanges: 0 },
+        T + MIN,
+        'Asia/Kolkata',
+      ),
+    ).toBe('offline · last synced 2:02 PM');
   });
 
   it("says it can't sync when the server is failing", () => {
-    expect(syncBadgeText({ state: 'failing', lastSyncedAt: T }, T, 'Asia/Kolkata')).toBe(
-      "can't sync · last synced 2:02 PM",
+    expect(
+      syncBadgeText({ state: 'failing', lastSyncedAt: T, waitingChanges: 0 }, T, 'Asia/Kolkata'),
+    ).toBe("can't sync · last synced 2:02 PM");
+  });
+
+  it('says how many changes are waiting, even online', () => {
+    const status = { state: 'synced', lastSyncedAt: T, waitingChanges: 1 } as const;
+    expect(syncBadgeText(status, T, 'Asia/Kolkata')).toBe('1 change waiting');
+  });
+
+  it('puts the waiting changes between the state and the last sync', () => {
+    const status = { state: 'offline', lastSyncedAt: T, waitingChanges: 3 } as const;
+    expect(syncBadgeText(status, T + MIN, 'Asia/Kolkata')).toBe(
+      'offline · 3 changes waiting · last synced 2:02 PM',
     );
   });
 
   it('says only offline when nothing was ever synced', () => {
-    expect(syncBadgeText({ state: 'offline', lastSyncedAt: null }, T)).toBe('offline');
+    expect(syncBadgeText({ state: 'offline', lastSyncedAt: null, waitingChanges: 0 }, T)).toBe(
+      'offline',
+    );
   });
 });

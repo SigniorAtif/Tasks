@@ -7,6 +7,8 @@
 // Data: the whole Monday-to-Sunday week around the anchor, in both views, so
 // moving between days of one week needs no request, and the week next to it
 // on either side is fetched in the background so Previous and Next are instant.
+// It's drawn with the queued occurrence changes applied (model/queued.ts), so
+// a cancel shows at once, even offline.
 
 import {
   keepPreviousData,
@@ -15,14 +17,14 @@ import {
   useSuspenseQuery,
 } from '@tanstack/react-query';
 import { Navigate } from '@tanstack/react-router';
-import type { DateWindow, ISODate, Occurrence } from '@tasks/core';
+import type { DateWindow, ISODate, Occurrence, UpdateOccurrence } from '@tasks/core';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Toast, type ToastMessage } from '../components/Toast.tsx';
 import { describeError, isUnauthenticated } from '../lib/api.ts';
-import { useChangeOccurrence } from '../lib/mutations.ts';
+import { onChangeDropped, queueOccurrenceChange } from '../lib/occurrence-queue.ts';
 import { calendarQuery, groupsQuery, meQuery } from '../lib/queries.ts';
 import { isKnownZone } from '../lib/time.ts';
-import { useOnline } from '../lib/use-online.ts';
+import { useQueuedChanges } from '../lib/use-queued-changes.ts';
 import {
   addDays,
   type CalendarView,
@@ -34,6 +36,7 @@ import {
   weekDays,
 } from './model/dates.ts';
 import { dayHeader, dayLabel, longDayLabel, statusLabel, weekLabel } from './model/format.ts';
+import { applyChange, droppedNotice, withQueuedChanges } from './model/queued.ts';
 import { RESTORE } from './model/sheet.ts';
 import { OccurrenceSheet } from './OccurrenceSheet.tsx';
 import { type GridGroup, TimeGrid } from './TimeGrid.tsx';
@@ -117,24 +120,36 @@ export function CalendarScreen({
     return byId;
   }, [groups.data]);
 
-  // The occurrence whose sheet is open, as it was when its block was tapped.
+  const queued = useQueuedChanges();
+  const shown = useMemo(
+    () => withQueuedChanges(calendar.data?.occurrences ?? NO_OCCURRENCES, queued),
+    [calendar.data, queued],
+  );
+
+  // The occurrence whose sheet is open, as it was shown when its block was tapped.
   const [opened, setOpened] = useState<Occurrence | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const undo = useChangeOccurrence();
-  const online = useOnline();
-  // Undo sends exactly what Restore sends.
-  const offerUndo = (cancelled: Occurrence) => {
-    const { seriesId, originalDate } = cancelled;
+
+  // A queued change the server refused for good: a 404 when its series was
+  // deleted or no longer has that date, or anything else the server said no to.
+  useEffect(
+    () => onChangeDropped(queryClient, (dropped) => setToast({ text: droppedNotice(dropped) })),
+    [queryClient],
+  );
+
+  // Queues the change; the calendar shows it at once. A cancel of a class that
+  // was on offers Undo, which queues exactly what Restore sends.
+  const queueChange = (occ: Occurrence, change: UpdateOccurrence) => {
+    const { seriesId, originalDate, title } = occ;
     if (originalDate === null) return;
+    queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change });
+    if (change.status !== 'cancelled' || occ.status === 'cancelled') return;
     setToast({
-      text: `${cancelled.title} · ${statusLabel(cancelled)}`,
+      text: `${title} · ${statusLabel(applyChange(occ, change))}`,
       action: {
         label: 'Undo',
         onClick: () =>
-          undo.mutate(
-            { seriesId, originalDate, change: RESTORE },
-            { onError: (error) => setToast({ text: describeError(error).title }) },
-          ),
+          queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change: RESTORE }),
       },
     });
   };
@@ -147,7 +162,6 @@ export function CalendarScreen({
   const previous = stepAnchor(anchor, view, -1, today);
   const next = stepAnchor(anchor, view, 1, today);
   const unit = view === 'week' ? 'week' : 'day';
-  const occurrences = calendar.data?.occurrences ?? NO_OCCURRENCES;
 
   let overlay: ReactNode = null;
   if (calendar.isPending) {
@@ -167,7 +181,7 @@ export function CalendarScreen({
         </button>
       </Notice>
     );
-  } else if (!calendar.isPlaceholderData && occurrences.length === 0) {
+  } else if (!calendar.isPlaceholderData && shown.occurrences.length === 0) {
     overlay = <Notice role="status">No classes this week</Notice>;
   }
 
@@ -238,7 +252,8 @@ export function CalendarScreen({
           key={gridKey}
           days={days}
           zone={zone}
-          occurrences={occurrences}
+          occurrences={shown.occurrences}
+          waitingKeys={shown.waitingKeys}
           groups={groupsById}
           nowMs={nowMs}
           pxPerMin={PX_PER_MIN[view]}
@@ -250,13 +265,14 @@ export function CalendarScreen({
       {opened !== null && (
         <OccurrenceSheet
           occurrence={opened}
+          waiting={shown.waitingKeys.has(opened.key)}
           group={groups.data?.groups.find((group) => group.id === opened.groupId)}
           zone={zone}
           onClose={() => setOpened(null)}
-          onCancelled={offerUndo}
+          onChange={(change) => queueChange(opened, change)}
         />
       )}
-      <Toast message={toast} actionDisabled={!online} onDismiss={() => setToast(null)} />
+      <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }
