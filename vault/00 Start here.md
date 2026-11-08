@@ -5,7 +5,7 @@ This vault explains the planner app: what each part does, why it was built that 
 - [[01 Reading order]] tells you what to read, and in which order.
 - [[Glossary]] gives every technical term in one line, linked to the note that explains it.
 - [[TypeScript essentials]] teaches the language every file is written in, using our own code. New to TypeScript? Read it before anything else.
-- Where the work stands: v0.0, v0.1 and v0.2 are merged; v0.3 (cancelling and groups) is next. Still waiting on you: the one-time server setup (`deploy/README.md`) and the phone checks. The newest overview is [[v0.2 in plain words]].
+- Where the work stands: v0.0, v0.1 and v0.2 are merged; v0.3 (cancelling and groups) is being built, and cancelling already works offline ([[Offline cancels]]). Still waiting on you: the one-time server setup (`deploy/README.md`) and the phone checks. The newest overview is [[v0.2 in plain words]].
 
 ## How the vault is organised
 

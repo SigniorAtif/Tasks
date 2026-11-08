@@ -8,8 +8,11 @@ Every technical term used in this vault and the code: one line each, plus the no
 |---|---|---|
 | 201 Created | The status for a create that made a new row | [[REST resources and CRUD]] |
 | 204 No Content | It worked, and there's no body: our `DELETE`s | [[REST resources and CRUD]] |
+| 408 Request Timeout | The server or a proxy gave up waiting for the request to arrive; the cancel queue tries again later | [[Offline cancels]] |
 | 409 Conflict | The request clashes with what's stored; ours: the client's id is taken by a row you can't see (`conflict`) | [[REST resources and CRUD]], [[Row-level security]] |
 | 422 Unprocessable Content | Valid JSON with wrong values (`validation_failed`), with an `errors` entry per field | [[Validating input with schemas]], [[Error responses]] |
+| 429 Too Many Requests | "Slow down": the server wants fewer requests; the cancel queue tries again later | [[Offline cancels]] |
+| `AbortController` / `AbortSignal` | The browser's way to cancel something you started: pass `signal` along, later call `abort()`, and the waiting promise rejects with an `AbortError`; `fetch` and Web Locks both take one | [[Web Locks and BroadcastChannel]] |
 | aborted transaction | After an error inside a transaction, Postgres refuses everything until `ROLLBACK` | [[Transactions]] |
 | ACID | Atomic, consistent, isolated, durable: what a database transaction promises | [[Transactions]] |
 | adapter boundary | A small fixed interface in front of a part you might swap; ours is `TimeGridProps`, so FullCalendar could replace the grid | [[Calendar grid]], [[Calendar grid choices]] |
@@ -25,7 +28,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `asUser` (`c.var.asUser`) | `withUser` already bound to the signed-in user; the calendar handlers get it from the `userScope` middleware and never handle a user id | [[Calendar API]], [[Row-level security in our database]] |
 | autocommit | Without `BEGIN`, each statement is its own transaction | [[Transactions]] |
 | background layer | Where cancelled classes are drawn: full width, behind, never taking a column (D-077) | [[Calendar grid]], [[Calendar grid choices]] |
-| backoff | Waiting longer before each retry (1 s, 2 s, 4 s …) so a struggling server isn't hammered | [[Idempotency and retries]] |
+| backoff | Waiting longer before each retry (1 s, 2 s, 4 s …, at most 30 s apart) so a struggling server isn't hammered; the cancel queue retries this way for as long as the failure can clear | [[Idempotency and retries]], [[Mutations and offline queues]] |
 | Better Auth | The library that handles Google sign-in, sessions and cookies inside our API | [[Auth]], [[API stack choices]] |
 | Biome | Linter + formatter: finds mistakes and tidies code without running it (`pnpm check`) | [[Tooling choices]] |
 | Bottom sheet | A panel that slides up from the bottom of a phone screen, near your thumb; our occurrence sheet on a phone | [[Dialogs and toasts]] |
@@ -33,6 +36,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | branded type | A type with a marker property only one module can name, so only that module can make values of it; ours is `UserScope` | [[Row-level security in our database]] |
 | branding (types) | A type only one function can create, like `UserScope` from `withUser` | [[TypeScript essentials]], [[Row-level security in our database]] |
 | breakpoint | A screen width where the layout changes; ours is 768 px (Day view below, Week view from it) | [[Responsive layouts]] |
+| BroadcastChannel | Messages between tabs of one origin: `postMessage` reaches every other tab that opened a channel with that name | [[Web Locks and BroadcastChannel]] |
 | build context | The files `docker build` may read; `.dockerignore` decides it | [[Containers and images]] |
 | buster (cache) | A version string saved with the cached copy; a copy with a different one is thrown away instead of restored | [[Offline reads]], [[IndexedDB and offline storage]] |
 | BYPASSRLS | A role attribute that skips row-level security, meant for jobs that must see every user's rows | [[Row-level security]] |
@@ -87,28 +91,34 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Docker Compose | Describes several containers in one YAML file and runs them together | [[Docker Compose]] |
 | Dockerfile | The recipe an image is built from | [[Containers and images]] |
 | Drizzle | Our query builder: SQL queries written in TypeScript, checked against the schema | [[Postgres and SQL basics]], [[Database and migrations]] |
+| drop (queued change) | A queued change the server refused for good (a 404, another 4xx): it leaves the queue, the weeks are fetched again, and a toast says so | [[Offline cancels]] |
 | ENABLE / FORCE ROW LEVEL SECURITY | `ENABLE` turns RLS on for a table; `FORCE` makes it apply to the table's owner too | [[Row-level security]] |
 | `ensureQueryData` | Return a query's cached answer, or fetch it if there is none; used in a route's `beforeLoad` and loader | [[Offline reads]], [[Web app]] |
 | entity | A kind of thing the app stores as its own row with its own id, in its own table: group, series, override. A series in no group is still a series, not a new entity | [[Swap, days off and series choices]], [[Database and migrations]] |
 | `enum` | A TypeScript feature we can't use: it needs generated code, and our settings allow only types Node can delete | [[TypeScript essentials]] |
 | environment variable | A named setting handed to a program at start (`PORT=3000`) | [[Environment variables and config]] |
+| epoch milliseconds | A moment as milliseconds since 1 January 1970 UTC: what `Date.now()` returns, and what `submittedAt` and `dataUpdatedAt` hold | [[Mutations and offline queues]] |
 | erasableSyntaxOnly | Our setting that allows only TypeScript that can be deleted to get JavaScript, because Node runs `.ts` by stripping types | [[TypeScript essentials]], [[TypeScript checking vs running]] |
 | eviction | The browser deleting a site's stored data to free space, without asking | [[IndexedDB and offline storage]] |
 | `excluded` | Inside `on conflict … do update`, the row the insert tried to write | [[Upserts and row locks]] |
 | expand / contract | Migration style: add new things first, remove old ones later, so rollbacks stay safe | [[Database migrations]] |
 | expansion (layout) | After columns are assigned, a block stretches right over columns that are free for its whole time | [[Interval partitioning]] |
 | fast-forward / `--no-ff` | Merge styles; `--no-ff` always records a merge commit, keeping the branch visible | [[Local workflow]] |
+| `fetchQuery` | Fetch now and return the answer; with `staleTime: 0` it always asks the server, unlike `ensureQueryData` | [[Offline cancels]] |
 | fixture | Fixed, made-up data that tests run against; ours is a sample semester, as TypeScript for the engine and as `fixtures/sample-timetable.json` | [[Timetable files and seeding]] |
 | foreign key | "This column must match an id in that table" | [[Postgres and SQL basics]] |
 | `forgetCachedData` | Our sign-out helper: clears the cache in memory and deletes the saved copy in IndexedDB | [[Offline reads]] |
+| frozen tab | A background tab the browser has paused to save battery: no timers, no messages, but its locks stay held. A discarded tab is thrown out of memory and reloaded when you return | [[Web Locks and BroadcastChannel]] |
 | `gcTime` | How long TanStack Query keeps a query in memory once no screen shows it; ours is `Infinity` | [[Offline reads]], [[Offline and form choices]] |
 | generic (`<T>`) | A type with a blank the caller fills in: `apiGet<Me>`, `Promise<Profile>` | [[TypeScript essentials]] |
 | GHCR | GitHub's storage for images: CI pushes, the server pulls | [[Containers and images]] |
 | gitleaks | Scans the whole git history for leaked secrets | [[Secret scanning]] |
 | `GRANT` / `REVOKE` | Give / take away a privilege, e.g. `grant select on series to tasks_app` | [[Roles and privileges]] |
 | greedy algorithm | One that takes the best-looking choice at each step and never goes back; for interval partitioning it's exactly optimal | [[Interval partitioning]] |
+| hand-over (one tab) | The running tab saves both copies at once and lets go of its lock, so the tab that asked can run the app | [[Offline cancels]] |
 | handler | The function that answers one route (`GET /api/v1/me` → `me.ts`) | [[API server]] |
 | hash | A one-way fingerprint of data (SHA-256) | [[Hashing and signing]] |
+| head-of-line blocking | One stuck item at the front of a queue holds up everything behind it | [[Mutations and offline queues]] |
 | header | A `Name: value` line in a request or response (`Cookie`, `Content-Type`) | [[HTTP basics]] |
 | health check | A command that asks "are you OK?" (`/healthz`, `pg_isready`) | [[Docker Compose]], [[API server]] |
 | HMAC | A signature made by hashing a message with a secret key | [[Hashing and signing]] |
@@ -123,6 +133,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | idb-keyval | A tiny wrapper that makes IndexedDB a promise-based `get` / `set` / `del` store | [[IndexedDB and offline storage]], [[Offline reads]] |
 | Idempotency-Key | A header carrying a random key so the server can replay its stored answer to a retry; we don't need one yet (D-042) | [[Idempotency and retries]] |
 | idempotent | Doing it twice has the same effect as once; our creates are, thanks to client-made ids | [[Idempotency and retries]], [[HTTP basics]] |
+| `ifAvailable` (Web Locks) | Ask for a lock without waiting: the callback gets `null` if another tab holds it | [[Web Locks and BroadcastChannel]] |
 | image | A frozen bundle of an OS userland, Node, our code and deps; built once, runs anywhere | [[Containers and images]] |
 | `import type` | An import used only for types, deleted before running (`verbatimModuleSyntax`) | [[TypeScript essentials]] |
 | index (database) | A sorted side structure that makes lookups by a column fast | [[Postgres and SQL basics]] |
@@ -142,6 +153,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `key` (React) | A component's identity; changing it makes React throw the old one away and mount a fresh one | [[Calendar grid]] |
 | last good answer | What we save for a query whose latest refetch failed: its previous answer, as a success | [[Offline reads]] |
 | layer (image) | A cached snapshot of the files one Dockerfile step changed | [[Containers and images]] |
+| leader election | Choosing one tab (or one server) to do a job the others must not do at the same time | [[Web Locks and BroadcastChannel]] |
 | least privilege | Give each part only the permissions its job needs, so a bug can do only that much damage | [[Roles and privileges]] |
 | linter / formatter | Finds suspicious code / rewrites layout consistently | [[Tooling choices]] |
 | literal type | A type that is one exact value, like `'not_held'` | [[TypeScript essentials]] |
@@ -151,6 +163,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | localStorage / sessionStorage | Small, synchronous text-only browser storage, per origin / per tab | [[IndexedDB and offline storage]] |
 | `Location` header | Sent with a `201`: the URL where the new row now lives (`/api/v1/series/<id>`) | [[Calendar API]] |
 | `LOGIN` / `NOLOGIN` | Whether a role may open a connection; `tasks_app` is `NOLOGIN` and is only switched into | [[Roles and privileges]] |
+| lost update | Two writers each save a whole value, and the second erases the first one's change without knowing it existed | [[Web Locks and BroadcastChannel]] |
 | manifest (web app) | The JSON telling the phone the app's name, icons and colours, so it can be installed | [[PWAs and service workers]] |
 | `matchMedia` | Asks a media query from JavaScript, with a `change` event when the answer flips | [[Responsive layouts]] |
 | `maxAge` (persister) | How old a saved cache may be before it's thrown away at start-up; ours is 30 days | [[Offline reads]], [[IndexedDB and offline storage]] |
@@ -159,8 +172,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | migration | A numbered SQL file that changes the database's tables, applied once in order | [[Database migrations]] |
 | mobile-first | Phone styles are the default; wider screens add rules with `min-width` | [[Responsive layouts]] |
 | monorepo | One repo holding several packages (`apps/*`, `packages/*`) | [[Monorepo and workspaces]] |
+| mounted (`QueryClient`) | Switched on by `QueryClientProvider` when the app draws: only then does the client hear `online`, `offline` and focus | [[Mutations and offline queues]] |
 | multi-stage build | A Dockerfile with throwaway stages; only the final one becomes the image | [[Containers and images]] |
-| mutation | TanStack Query's name for a request that changes something on the server (POST, PATCH, DELETE) | [[Series form]] |
+| mutation | TanStack Query's name for a request that changes something on the server (POST, PATCH, DELETE), and the object that tracks it | [[Series form]], [[Mutations and offline queues]] |
+| mutation cache | Where TanStack Query keeps every mutation while it runs; it can be counted, drawn, saved and subscribed to | [[Mutations and offline queues]] |
 | namespace (Linux) | Kernel feature that gives a container its own view of processes, files and network | [[Containers and images]] |
 | narrowing | TypeScript following your `if`: after `rule.freq === 'daily'`, it knows which shape `rule` is | [[TypeScript essentials]] |
 | `navigator.onLine` | The browser's "connected to a network" flag; `false` is reliable, `true` doesn't mean the internet works | [[IndexedDB and offline storage]] |
@@ -175,7 +190,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `Omit` / `Partial` / `Pick` / `Record` | Helpers that build one type from another (fewer fields, optional fields, exact keys) | [[TypeScript essentials]] |
 | `on conflict (id) do nothing` | An insert that silently skips an id that already exists; with a lookup after it, our creates answer 201, 200 or 409 | [[Calendar API]], [[Idempotency and retries]] |
 | `on conflict … do update` | An upsert: insert the row, or update the one already holding that unique key, in one statement | [[Upserts and row locks]] |
-| `onlineManager` | TanStack Query's idea of whether the device is online, from the browser's `online` / `offline` events; starts as online | [[Offline reads]] |
+| `onChangeDropped` | Hears every queued change the server refused for good, starting with drops nobody heard yet | [[Offline cancels]] |
+| one tab at a time | The app runs in one browser tab; a second tab shows "Tasks is open in another tab" with Use here | [[Offline cancels]], [[Offline cancel choices]] |
+| `onlineManager` | TanStack Query's idea of whether the device is online, from the browser's `online` / `offline` events; starts as online, hears events only while a client is mounted, and our startup seeds it from `navigator.onLine` | [[Offline reads]], [[Mutations and offline queues]] |
+| optimistic update | Showing a write's result before the server confirms it; ours draws queued changes on top of the cache instead of writing them in | [[Mutations and offline queues]], [[Offline cancel choices]] |
 | optional field (`?`) | A field that may be missing entirely; we use `\| null` instead for stored data | [[TypeScript essentials]], [[Core types]] |
 | origin | Scheme + host + port (`https://tasks.ahmedatif.in`); browsers' unit of trust | [[Origin]] |
 | ORM | A library that hides SQL behind objects (Prisma); Drizzle is closer to SQL | [[Postgres and SQL basics]] |
@@ -188,6 +206,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | parameter (`$1`) | A value sent separately from the SQL text, which makes SQL injection impossible | [[Postgres and SQL basics]] |
 | parse, don't validate | Turn unknown input into a typed value or a list of errors, instead of a yes/no check | [[Validating input with schemas]] |
 | `PATCH` vs `PUT` | Change the fields I send / replace the whole thing; our edits use `PATCH` | [[REST resources and CRUD]] |
+| paused (mutation) | A pending mutation that's waiting instead of sending: the browser says offline, or it isn't its turn in its scope | [[Mutations and offline queues]] |
 | persistent storage | `navigator.storage.persist()`: asks the browser not to evict this site's data | [[IndexedDB and offline storage]] |
 | persister | Saves TanStack Query's cache to storage (ours: IndexedDB) and restores it when the app starts | [[IndexedDB and offline storage]], [[Offline reads]] |
 | pino | Our logger: one JSON line per event | [[Structured logging]] |
@@ -206,6 +225,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | proxy (dev server) | Vite forwarding `/api` to the API so the browser sees one origin | [[Dev server proxy]] |
 | psql | Postgres's command-line client: `docker compose exec db psql -U tasks tasks` | [[Postgres and SQL basics]] |
 | PWA | A website your phone can install like an app | [[PWAs and service workers]] |
+| `QUEUE_FORMAT` | The saved queue's own version string (`'v1'`); never bumped to start clean, so a new version can't throw away a waiting change | [[Offline cancels]] |
 | quota (storage) | The most a site may store in the browser; Chrome allows about 60% of the disk | [[IndexedDB and offline storage]] |
 | refresh token | A long-lived key from Google that gets the app a fresh, hour-long access pass without asking you again; we don't store one yet | [[Swap, days off and series choices]], [[OAuth sign-in]] |
 | registry | Where images are stored and downloaded from (GHCR, Docker Hub) | [[Containers and images]] |
@@ -214,17 +234,22 @@ Every technical term used in this vault and the code: one line each, plus the no
 | responsive layout | A layout that changes shape with the screen's width | [[Responsive layouts]] |
 | REST | The common API style: resources named by URLs, the standard methods, status codes, no memory between requests | [[REST resources and CRUD]] |
 | restore (cache) | Read the saved cache from IndexedDB and hydrate it into memory; ours runs before the first draw | [[Offline reads]] |
+| `resumePausedMutations` | Starts every paused mutation again; the client calls it on `online` and on focus, our startup calls it for the restored queue | [[Mutations and offline queues]] |
+| `retryDelay` | How long TanStack waits before the next try; by default 1 s, 2 s, 4 s …, at most 30 s | [[Mutations and offline queues]] |
 | reverse proxy | A server that receives requests on behalf of another (Caddy, Cloudflare) | [[Reverse proxies and TLS]] |
 | RLS | Row-level security: Postgres itself hides other users' rows, through a policy on each table | [[Row-level security]], [[Row-level security in our database]] |
 | role | Postgres's single kind of account; "users" are roles that can log in, "groups" are roles others join | [[Roles and privileges]] |
 | rollback | Going back to the previous version after a failed deploy | [[Deploy and CI]] |
+| rollback (optimistic update) | Putting back what the screen showed before a write that failed; drawing queued changes on top needs none | [[Mutations and offline queues]] |
 | route / routing | Matching a URL path to code: Hono on the server, TanStack Router in the app | [[API server]], [[Single-page apps and routing]] |
 | Row lock | Taken by an update or delete on a row and held until the transaction ends; others wanting that row wait | [[Upserts and row locks]] |
 | `safeParse` | zod's "check and tell me": returns `{ success, data }` or `{ success, error }`, never throws | [[Validating input with schemas]] |
 | salt | Random data mixed into a password hash so equal passwords hash differently | [[Hashing and signing]] |
 | `satisfies` | Checks a value against a type without losing the value's exact type | [[TypeScript essentials]] |
+| `savedAsPaused` | Saves every queued change as paused, so `resumePausedMutations` picks it up after a reload | [[Offline cancels]] |
 | schema (database) | The tables and columns, defined in `apps/api/src/db/schema.ts`. Not the same as a validation schema | [[Database and migrations]] |
 | schema (validation) | A description of the shape and rules data must follow, which checks it and gives its type | [[Validating input with schemas]] |
+| scope (mutation) | Mutations with the same `scope.id` run one at a time, in the order they were made | [[Mutations and offline queues]] |
 | scope (OAuth) | One permission an app asks Google for; sign-in asks only for name and email, Drive would need `drive.file` | [[Swap, days off and series choices]], [[OAuth sign-in]] |
 | secret | Any value that grants access (`BETTER_AUTH_SECRET`, OAuth secret); never in git | [[Environment variables and config]], [[Secret scanning]] |
 | seed, seeding | Filling a database with starting data by running a script instead of typing it into the app | [[Timetable files and seeding]] |
@@ -236,6 +261,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | session | A row in `auth_session` saying "this cookie belongs to this user until …" | [[Cookies and sessions]] |
 | `SET` / `SET LOCAL` / `set_config` | Change a setting for the connection / until the transaction ends / the same, as a function that takes `$1` | [[Transactions]] |
 | `SET ROLE` / `SET LOCAL ROLE` | Act as another role from now / until the transaction ends | [[Roles and privileges]] |
+| `setMutationDefaults` | Options registered on the client for every mutation with a key, so one restored after a reload still knows how to send itself | [[Mutations and offline queues]] |
 | `setQueriesData` | TanStack Query: write new data into every cached query whose key starts with a prefix, without fetching | [[Cancelling one occurrence]] |
 | Snapshot (database) | The state of the database one statement (READ COMMITTED) reads; every part of a statement sees the same one | [[Upserts and row locks]] |
 | SPA | A single-page app: one HTML page, JavaScript swaps the screens | [[Single-page apps and routing]] |
@@ -245,16 +271,18 @@ Every technical term used in this vault and the code: one line each, plus the no
 | SSRF | Server-side request forgery: tricking a server that fetches URLs into reaching places only it can see; our notes' links are never fetched | [[Swap, days off and series choices]] |
 | `staleTime` | How long TanStack Query treats an answer as fresh and won't refetch it; the calendar uses a minute | [[Calendar grid]], [[Server state and caching]] |
 | status code | The 3-digit result of a request (200, 401, 404, 500) | [[HTTP basics]] |
+| `steal` (Web Locks) | Take a lock from its holder at once; the holder's request rejects, and its code must notice and stop | [[Web Locks and BroadcastChannel]] |
 | strict mode | Our TypeScript setting that, among other things, forbids `null` where a value is expected | [[TypeScript essentials]] |
 | structured clone | The browser's built-in deep copy, used to store values in IndexedDB | [[IndexedDB and offline storage]] |
 | superuser | A Postgres role that skips every permission check and RLS; our `tasks` login is one | [[Roles and privileges]] |
 | sweep (clash check) | Sort the expanded occurrences by start and walk through once, noting every pair that overlaps; how clashes are found | [[Swap, days off and series choices]], [[Interval partitioning]] |
-| sync badge | The "offline · last synced 2:02 PM" pill: the screen shows saved answers, last confirmed at that time | [[Offline reads]] |
+| sync badge | The "offline · last synced 2:02 PM" pill: the screen shows saved answers, last confirmed at that time; since v0.3 it also counts waiting changes | [[Offline reads]], [[Offline cancels]] |
 | TanStack Query | The app's cache of server data; refetches and stores answers | [[Server state and caching]] |
 | `tasks_app` | The non-owner, non-superuser role each API request switches into, so RLS applies | [[Row-level security in our database]], [[Roles and privileges]] |
 | TCP | The reliable connection under HTTP: bytes arrive complete and in order | [[HTTP basics]] |
 | template literal type | A type that is a text pattern: `` `--palette-${ColorToken}` `` | [[TypeScript essentials]] |
-| `TimeGridProps` | The seven props the calendar grid takes: days, zone, occurrences, groups, now, zoom, on-tap | [[Calendar grid]] |
+| `throttleTime` | The persister saves at most once per this many ms (ours: 1 000): at once after a quiet second, else a moment later | [[Offline cancels]], [[Offline reads]] |
+| `TimeGridProps` | The eight props the calendar grid takes: days, zone, occurrences, waiting keys, groups, now, zoom, on-tap | [[Calendar grid]] |
 | timer overflow (24.8 days) | Browsers store a `setTimeout` delay in 32 bits; a longer delay fires immediately | [[Offline reads]], [[Offline and form choices]] |
 | timetable file | The hand-writable JSON (`"format": "tasks.timetable"`, `"version": 1`) of groups and their class slots | [[Timetable files and seeding]] |
 | `timetableToRows` | Pure function: a checked timetable file → the rows `POST /api/v1/groups` and `/series` take | [[Timetable files and seeding]] |
@@ -271,13 +299,20 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `unknown` | "Could be anything; prove what it is first"; for data from outside | [[TypeScript essentials]] |
 | Upsert | Insert-or-update as one step, so two requests racing for the same key can't both insert | [[Upserts and row locks]] |
 | `useEffectEvent` | React: wraps a function so an effect calls its latest version without restarting when it changes | [[Dialogs and toasts]] |
+| `useMutationState` | A React hook that returns the mutations matching a filter and re-renders as they change | [[Mutations and offline queues]] |
 | `UserScope` | The scoped transaction plus whose it is; only `withUser` makes one, and every calendar repository function takes it | [[Row-level security in our database]] |
 | `USING` / `WITH CHECK` | The two halves of a policy: which existing rows you can see and touch / which new rows you may write | [[Row-level security]] |
 | UUID / UUIDv4 | A 128-bit id written as 32 hex digits; v4 is fully random, so not in time order | [[Idempotency and retries]] |
 | UUIDv7 | Our id format: made by the client, unique without asking the server, sortable by creation time | [[Idempotency and retries]], [[Database and migrations]] |
 | `visibilitychange` | The browser event when a tab or app goes to the back or comes to the front; the now line re-syncs on it | [[Calendar grid]] |
+| `void` (before a promise) | Marks a promise the code deliberately doesn't wait for | [[Calendar grid]], [[Mutations and offline queues]] |
 | Vite | The web app's dev server and bundler | [[Web app]], [[Web stack choices]] |
 | volume | A Docker-managed folder that outlives containers; Postgres's data lives in one | [[Containers and images]], [[Docker Compose]] |
+| waiting change | A cancel, restore or reason change made on the phone that the server doesn't have yet; shown at once, with a clock mark | [[Offline cancels]] |
+| `WeakMap` | A map whose keys are objects it doesn't keep alive: when nothing else holds a key, its entry goes too | [[Offline cancels]] |
+| Web Lock (`navigator.locks`) | A named lock shared by every tab of an origin; held while a callback's promise runs, freed when the tab dies | [[Web Locks and BroadcastChannel]] |
+| `window.close()` | Closes the tab, but only one a script opened; for any other tab it does nothing | [[Web Locks and BroadcastChannel]] |
+| `withQueuedChanges` | Draws the cached weeks with every queued change applied on top, oldest first | [[Offline cancels]] |
 | `withUser` | Runs a function in one transaction as `tasks_app` with `app.user_id` set, so RLS limits every query to that user | [[Row-level security in our database]] |
 | `z.input` / `z.output` | A schema's two types: what a client may send / what the code gets after defaults and transforms | [[Validating input with schemas]] |
 | zod | Our schema library: parses settings at start-up and every request body and query string | [[Validating input with schemas]], [[Environment variables and config]] |

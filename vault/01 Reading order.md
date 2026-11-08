@@ -50,6 +50,7 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 1. [[Cancel and group choices]] (a decision): what was settled before any code, with the examples that settled it. The app notes follow as the milestone is built.
 2. Groups lost their first day (ticket #7). No new note: the change runs through existing ones. Read [[Recurrence engine]] (clipping, and extras after a group's last day), then [[Database and migrations]] (migration `0003`: a rename drizzle-kit has to ask about, and the expand-only rule it breaks once), then [[Series form]] (the first day suggested from the group).
 3. Cancelling one class (ticket #8): [[Upserts and row locks]] and [[Dialogs and toasts]] first, then [[Cancelling one occurrence]]: the sheet, the `PATCH`, the row that's deleted when it says nothing, and Undo.
+4. Cancels that work offline (ticket #9): [[Mutations and offline queues]] and [[Web Locks and BroadcastChannel]] first, then [[Offline cancels]]: the queue, the clock mark, the saved copy, the startup order, signing out, and one tab at a time. The "why": [[Offline cancel choices]].
 
 ## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
 
@@ -63,7 +64,7 @@ Subject by subject. Inside each subject, each note builds on the ones above it. 
 2. **Server code** (`foundations/server/`): [[Environment variables and config]] → [[Middleware]] → [[Error responses]] → [[Validating input with schemas]] → [[Structured logging]]
 3. **Databases** (`foundations/database/`): [[Postgres and SQL basics]] → [[Database migrations]] → [[Connection pools]] → [[Transactions]] → [[Upserts and row locks]] → [[Roles and privileges]] → [[Row-level security]]
 4. **Shipping** (`foundations/shipping/`): [[Containers and images]] → [[Docker Compose]] → [[CI and CD]] → [[Secret scanning]]
-5. **Browser apps** (`foundations/browser/`): [[Single-page apps and routing]] → [[Server state and caching]] → [[PWAs and service workers]] → [[Dev server proxy]] → [[IndexedDB and offline storage]] → [[Responsive layouts]] → [[CSS variables]] → [[Dialogs and toasts]]
+5. **Browser apps** (`foundations/browser/`): [[Single-page apps and routing]] → [[Server state and caching]] → [[PWAs and service workers]] → [[Dev server proxy]] → [[IndexedDB and offline storage]] → [[Responsive layouts]] → [[CSS variables]] → [[Dialogs and toasts]] → [[Mutations and offline queues]] → [[Web Locks and BroadcastChannel]]
 6. **Time** (`foundations/time/`): [[Dates, times and instants]] → [[Time zones and daylight saving]]
 7. **Tooling and testing** (`foundations/tooling/`): [[TypeScript essentials]] → [[Monorepo and workspaces]] → [[TypeScript checking vs running]] → [[Testing pure code]] → [[Integration tests]]
 8. **Algorithms** (`foundations/algorithms/`): [[Interval partitioning]] (it uses the half-open ranges from [[Dates, times and instants]], so read that first)
