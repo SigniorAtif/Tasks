@@ -18,9 +18,12 @@ All in `apps/web/src/`.
 | `routes/series.$seriesId.tsx` | `/series/<id>`: session check, loads the series list and the groups, finds the series, or shows "This class doesn't exist any more" |
 | `lib/require-session.ts` | `requireSession(queryClient)`: the `beforeLoad` both routes share. No session → `/login` |
 | `series/SeriesForm.tsx` | The form: its state, Save, Delete, the error banner |
-| `series/controls.tsx` | Drawing pieces: `Field` (label + input + hint + error), `DayToggles`, `ColorSwatches`, `describedBy` (the ARIA links) |
+| `series/controls.tsx` | `DayToggles`, the one drawing piece only this form has |
+| `components/form-controls.tsx` | Drawing pieces both forms share: `Field` (label + input + hint + error), `ColorSwatches`, `describedBy` (the ARIA links), `FormBanner`, `SaveRow` ([[Shared form pieces]]) |
+| `lib/form-problems.ts`, `lib/use-form-problems.ts` | Turning schema errors into one message per field, and keeping them on screen with the focus on the first ([[Shared form pieces]]) |
 | `series/form-values.ts` | Everything that isn't drawing, as pure functions: starting values, request bodies, "what changed", checking with the schemas, error messages |
-| `series/SeriesScreen.tsx` | The frame: "← Calendar", the sync badge, the title; and the not-found screen |
+| `components/ScreenFrame.tsx` | The frame: "← Calendar", the sync badge, the title; and the not-found screen (`GoneScreen`). The Groups screens use it too |
+| `lib/time.ts` | `todayFor(profile)`: your day, for the first-day suggestion and for what counts as archived ([[The user's day]]) |
 | `lib/mutations.ts` | The writes: `useCreateGroup`, `useCreateSeries`, `useUpdateSeries`, `useDeleteSeries`, and `newId()` |
 | `lib/api.ts` | `apiSend(method, path, body)`: POST, PATCH, DELETE as JSON; a 422's field errors stay on the `ApiError` |
 | `series/form-values.test.ts`, `lib/mutations.test.ts`, `lib/api.test.ts` | Tests in plain Node |
@@ -34,7 +37,7 @@ The form keeps exactly what the inputs hold, as strings (`''` for an empty box),
 | Title | text: "DS" | empty | `title` |
 | Subject | text; its placeholder shows the title | empty, meaning "same as the title" | `subject` only if you typed one (on create); the server copies the title (B8) |
 | Location | text: "C-301" | empty | `location`, or `null` when blank |
-| Group | `<select>` of your groups that aren't archived, plus "New group…" | your first group, or "New group" if you have none | `groupId` |
+| Group | `<select>` of your groups that aren't archived, by name with numbers counted ("Sem 9" before "Sem 10"), plus "New group…" | your first group, or "New group" if you have none | `groupId` |
 | New group | name, colour (10 swatches). No first day: since v0.3 a group is a folder and has none | blue | a separate `POST /api/v1/groups` first |
 | Days | Mon–Sun toggle buttons, Monday first (B11) | none | `rule.byDay`, always Monday first |
 | Repeats | every 1 to 4 weeks | every week | `rule.interval` (`rule.freq` is always `weekly`) |
@@ -68,7 +71,9 @@ What to notice:
 - `orderedDays` puts the days Monday first, whatever order you tapped them in. `'weekly' as const` tells TypeScript the value is exactly `'weekly'`, not just any string ([[TypeScript essentials]]).
 - An empty minutes box becomes `NaN` ("not a number"), not `0`, so the schema refuses it instead of saving a zero-minute class.
 
-"Today in your zone" uses your profile's zone, not the phone's. At 1:30 AM in Kolkata it's already the 14th, even on a laptop set to London, where it's still the 13th (`todayIn` in `form-values.ts`).
+"Today" is **your day**: your profile's zone, not the phone's, and starting at your day boundary (04:00), not midnight. At 5:00 AM in Kolkata it's the 14th, even on a laptop set to London, where it's still 11:30 PM on the 13th. At 1:30 AM in Kolkata, though, it's still the 13th: you haven't slept yet (`todayFor` in `lib/time.ts`, explained in [[The user's day]]).
+
+"Archived" uses the same day. A group whose last day has passed (core's `isArchived`) leaves the Group select, unless it's the group this class is already in: then it stays, marked "(archived)", so the form doesn't quietly change it.
 
 Time zone isn't a field: the server uses your profile's zone for a new series.
 
@@ -128,9 +133,9 @@ flowchart TD
 
 The schemas live in `packages/core/src/schemas.ts` ([[Validating input with schemas]]). The API parses every body with them, and this form runs the **same** schema on the body it's about to send, before sending. So the two can't disagree about what's valid. An empty title, no day picked, a last day before the first day: all are caught here, in the API's own wording, without a round trip.
 
-*From `apps/web/src/series/form-values.ts` (shortened):*
+*From `apps/web/src/lib/form-problems.ts`:*
 ```ts
-function check(schema: Schema, input: unknown): FieldError[] {
+export function schemaErrors(schema: Schema, input: unknown): FieldError[] {
   const { error } = schema.safeParse(input, { error: friendlierMessages });
   if (error === undefined) return [];
   return error.issues.map((issue) => ({
@@ -138,23 +143,25 @@ function check(schema: Schema, input: unknown): FieldError[] {
     message: issue.message,
   }));
 }
+```
 
-// …
-function checkDateOrder(input: { startDate?: string; untilDate?: string | null }): Problems {
+*From `apps/web/src/series/form-values.ts` (shortened):*
+```ts
+}): Problems<FieldName> {
   const dates = { startDate: input.startDate, untilDate: input.untilDate };
-  return problemsFromErrors(check(updateSeriesSchema, dates), 'series');
+  return problemsFromErrors(schemaErrors(updateSeriesSchema, dates), 'series');
 }
 
 /** A new series, checked by the API's own `createSeriesSchema`. */
-export function checkCreateSeries(input: CreateSeries): Problems {
+export function checkCreateSeries(input: CreateSeries): Problems<FieldName> {
   return mergeProblems(
-    problemsFromErrors(check(createSeriesSchema, input), 'series'),
+    problemsFromErrors(schemaErrors(createSeriesSchema, input), 'series'),
     checkDateOrder(input),
   );
 }
 ```
 
-`createSeriesSchema` and `updateSeriesSchema` are imported from `@tasks/core`: the very objects the API parses bodies with. `safeParse` runs a zod schema without throwing and returns every problem in `error.issues`, and `check` turns each into `{ path: 'rule.byDay', message }`, the same shape as the server's 422, so one function, `problemsFromErrors`, handles both. `checkDateOrder` is the "All at once" trick below: the update schema (every field optional) run on just the two dates.
+`createSeriesSchema` and `updateSeriesSchema` are imported from `@tasks/core`: the very objects the API parses bodies with. `safeParse` runs a zod schema without throwing and returns every problem in `error.issues`, and `schemaErrors` (shared with the group form) turns each into `{ path: 'rule.byDay', message }`, the same shape as the server's 422, so one function, `problemsFromErrors`, handles both. The first excerpt starts at the end of `checkDateOrder`'s parameters: it the "All at once" trick below: runs the update schema (every field optional) on just the two dates.
 
 - **Messages.** The schemas word their messages to follow a field's name ("must not be empty"), so the form puts the label in front: "Title must not be empty". Names of other fields are swapped for what the screen calls them, so it says "Last day must be on or after the first day", not "...after startDate". For the few checks the schemas leave to zod's default wording ("Too small: expected number to be >=1"), the form passes its own (`friendlierMessages`): "Duration in minutes must be at least 1".
 - **All at once.** zod skips a check that compares two fields (last day vs first day) when any field has the wrong *type*. An empty title doesn't stop it (`""` is still a string), but an empty duration box does: the form turns it into `NaN`, which zod counts as "not a number". With an empty duration as well, you'd fix the duration, tap Save, and only then hear about the dates. So the form also checks just the two dates with the same schema, and every problem shows in one go ([[Validating input with schemas]] has the exact rule).
@@ -162,21 +169,21 @@ export function checkCreateSeries(input: CreateSeries): Problems {
 - **Any other failure** (offline, a 500) shows in the same box at the top, with the error code and the request id in small print (`describeError`), so a bug report can find the server's log line ([[Error responses]]).
 - **Focus.** After Save, the focus moves to the first field with a problem, in screen order. The messages are drawn first (React's `flushSync`), so the input that gets the focus already points at its message, and a screen reader reads it out. Editing a field takes its message away.
 
-*From `apps/web/src/series/SeriesForm.tsx`:*
-```tsx
-  function showProblems(found: Problems) {
-    // Draw the messages first, so the input that gets the focus already
-    // points at its error and a screen reader reads it out.
-    flushSync(() => setProblems(found));
-    const field = firstProblemField(found);
-    if (field === undefined) banner.current?.focus();
-    else inputs.current[field]?.focus();
-  }
+*From `apps/web/src/lib/use-form-problems.ts`:*
+```ts
+    showProblems(found: Problems<Field>) {
+      // Draw the messages first, so the input that gets the focus already
+      // points at its error and a screen reader reads it out.
+      flushSync(() => setProblems(found));
+      const field = firstProblem(found);
+      if (field === undefined) banner.current?.focus();
+      else inputs.current[field]?.focus();
+    },
 ```
 
 What to notice:
 - Normally React draws a state change a moment later. `flushSync` makes it draw right now, so by the next line the red messages exist on the page.
-- `firstProblemField` walks the fields in screen order (`FIELD_ORDER` in `form-values.ts`). `inputs.current` holds each input's element, saved through its `ref` when it was drawn.
+- This lives in `useFormProblems`, a hook both forms use ([[Shared form pieces]]). `firstProblem` is whatever the form passed in: here `firstProblemField`, which walks the fields in screen order (`FIELD_ORDER` in `form-values.ts`). `inputs.current` holds each input's element, saved through `ref={register('title')}` when it was drawn.
 - No field to blame (only a path like `tzid`)? The focus goes to the red box at the top instead.
 
 **Accessibility, everywhere:** every input has a `<label>`. Its hint and its error are linked with `aria-describedby`, so a screen reader reads them when the input is focused, and an input with an error has `aria-invalid` (and a red border). The days and the colours are `<fieldset>`s with a `<legend>`. The day buttons say "Monday", not "Mon", and are toggles (`aria-pressed`). The colour swatches are real radio buttons, hidden but focusable, so arrow keys move between them and each says its name ("Violet").
@@ -329,7 +336,9 @@ Details:
   const series = found ?? firstFound;
 
   if (isUnauthenticated(me.error)) return <Navigate to="/login" replace />;
-  if (series === undefined) return <SeriesNotFound />;
+  if (series === undefined) {
+    return <GoneScreen title="This class doesn't exist any more" back="calendar" />;
+  }
 ```
 
 `useState(found)` keeps only the *first* value it's given and ignores later ones. After a delete, the refetched list no longer has the class, so `found` is `undefined`, but `firstFound` still holds it until the app has gone home.

@@ -130,9 +130,9 @@ In our app, the two calls side by side:
 *From `apps/web/src/series/form-values.ts` and `apps/api/src/routes/series.ts` (shortened):*
 ```ts
 // apps/web/src/series/form-values.ts: the form, before sending
-export function checkCreateSeries(input: CreateSeries): Problems {
+export function checkCreateSeries(input: CreateSeries): Problems<FieldName> {
   return mergeProblems(
-    problemsFromErrors(check(createSeriesSchema, input), 'series'),
+    problemsFromErrors(schemaErrors(createSeriesSchema, input), 'series'),
     checkDateOrder(input),
   );
 }
@@ -141,7 +141,7 @@ export function checkCreateSeries(input: CreateSeries): Problems {
     const input = await jsonBody(c, createSeriesSchema);
 ```
 
-Both files import `createSeriesSchema` from `@tasks/core`: one object, used twice. The form turns its issues into messages under each field (`problemsFromErrors`), and the server turns the same issues into a `422` (`jsonBody`, below).
+Both files import `createSeriesSchema` from `@tasks/core`: one object, used twice. The form runs it with `schemaErrors` and turns its issues into messages under each field (`problemsFromErrors`; both forms share the machinery, [[Shared form pieces]]), and the server turns the same issues into a `422` (`jsonBody`, below).
 
 One definition means the two can't disagree. If the longest allowed class becomes 600 minutes, the form and the server change in the same commit. With two hand-written copies, the form would sooner or later accept something the server refuses, and you'd find out from a confusing error after tapping Save.
 

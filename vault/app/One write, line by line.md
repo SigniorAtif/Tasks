@@ -106,9 +106,9 @@ sequenceDiagram
        );
        if (hasProblems(found)) return showProblems(found);
    // apps/web/src/series/form-values.ts
-   export function checkCreateSeries(input: CreateSeries): Problems {
+   export function checkCreateSeries(input: CreateSeries): Problems<FieldName> {
      return mergeProblems(
-       problemsFromErrors(check(createSeriesSchema, input), 'series'),
+       problemsFromErrors(schemaErrors(createSeriesSchema, input), 'series'),
        checkDateOrder(input),
      );
    }
