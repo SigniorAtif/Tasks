@@ -74,7 +74,7 @@ What to notice:
 
 ```mermaid
 flowchart TD
-  pr["PR opened or updated"] --> ci["CI: 5 jobs side by side<br/>lint, types, build · API + web tests<br/>core time zones + coverage · gitleaks<br/>image builds and boots"]
+  pr["PR opened or updated"] --> ci["CI: 6 jobs side by side<br/>lint, types, build · API + web tests<br/>core time zones + coverage · end-to-end test<br/>gitleaks · image builds and boots"]
   ci -->|"any red"| fix["fix, push again"] --> ci
   ci -->|"all green"| merge["you merge into main"]
   merge --> build["deploy.yml builds the image<br/>amd64 + arm64, tagged with the commit SHA"]
@@ -90,13 +90,14 @@ flowchart TD
   chk -->|"no"| rb["roll back to the previous image"]
 ```
 
-1. **You open a PR.** `ci.yml` starts five jobs on fresh machines, side by side:
+1. **You open a PR.** `ci.yml` starts six jobs on fresh machines, side by side:
 
    | Job (the exact required-check name) | What it runs |
    |---|---|
    | `Lint, typecheck and build` | `pnpm check`, `pnpm typecheck`, `pnpm build` |
    | `Test API and web` | the tests of every package in `apps/`, with Postgres 18 next to them |
    | `Test core` | core's tests under UTC, Asia/Kolkata and America/New_York, then the 90% coverage gate |
+   | `End-to-end test` | since v0.3: Chromium against the built app, the API and its own Postgres, one test ([[End-to-end test]]) |
    | `Scan for secrets` | gitleaks over the full history |
    | `Build and boot the image` | builds the image (x86, not pushed), runs migrations, starts it, checks `/healthz` reports this commit |
 

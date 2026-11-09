@@ -108,13 +108,14 @@ Your timetable is already seeded for `you@example.com` (21 series, checked again
 
 ## Before you push: run what CI runs
 
-CI runs five jobs on every PR ([[Deploy and CI]]). These commands are their local twins, roughly fastest to slowest:
+CI runs six jobs on every PR ([[Deploy and CI]]). These commands are their local twins, roughly fastest to slowest:
 
 | CI job | Local command | Needs |
 |---|---|---|
 | Lint, typecheck and build | `pnpm check && pnpm typecheck && pnpm build` | Nothing extra |
 | Test API and web | `pnpm --filter "./apps/*" test` | Docker (the tests start Postgres themselves if it isn't running) |
 | Test core | `pnpm --filter @tasks/core test:tz && pnpm --filter @tasks/core coverage` | Nothing extra |
+| End-to-end test | `pnpm e2e` | Postgres running (`docker compose up -d --wait db`), and Chromium once per machine: `pnpm --filter @tasks/e2e exec playwright install chromium` ([[End-to-end test]]) |
 | Scan for secrets | `docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --redact` | Docker |
 | Build and boot the image | See "Try the production image" below | Docker + buildx |
 
@@ -122,6 +123,7 @@ A sensible rhythm:
 - **Every commit:** `pnpm check && pnpm typecheck`, plus the tests of the package you touched. `pnpm check:fix` fixes formatting by itself.
 - **Before pushing or opening a PR:** the first three rows. `pnpm test` runs every package's tests at once.
 - **When you touched the `Dockerfile`, `deploy/`, dependencies, or anything about start-up:** the image check too.
+- **When you touched the calendar, the sheet, the class form, the saved copy or sign-in:** `pnpm e2e` too.
 
 You don't need to start Postgres before testing. The API tests' one-time setup (`apps/api/src/test/global-setup.ts`) tries to connect. If nothing answers on `localhost:5432`, it prints "Postgres isn't running … starting it with docker compose", runs `docker compose up -d --wait db`, and carries on. Postgres keeps running afterwards, as it does after `pnpm dev`.
 

@@ -14,6 +14,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | 429 Too Many Requests | "Slow down": the server wants fewer requests; the cancel queue tries again later | [[Offline cancels]] |
 | `AbortController` / `AbortSignal` | The browser's way to cancel something you started: pass `signal` along, later call `abort()`, and the waiting promise rejects with an `AbortError`; `fetch` and Web Locks both take one | [[Web Locks and BroadcastChannel]] |
 | aborted transaction | After an error inside a transaction, Postgres refuses everything until `ROLLBACK` | [[Transactions]] |
+| accessible name | The words a screen reader says for an element (a button's text or its `aria-label`); Playwright finds elements by it | [[End-to-end tests and Playwright]] |
 | ACID | Atomic, consistent, isolated, durable: what a database transaction promises | [[Transactions]] |
 | adapter boundary | A small fixed interface in front of a part you might swap; ours is `TimeGridProps`, so FullCalendar could replace the grid | [[Calendar grid]], [[Calendar grid choices]] |
 | allowlist | The list of emails allowed to sign in (`AUTH_ALLOWED_EMAILS`); everyone else is refused before a user row exists | [[Auth]] |
@@ -27,6 +28,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `as const` | "This value never changes; remember its exact contents", e.g. the ten colour names | [[TypeScript essentials]] |
 | `asUser` (`c.var.asUser`) | `withUser` already bound to the signed-in user; the calendar handlers get it from the `userScope` middleware and never handle a user id | [[Calendar API]], [[Row-level security in our database]] |
 | autocommit | Without `BEGIN`, each statement is its own transaction | [[Transactions]] |
+| auto-waiting (Playwright) | Actions wait until their element is ready, and `expect` retries until true or 5 s pass, so a test never sleeps | [[End-to-end tests and Playwright]] |
 | background layer | Where cancelled classes are drawn: full width, behind, never taking a column (D-077) | [[Calendar grid]], [[Calendar grid choices]] |
 | backoff | Waiting longer before each retry (1 s, 2 s, 4 s …, at most 30 s apart) so a struggling server isn't hammered; the cancel queue retries this way for as long as the failure can clear | [[Idempotency and retries]], [[Mutations and offline queues]] |
 | Better Auth | The library that handles Google sign-in, sessions and cookies inside our API | [[Auth]], [[API stack choices]] |
@@ -37,6 +39,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | branding (types) | A type only one function can create, like `UserScope` from `withUser` | [[TypeScript essentials]], [[Row-level security in our database]] |
 | breakpoint | A screen width where the layout changes; ours is 768 px (Day view below, Week view from it) | [[Responsive layouts]] |
 | BroadcastChannel | Messages between tabs of one origin: `postMessage` reaches every other tab that opened a channel with that name | [[Web Locks and BroadcastChannel]] |
+| browser context | A fresh, empty browser profile (own cookies, storage, IndexedDB); every Playwright test gets a new one | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | build context | The files `docker build` may read; `.dockerignore` decides it | [[Containers and images]] |
 | buster (cache) | A version string saved with the cached copy; a copy with a different one is thrown away instead of restored | [[Offline reads]], [[IndexedDB and offline storage]] |
 | BYPASSRLS | A role attribute that skips row-level security, meant for jobs that must see every user's rows | [[Row-level security]] |
@@ -94,6 +97,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | drop (queued change) | A queued change the server refused for good (a 404, another 4xx): it leaves the queue, the weeks are fetched again, and a toast says so | [[Offline cancels]] |
 | ENABLE / FORCE ROW LEVEL SECURITY | `ENABLE` turns RLS on for a table; `FORCE` makes it apply to the table's owner too | [[Row-level security]] |
 | `ensureQueryData` | Return a query's cached answer, or fetch it if there is none; used in a route's `beforeLoad` and loader | [[Offline reads]], [[Web app]] |
+| end-to-end test | A test where a real browser drives the real built app, through the API to the database and back; ours: `pnpm e2e` | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | entity | A kind of thing the app stores as its own row with its own id, in its own table: group, series, override. A series in no group is still a series, not a new entity | [[Swap, days off and series choices]], [[Database and migrations]] |
 | `enum` | A TypeScript feature we can't use: it needs generated code, and our settings allow only types Node can delete | [[TypeScript essentials]] |
 | environment variable | A named setting handed to a program at start (`PORT=3000`) | [[Environment variables and config]] |
@@ -106,6 +110,8 @@ Every technical term used in this vault and the code: one line each, plus the no
 | fast-forward / `--no-ff` | Merge styles; `--no-ff` always records a merge commit, keeping the branch visible | [[Local workflow]] |
 | `fetchQuery` | Fetch now and return the answer; with `staleTime: 0` it always asks the server, unlike `ensureQueryData` | [[Offline cancels]] |
 | fixture | Fixed, made-up data that tests run against; ours is a sample semester, as TypeScript for the engine and as `fixtures/sample-timetable.json` | [[Timetable files and seeding]] |
+| fixture (Playwright) | Something the test runner sets up for a test and hands it, such as `page`, `context` or `browser` | [[End-to-end tests and Playwright]] |
+| flaky test | One that passes and fails on the same code, usually from timing or leftover state; worse than none | [[End-to-end tests and Playwright]] |
 | foreign key | "This column must match an id in that table" | [[Postgres and SQL basics]] |
 | `forgetCachedData` | Our sign-out helper: clears the cache in memory and deletes the saved copy in IndexedDB | [[Offline reads]] |
 | frozen tab | A background tab the browser has paused to save battery: no timers, no messages, but its locks stay held. A discarded tab is thrown out of memory and reloaded when you return | [[Web Locks and BroadcastChannel]] |
@@ -120,6 +126,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | hash | A one-way fingerprint of data (SHA-256) | [[Hashing and signing]] |
 | head-of-line blocking | One stuck item at the front of a queue holds up everything behind it | [[Mutations and offline queues]] |
 | header | A `Name: value` line in a request or response (`Cookie`, `Content-Type`) | [[HTTP basics]] |
+| headless | A browser running with no window, as on a CI machine; Playwright's smallest Chromium is the headless shell | [[End-to-end tests and Playwright]] |
 | health check | A command that asks "are you OK?" (`/healthz`, `pg_isready`) | [[Docker Compose]], [[API server]] |
 | HMAC | A signature made by hashing a message with a secret key | [[Hashing and signing]] |
 | Hono | The web framework our API is written with: routes and middleware | [[API server]], [[API stack choices]] |
@@ -144,7 +151,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | interface | A description of an object's fields and their types | [[TypeScript essentials]] |
 | interval / overlap | A start and an end, `[start, end)`; two overlap when each starts before the other ends (touching isn't overlap) | [[Interval partitioning]] |
 | interval partitioning | Putting overlapping intervals into as few columns as possible: sort by start, take the first free column | [[Interval partitioning]], [[Calendar grid]] |
-| invalidate (a query) | Mark a cached answer out of date: refetched now if on screen, otherwise when next shown | [[Series form]], [[Server state and caching]] |
+| invalidate (a query) | Mark a cached answer out of date whatever its age (`isInvalidated`): refetched now if on screen, otherwise when next shown; every answer restored from the phone comes back invalidated | [[Series form]], [[Server state and caching]], [[Offline reads]] |
 | IP address | A machine's number on a network; `127.0.0.1` is "this machine" | [[HTTP basics]] |
 | isolation level | How much concurrent transactions see of each other; Postgres's default is READ COMMITTED | [[Transactions]] |
 | JSON | The text format API bodies use: `{"sha":"dev"}` | [[HTTP basics]] |
@@ -163,6 +170,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | localStorage / sessionStorage | Small, synchronous text-only browser storage, per origin / per tab | [[IndexedDB and offline storage]] |
 | `Location` header | Sent with a `201`: the URL where the new row now lives (`/api/v1/series/<id>`) | [[Calendar API]] |
 | `LOGIN` / `NOLOGIN` | Whether a role may open a connection; `tasks_app` is `NOLOGIN` and is only switched into | [[Roles and privileges]] |
+| locator | Playwright's description of how to find an element (`getByRole('button', { name: 'Save' })`); it looks again each time it's used | [[End-to-end tests and Playwright]] |
 | lost update | Two writers each save a whole value, and the second erases the first one's change without knowing it existed | [[Web Locks and BroadcastChannel]] |
 | manifest (web app) | The JSON telling the phone the app's name, icons and colours, so it can be installed | [[PWAs and service workers]] |
 | `matchMedia` | Asks a media query from JavaScript, with a `change` event when the answer flips | [[Responsive layouts]] |
@@ -211,6 +219,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | persister | Saves TanStack Query's cache to storage (ours: IndexedDB) and restores it when the app starts | [[IndexedDB and offline storage]], [[Offline reads]] |
 | pino | Our logger: one JSON line per event | [[Structured logging]] |
 | PKCE | An extra OAuth check that stops a stolen sign-in code from being used by someone else | [[OAuth sign-in]] |
+| Playwright | A library that drives a real browser from a script, with its own test runner (`@playwright/test`); ours runs the end-to-end test | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | pnpm / workspace | Package manager; a workspace links our packages to each other | [[Monorepo and workspaces]] |
 | policy (RLS) | A per-table condition deciding which rows a request may see (`USING`) and write (`WITH CHECK`) | [[Row-level security]] |
 | popover (HTML) | A built-in panel (`popover` attribute) the browser opens, closes on Escape or outside taps, and draws on top; our account menu | [[Calendar grid]] |
@@ -269,7 +278,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | SQLSTATE | Postgres' five-character error code, stable unlike the message: `23505` unique, `23503` foreign key, `23514` check, `42501` not allowed | [[Calendar API]] |
 | SSH | Encrypted remote login; the deploy job uses it to run `deploy.sh` on the server | [[Deploy and CI]] |
 | SSRF | Server-side request forgery: tricking a server that fetches URLs into reaching places only it can see; our notes' links are never fetched | [[Swap, days off and series choices]] |
-| `staleTime` | How long TanStack Query treats an answer as fresh and won't refetch it; the calendar uses a minute | [[Calendar grid]], [[Server state and caching]] |
+| `staleTime` | How long TanStack Query treats an answer as fresh and won't refetch it; the calendar uses a minute. An invalidated answer is stale whatever its age | [[Calendar grid]], [[Server state and caching]], [[Offline reads]] |
 | status code | The 3-digit result of a request (200, 401, 404, 500) | [[HTTP basics]] |
 | `steal` (Web Locks) | Take a lock from its holder at once; the holder's request rejects, and its code must notice and stop | [[Web Locks and BroadcastChannel]] |
 | strict mode | Our TypeScript setting that, among other things, forbids `null` where a value is expected | [[TypeScript essentials]] |
@@ -279,8 +288,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | sync badge | The "offline · last synced 2:02 PM" pill: the screen shows saved answers, last confirmed at that time; since v0.3 it also counts waiting changes | [[Offline reads]], [[Offline cancels]] |
 | TanStack Query | The app's cache of server data; refetches and stores answers | [[Server state and caching]] |
 | `tasks_app` | The non-owner, non-superuser role each API request switches into, so RLS applies | [[Row-level security in our database]], [[Roles and privileges]] |
+| `tasks_e2e` | The end-to-end test's own database, emptied before every run | [[End-to-end test]] |
 | TCP | The reliable connection under HTTP: bytes arrive complete and in order | [[HTTP basics]] |
 | template literal type | A type that is a text pattern: `` `--palette-${ColorToken}` `` | [[TypeScript essentials]] |
+| test pyramid | Many unit tests, fewer integration tests, a handful of end-to-end tests: cheap ones for detail, costly ones for wiring | [[End-to-end tests and Playwright]] |
 | `throttleTime` | The persister saves at most once per this many ms (ours: 1 000): at once after a quiet second, else a moment later | [[Offline cancels]], [[Offline reads]] |
 | `TimeGridProps` | The eight props the calendar grid takes: days, zone, occurrences, waiting keys, groups, now, zoom, on-tap | [[Calendar grid]] |
 | timer overflow (24.8 days) | Browsers store a `setTimeout` delay in 32 bits; a longer delay fires immediately | [[Offline reads]], [[Offline and form choices]] |
@@ -289,6 +300,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | TLS | The encryption under HTTPS, with certificates proving the server's identity | [[Reverse proxies and TLS]] |
 | Toast | A short message at the screen's edge that goes away by itself, sometimes with one button such as Undo | [[Dialogs and toasts]] |
 | Top layer | A layer the browser draws above the whole page; a modal `<dialog>` goes there, so no `z-index` covers it | [[Dialogs and toasts]] |
+| trace (Playwright) | A recording of a test run (page snapshots, network, console) kept when it fails; opened with `playwright show-trace` | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | transaction | Statements that all happen or none do (`BEGIN` … `COMMIT` / `ROLLBACK`) | [[Transactions]], [[Postgres and SQL basics]] |
 | type alias | A second name for a type: `ISODate = string`; documents, doesn't enforce | [[TypeScript essentials]], [[Core types]] |
 | type checker (`tsc`) | The program that reads the types and reports mistakes before anything runs (`pnpm typecheck`) | [[TypeScript essentials]], [[TypeScript checking vs running]] |
@@ -309,6 +321,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Vite | The web app's dev server and bundler | [[Web app]], [[Web stack choices]] |
 | volume | A Docker-managed folder that outlives containers; Postgres's data lives in one | [[Containers and images]], [[Docker Compose]] |
 | waiting change | A cancel, restore or reason change made on the phone that the server doesn't have yet; shown at once, with a clock mark | [[Offline cancels]] |
+| `webServer` (Playwright) | The config entry that starts the app before the tests, waits until a URL answers, and stops it after | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | `WeakMap` | A map whose keys are objects it doesn't keep alive: when nothing else holds a key, its entry goes too | [[Offline cancels]] |
 | Web Lock (`navigator.locks`) | A named lock shared by every tab of an origin; held while a callback's promise runs, freed when the tab dies | [[Web Locks and BroadcastChannel]] |
 | `window.close()` | Closes the tab, but only one a script opened; for any other tab it does nothing | [[Web Locks and BroadcastChannel]] |
