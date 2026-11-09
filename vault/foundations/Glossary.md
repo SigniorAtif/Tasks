@@ -82,7 +82,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Term | In one line | Explained in |
 |---|---|---|
 | daemon (`dockerd`) | A background service; Docker's does the real work, the `docker` command just asks it | [[Containers and images]] |
-| day boundary (`dayBoundary`) | The wall time your day starts at, 04:00 by default: until then it's still yesterday for you (D-035) | [[The user's day]] |
+| day boundary (`dayBoundary`) | The wall time your day starts at: midnight by default (04:00 until migration `0004`); set later, a late night still counts as yesterday (D-035) | [[The user's day]] |
 | debounce | Wait until something stops happening, then act once; our notes save a second after the typing stops, not on every key | [[Swap, days off and series choices]] |
 | default deny | With RLS on, a row is hidden unless a policy lets it through; no policy, or no user set, means no rows | [[Row-level security]] |
 | default parameter | The value an argument takes when the caller leaves it out: `epochMs = Date.now()` | [[The user's day]] |

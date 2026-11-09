@@ -107,7 +107,7 @@ export function groupSections(
 }
 ```
 
-`today` is your day from `todayFor`, and `isArchived` is core's one helper: a group is archived once its last day is before your day, which starts at 04:00, not midnight ([[The user's day]]). Sorting once, before filtering, keeps both halves in order.
+`today` is your day from `todayFor`, and `isArchived` is core's one helper: a group is archived once its last day is before your day, which starts at your day boundary, midnight by default ([[The user's day]]). Sorting once, before filtering, keeps both halves in order.
 
 Under each name, `groupSummary` writes one line from what the group has: "Counts attendance · Last day 18 Dec 2026", or "Ended 30 Apr 2026" once it's archived, or nothing for a group with neither. The answer to *Predict first*: under no heading, art club, Health, Sem 9, Sem 10; under "Archived", Summer school.
 

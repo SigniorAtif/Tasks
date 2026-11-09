@@ -71,7 +71,7 @@ What to notice:
 - `orderedDays` puts the days Monday first, whatever order you tapped them in. `'weekly' as const` tells TypeScript the value is exactly `'weekly'`, not just any string ([[TypeScript essentials]]).
 - An empty minutes box becomes `NaN` ("not a number"), not `0`, so the schema refuses it instead of saving a zero-minute class.
 
-"Today" is **your day**: your profile's zone, not the phone's, and starting at your day boundary (04:00), not midnight. At 5:00 AM in Kolkata it's the 14th, even on a laptop set to London, where it's still 11:30 PM on the 13th. At 1:30 AM in Kolkata, though, it's still the 13th: you haven't slept yet (`todayFor` in `lib/time.ts`, explained in [[The user's day]]).
+"Today" is **your day**: your profile's zone, not the phone's, starting at your day boundary, which is midnight unless it's set later. At 5:00 AM in Kolkata it's the 14th, even on a laptop set to London, where it's still 11:30 PM on the 13th (`todayFor` in `lib/time.ts`, explained in [[The user's day]]).
 
 "Archived" uses the same day. A group whose last day has passed (core's `isArchived`) leaves the Group select, unless it's the group this class is already in: then it stays, marked "(archived)", so the form doesn't quietly change it.
 

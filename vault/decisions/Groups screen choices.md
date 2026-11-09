@@ -2,14 +2,18 @@
 
 The choices made while building ticket #11, the Groups screen. The ticket set the shape: a route from the account menu, running groups first and an Archived section after, each sorted by name; "archived" worked out by one helper in core that honours the profile's zone and day boundary; a form for name, colour, attendance and last day. Everything below filled the gaps around it. PR #21 lists them. How the code does it: [[Groups screen]], [[The user's day]], [[Shared form pieces]].
 
-## "Today" starts at the day boundary, wherever "archived" is asked
+## "Today" starts at midnight, and follows the profile's day boundary
 
-A group is archived once its last day is before **your day**, and your day starts at your day boundary (04:00 by default) in your profile's zone. A group that ends on Fri 27 Nov is still running at 03:59 on Saturday, and archived at 04:00.
+A group is archived once its last day is before **your day**: the date in your profile's zone, starting at your day boundary. The boundary is midnight by default, so a group that ends on Fri 27 Nov is archived from 00:00 on Saturday.
 
-Why: the day boundary already existed (D-035, in the profile since v0.0) for exactly this kind of question: when you're still up at 01:00, it's still Friday for you. If "archived" flipped at midnight, then at 00:30 after Sem 3's last day, still Friday for you, Sem 3 would already sit under Archived and vanish from the series form's select. One rule for "today" means the Groups screen and the series form can never disagree about whether Sem 3 has ended.
+Why one rule: the Groups screen and the series form can never disagree about whether Sem 3 has ended. Why it follows the profile's boundary: the setting has been in the profile since v0.0 (D-035), and the ticket asked for it.
+
+Why midnight by default: D-035 chose 04:00, so that a late night stays one day: at 00:30 after Sem 3's last day, still Friday for you, Sem 3 would still be running. #11 was first built that way. Then, at 02:14 one night, the calendar showed the 10th as today while the series form suggested the 9th as a new class's first day, and the Groups screen listed a group that ended on the 9th as running. The calendar's dates change at midnight, as a grid of dates has to, so a 04:00 day put two different "todays" on screen for four hours every night. Midnight makes them agree. The boundary stays a setting, so a later start can come back with a settings screen. Migration `0004` moved every profile still on 04:00, because nothing in the app could set it yet, so none of them was a choice.
 
 What lost:
-- **Midnight in your zone.** It's what #7's stand-in did (`todayIn`), and it's simpler: no boundary. But it splits a late night in two.
+- **04:00 by default.** A class at 01:00 after a late night counts as the evening before, as D-035 wanted, at the price of two "todays" on screen between midnight and 04:00.
+- **Making the calendar follow the 04:00 day instead.** Its highlighted day would be yesterday's column until 04:00 while the clock reads the new date: the same mismatch, moved.
+- **Hard-coding midnight**, as #7's stand-in did (`todayIn`). The same answer today, but it ignores the profile's setting, so a later start could never come back without touching every screen.
 - **The phone's own date.** Simplest of all, and wrong whenever the phone's zone isn't the profile's: on a laptop set to London, a Kolkata user's group would end five and a half hours late.
 
 ## One helper, in core, that takes "today" as an argument
@@ -72,13 +76,13 @@ What lost:
 
 ## Not in this ticket
 
-- **The calendar's own "today"** still turns at midnight. It's a separate screen with its own date maths; moving it to `todayFor` is logged for later.
+- **The calendar's own "today"** turns at midnight, which now matches the default. Making it follow a later boundary waits until something can set one.
 - **"Observes holidays"** stays hidden until days off exist (v0.3b).
 - **Archive and Delete** come in #12 and #14.
 
 ## Check yourself
 
-- Name the one rule that decides "archived", and give a moment when a midnight rule and the day-boundary rule disagree about Sem 3 ending on 27 Nov.
+- Name the one rule that decides "archived". With a 04:00 boundary, give a moment when it and the calendar disagree about Sem 3 ending on 27 Nov, and say why the default moved to midnight.
 - Why does `isArchived` take `today` as an argument instead of reading the clock?
 - Postgres already sorts groups by name. Why sort again in the browser, and why on the series form too?
 - What could go wrong if the series form dropped an archived group from its select even when the class is already in it?

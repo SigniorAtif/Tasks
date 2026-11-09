@@ -2,11 +2,13 @@
 
 > **Background:** [[Dates, times and instants]] · [[Time zones and daylight saving]] · [[Testing pure code]]
 
-"Today" in this app isn't the date on the phone's clock. It's **your day**: the date in your profile's zone (`tzid`), starting at your **day boundary** (`dayBoundary`, 04:00 unless you change it), not at midnight. A class at 01:00 after a late night still belongs to the evening before, and so does everything else that asks "is it today yet?". Since ticket #11 two questions use it: which first day the series form suggests, and whether a group has ended ("archived"). Why it works this way: [[Groups screen choices]].
+"Today" in this app isn't the date on the phone's clock. It's **your day**: the date in your profile's zone (`tzid`), starting at your **day boundary** (`dayBoundary`). The boundary is midnight unless it's set later. Set to 04:00, a class at 01:00 after a late night would still belong to the evening before, and so would everything else that asks "is it today yet?". Since ticket #11 two questions use it: which first day the series form suggests, and whether a group has ended ("archived"). Why it works this way: [[Groups screen choices]].
+
+**It used to be 04:00.** D-035 made 04:00 the default, and #11 was first built with it. Then, between midnight and 04:00, the series form and the Groups screen said "yesterday" while the calendar, whose dates change at midnight, already showed the new day. So the default moved to midnight (migration `0004`, 10 Nov 2026, [[Database and migrations]]). The boundary itself stays a setting, which is why most examples below use 04:00: at midnight there's nothing to see.
 
 ## Predict first
 
-Sem 3's last day is Fri 27 Nov. It's 03:30 on Sat 28 Nov in Kolkata, and you open the Groups screen. Is Sem 3 under "Archived" yet? What about at 04:00? And if your laptop is set to London time, where it's still 22:00 on the 27th, does that change anything?
+Sem 3's last day is Fri 27 Nov. It's 00:30 on Sat 28 Nov in Kolkata, and you open the Groups screen. With the default boundary (midnight), is Sem 3 under "Archived" yet? If your boundary were 04:00, what would change, and from when? And if your laptop is set to London time, where it's still 19:00 on the 27th, does that change anything?
 
 ## Files
 
@@ -21,7 +23,7 @@ Who asks: the Groups screen ([[Groups screen]]) splits running groups from archi
 
 ```mermaid
 flowchart TD
-  profile["your profile<br/>tzid: Asia/Kolkata, dayBoundary: 04:00"] --> todayFor["todayFor(profile)<br/>apps/web/src/lib/time.ts"]
+  profile["your profile<br/>tzid: Asia/Kolkata, dayBoundary: 00:00"] --> todayFor["todayFor(profile)<br/>apps/web/src/lib/time.ts"]
   now["now<br/>Date.now(), on the phone"] --> todayFor
   todayFor --> local["localDateOf(now, tzid, dayBoundary)<br/>packages/core/src/days.ts"]
   local --> today["today: '2026-11-27'"]
@@ -44,7 +46,7 @@ export function localDateOf(epochMs: number, tzid: IanaZone, dayBoundary: WallTi
 }
 ```
 
-Line by line, with 01:30 on Sat 28 Nov in Kolkata, which is 20:00 UTC on the 27th:
+Line by line, with a 04:00 boundary and 01:30 on Sat 28 Nov in Kolkata, which is 20:00 UTC on the 27th:
 
 1. `epochMs` is the moment as one number: milliseconds since 1970-01-01T00:00Z, the number every clock agrees on ([[Dates, times and instants]]).
 2. `Temporal.Instant.fromEpochMilliseconds(epochMs)` makes that number a Temporal **instant**: a moment with no zone. `.toZonedDateTimeISO(tzid)` asks what a wall clock in `Asia/Kolkata` shows at that moment: `2026-11-28T01:30+05:30[Asia/Kolkata]`. That's a `ZonedDateTime`, a moment plus a zone.
@@ -53,14 +55,14 @@ Line by line, with 01:30 on Sat 28 Nov in Kolkata, which is 20:00 UTC on the 27t
 5. 01:30 is before 04:00, so the answer is the day before: `2026-11-27`. At 04:00 or later it's the date itself.
 6. `.toString()` gives the `YYYY-MM-DD` text the rest of the app uses (an `ISODate`).
 
-More moments, with the boundary at 04:00:
+With the default boundary, `00:00`, no wall time is before it, so `beforeBoundary` is always false and your day is simply the date in your zone. More moments, both ways:
 
-| Wall clock in Kolkata | Calendar date | Your day |
-|---|---|---|
-| Fri 27 Nov, 23:59 | 27 Nov | 27 Nov |
-| Sat 28 Nov, 00:00 | 28 Nov | **27 Nov** |
-| Sat 28 Nov, 03:59 | 28 Nov | **27 Nov** |
-| Sat 28 Nov, 04:00 | 28 Nov | 28 Nov |
+| Wall clock in Kolkata | Calendar date | Your day, boundary 00:00 (default) | Your day, boundary 04:00 |
+|---|---|---|---|
+| Fri 27 Nov, 23:59 | 27 Nov | 27 Nov | 27 Nov |
+| Sat 28 Nov, 00:00 | 28 Nov | 28 Nov | **27 Nov** |
+| Sat 28 Nov, 03:59 | 28 Nov | 28 Nov | **27 Nov** |
+| Sat 28 Nov, 04:00 | 28 Nov | 28 Nov | 28 Nov |
 
 Notice what the function *doesn't* take: the phone's zone. Every step uses `tzid`, so a laptop set to London gives the same answer as a phone in Kolkata. The test *follows the zone and day boundary it is given, not the machine's* pins that: 05:30 on the 28th in Kolkata is still 19:00 on the 27th in New York, and with a New York profile the answer is the 27th. The core tests also run three times, in UTC, Kolkata and New York (`pnpm test:tz`), so a hidden use of the machine's zone would fail somewhere.
 
@@ -93,7 +95,7 @@ export function isArchived(item: { untilDate: ISODate | null }, today: ISODate):
 
 What to notice:
 - `untilDate < today` compares two `YYYY-MM-DD` strings. That works because the format puts the biggest unit first, so text order is date order: `'2026-11-27' < '2026-11-28'`.
-- `<`, not `<=`: on its last day a group is still running. It's archived from the next day, **your** next day, so from 04:00.
+- `<`, not `<=`: on its last day a group is still running. It's archived from the next day, **your** next day: from midnight by default, or from 04:00 with a 04:00 boundary.
 - `untilDate: null` means "no last day", and such a group never ends.
 - `item: { untilDate: ISODate | null }` asks only for the one field it reads. A group fits, and so does a series, so one function answers for both.
 - "Archived" is never stored. It follows from the last day, so "Sem 3 ends 27 Nov" archives itself on the 28th with no second step and no chance of a flag that disagrees with the date ([[Cancel and group choices]]).
@@ -112,6 +114,21 @@ The test the ticket asked for:
   });
 ```
 
+It uses a 04:00 boundary on purpose: it proves the helper follows the boundary it's given. The next test pins the default:
+
+*From `packages/core/src/days.test.ts`:*
+```ts
+  it('starts the day at midnight for a profile on the defaults', () => {
+    const { tzid, dayBoundary } = DEFAULT_PROFILE;
+    const archivedAt = (wall: string) =>
+      isArchived(sem3, localDateOf(inKolkata(wall), tzid, dayBoundary));
+    expect(archivedAt('2026-11-27T23:59')).toBe(false);
+    expect(archivedAt('2026-11-28T00:00')).toBe(true);
+  });
+```
+
+`DEFAULT_PROFILE` is the same object the API uses for a new profile (`packages/core/src/api.ts`), so if anyone moves the default back to 04:00, this test fails.
+
 ## Right now, in the app: `todayFor`
 
 Core has no clock. Its code never reads `Date.now()` (a Biome rule bans the `Date` global there, D-015), so `localDateOf` takes the moment as an argument. That's what makes it easy to test: any moment can be passed in. The web app supplies the real "now":
@@ -129,20 +146,20 @@ What to notice:
 - `isKnownZone` asks the browser whether it knows the zone. An old browser that doesn't know a newer zone name would make Temporal throw, so it falls back to the phone's own zone (`Temporal.Now.timeZoneId()`) instead of breaking the screen.
 - The profile comes from `GET /api/v1/me`, which the app already has in its cache, so working out today costs no request and works offline.
 
-**When the day turns while a screen is open.** Nothing watches the clock for 04:00. Instead, the `me` query refetches every minute while the app is in front (`refetchInterval: 60_000` in `lib/queries.ts`), each answer carries a new `serverTime`, so the screen draws again and calls `todayFor` again. A group whose last day was yesterday moves to Archived within a minute of 04:00.
+**When the day turns while a screen is open.** Nothing watches the clock for the boundary. Instead, the `me` query refetches every minute while the app is in front (`refetchInterval: 60_000` in `lib/queries.ts`), each answer carries a new `serverTime`, so the screen draws again and calls `todayFor` again. A group whose last day was yesterday moves to Archived within a minute of the boundary.
 
-## Not yet
+## The calendar's today
 
-The calendar's own "today" (the day it highlights) still turns at midnight in your zone. It's a different screen with its own date maths, and moving it to `todayFor` is logged as later work.
+The calendar's own "today" (the day it highlights, `todayIn` in `calendar/model/dates.ts`) always turns at midnight in your zone. With the default boundary, that's the same day `todayFor` gives. The two would only part ways for a profile with a later boundary, and nothing in the app can set one yet; making the calendar follow `todayFor` is logged for when it can.
 
 ## How it was checked
 
-- The four core tests and two web tests above, in all three zones.
-- Live, at 02:14 on 10 Nov in Kolkata: "Evening classes" with a last day of 9 Nov still showed as running, and "Pottery", ended 8 Nov, sat under Archived. Made-up groups, in a test database.
+- The five core tests and two web tests above, in all three zones.
+- Live, at 02:14 on 10 Nov in Kolkata, while the default was still 04:00: "Evening classes" with a last day of 9 Nov still showed as running, and "Pottery", ended 8 Nov, sat under Archived. Made-up groups, in a test database. The same moment showed the calendar already on the 10th, which is what moved the default to midnight.
 
 ## Check yourself
 
-- **Predict:** your boundary is 04:00 and you're in Kolkata. At 03:00 on 1 Dec, what does `todayFor` return? Is a group with last day 30 Nov archived?
+- **Predict:** you're in Kolkata on the default profile. At 00:30 on 1 Dec, what does `todayFor` return, and is a group with last day 30 Nov archived? What if your boundary were 04:00?
 - **Trace:** a profile in `America/New_York` with boundary `00:00`, at 05:30 on 28 Nov in Kolkata. Walk through `localDateOf` step by step. What date comes out, and why is it not the 28th?
 - **Break it:** change `<` to `<=` in `isArchived`. Which line of the 27 Nov test fails, and what would you see on the Groups screen on 27 Nov?
 - **Explain:** why does `localDateOf` compare `toPlainTime()` with the boundary instead of adding four hours to midnight?

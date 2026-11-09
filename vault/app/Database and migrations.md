@@ -2,7 +2,7 @@
 
 > **Background:** [[Postgres and SQL basics]] · [[Database migrations]] · [[Connection pools]]
 
-How the API stores data: one Postgres 18 database, eight tables, three migrations. v0.0 made the five identity and settings tables, and v0.2 added the three calendar tables and row-level security. Concepts behind it: [[Database migrations]], [[Connection pools]], [[Row-level security]]. Choices: [[API stack choices]], [[v0.2 contracts]].
+How the API stores data: one Postgres 18 database, eight tables, five migrations. v0.0 made the five identity and settings tables, v0.2 added the three calendar tables and row-level security, and v0.3 took a group's first day away (`0003`) and moved the day start to midnight (`0004`). Concepts behind it: [[Database migrations]], [[Connection pools]], [[Row-level security]]. Choices: [[API stack choices]], [[v0.2 contracts]].
 
 New to databases? Read [[Postgres and SQL basics]] first: tables, keys, indexes, transactions, and how to open `psql` on our database.
 
@@ -76,7 +76,7 @@ erDiagram
 | `auth_session` | signed-in browser | Better Auth | `token` unique (looked up on every request), `expires_at`, `ip_address`, `user_agent` |
 | `auth_account` | way of signing in (your Google account) | Better Auth | `(provider_id, account_id)` unique: one Google identity → one user. Holds Google's tokens. `password` stays empty: passwords are off |
 | `auth_verification` | short-lived secret | Better Auth | Holds the OAuth `state` and PKCE verifier for 10 minutes during sign-in ([[OAuth sign-in]]) |
-| `profile` | user | our code | `tzid` (default `Asia/Kolkata`), `day_boundary` (default `04:00`) |
+| `profile` | user | our code | `tzid` (default `Asia/Kolkata`), `day_boundary` (default `00:00` since migration `0004`, `04:00` before) |
 
 ### The calendar tables (v0.2; groups changed in v0.3)
 
@@ -320,6 +320,26 @@ The safe way is **expand/contract**, over two releases:
 
 v0.3 did it in one step because nothing is deployed yet: there's no server and no older app to roll back to, and the only copy of the data is on this laptop, where the seed can rebuild it. ADR v0.3's "Contradicts" line records the exception. Once the server holds your real semester, a change like this gets the two releases.
 
+### A changed default, and the rows it doesn't reach: migration `0004`
+
+The day boundary's default moved from 04:00 to midnight ([[The user's day]], [[Groups screen choices]]). In code that's one value, `DEFAULT_PROFILE.dayBoundary` in `packages/core/src/api.ts`. As the `0000` notes above say, the database doesn't follow core by itself: `schema.ts` reads that value, so `db:generate --name midnight_day_start` saw a new default and wrote the `ALTER`. The `UPDATE` was added by hand.
+
+*From `apps/api/drizzle/0004_midnight_day_start.sql`:*
+```sql
+ALTER TABLE "profile" ALTER COLUMN "day_boundary" SET DEFAULT '00:00';--> statement-breakpoint
+-- Nothing in the app can set a day boundary yet, so every 04:00 is the old
+-- default, not a choice: move those profiles to midnight too.
+UPDATE "profile" SET "day_boundary" = '00:00' WHERE "day_boundary" = '04:00';
+```
+
+What to notice:
+- A column's `DEFAULT` is only used when a row is **inserted** without a value. Your profile was made on your first sign-in with `04:00` written into it, so changing the default alone would leave you on 04:00. That's why the `UPDATE` is there.
+- drizzle-kit compares schemas, never data, so it can't know existing rows should change. A data change in a migration is always written by hand, and read twice.
+- `WHERE "day_boundary" = '04:00'` moves only the old default. A profile set to 03:00 (a test sets one) stays as it is, because that would have been someone's choice.
+- It's expand-safe, unlike `0003` above: the old app reads `day_boundary` exactly as before, it just gets `00:00`.
+
+`schema.test.ts` checks it: it makes one profile on 04:00 and one on 03:00, runs the file's statements over them, and expects `00:00:00` and `03:00:00`. With the `UPDATE` line removed, the test fails with `expected '04:00:00' to be '00:00:00'`.
+
 ## Check yourself
 - You delete Alice's row from `auth_user` in psql. Which other rows disappear, and which rule makes it happen?
 - `auth_session.token` has a unique constraint. Besides preventing duplicates, why does that make every API request faster?
@@ -327,4 +347,5 @@ v0.3 did it in one step because nothing is deployed yet: there's no server and n
 - Why is `drizzle/` committed to git, when it's generated from `schema.ts`?
 - A bug makes the API insert a series with your `user_id` but Bob's `group_id`. Which rule refuses it, and would it still be refused if row-level security were switched off?
 - drizzle-kit asks whether `until_date` is a rename of `active_to`. You pick "create column" by mistake and deploy. What happens to every group's last day, and which line of the generated SQL should have stopped you?
+- Migration `0004` sets the default to `'00:00'`. Without its `UPDATE` line, which profiles would still start their day at 04:00, and why? Why does the `UPDATE` leave a 03:00 profile alone?
 - After migration `0003`, the server's new app fails its health check and `deploy.sh` rolls back to the old app. What does the old app's first `GET /api/v1/groups` answer, and why? How would expand/contract have avoided it?
