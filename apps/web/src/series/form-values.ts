@@ -13,15 +13,14 @@ import {
   createGroupSchema,
   createSeriesSchema,
   DEFAULT_COLOR_TOKEN,
-  type IanaZone,
   type ISODate,
+  isArchived,
   type ScheduleGroup,
   type Series,
   type UpdateSeries,
   updateSeriesSchema,
   type Weekday,
 } from '@tasks/core';
-import { Temporal } from 'temporal-polyfill';
 import type { FieldError } from '../lib/api.ts';
 import {
   type FieldMap,
@@ -32,7 +31,6 @@ import {
   problemsFor,
   schemaErrors,
 } from '../lib/form-problems.ts';
-import { isKnownZone } from '../lib/time.ts';
 
 /** The days, Monday first (B11), as the toggle buttons show them. */
 export const WEEKDAYS: readonly { day: Weekday; short: string; long: string }[] = [
@@ -113,24 +111,10 @@ export function firstProblemField(problems: Problems<FieldName>): FieldName | un
 // Starting values
 // ---------------------------------------------------------------------------
 
-/** Today's date in the user's zone (the phone's zone if this browser doesn't know it). */
-export function todayIn(tzid: IanaZone, epochMs: number = Date.now()): ISODate {
-  const zone = isKnownZone(tzid) ? tzid : Temporal.Now.timeZoneId();
-  return Temporal.Instant.fromEpochMilliseconds(epochMs)
-    .toZonedDateTimeISO(zone)
-    .toPlainDate()
-    .toString();
-}
-
 /**
- * A group is archived once its last day is before today. A stand-in until the
- * shared helper in core, which also honours the profile's day boundary (#11).
+ * The groups the "Group" select offers: every one not archived (core's
+ * `isArchived`, against the user's day), plus the series' own.
  */
-export function isArchived(group: Pick<ScheduleGroup, 'untilDate'>, today: ISODate): boolean {
-  return group.untilDate !== null && group.untilDate < today;
-}
-
-/** The groups the "Group" select offers: every one not archived, plus the series' own. */
 export function selectableGroups(
   groups: readonly ScheduleGroup[],
   today: ISODate,

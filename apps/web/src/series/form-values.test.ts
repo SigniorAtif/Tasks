@@ -15,7 +15,6 @@ import {
   suggestedFirstDay,
   toCreateGroup,
   toCreateSeries,
-  todayIn,
   toFullUpdate,
   valuesFromSeries,
   withGroupChosen,
@@ -73,13 +72,6 @@ function filled(overrides: Partial<SeriesFormValues> = {}): SeriesFormValues {
 }
 
 describe('starting values', () => {
-  it("is today's date in the user's zone, not the phone's", () => {
-    // 20:00 UTC on the 12th is already 01:30 on the 13th in Kolkata.
-    const at = Date.parse('2026-10-12T20:00:00Z');
-    expect(todayIn('Asia/Kolkata', at)).toBe('2026-10-13');
-    expect(todayIn('America/New_York', at)).toBe('2026-10-12');
-  });
-
   it('picks the first group that is not archived, or "new group" when there is none', () => {
     expect(blankValues(TODAY, [archived, sem3]).groupId).toBe(GROUP_ID);
     expect(blankValues(TODAY, [archived]).groupId).toBe(NEW_GROUP);

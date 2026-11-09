@@ -4,7 +4,7 @@ import { ScreenFrame } from '../components/ScreenFrame.tsx';
 import { isUnauthenticated } from '../lib/api.ts';
 import { groupsQuery, meQuery, seriesListQuery } from '../lib/queries.ts';
 import { requireSession } from '../lib/require-session.ts';
-import { todayIn } from '../series/form-values.ts';
+import { todayFor } from '../lib/time.ts';
 import { SeriesForm } from '../series/SeriesForm.tsx';
 
 // `/series/new`: the form to add a class.
@@ -36,7 +36,7 @@ function NewSeriesScreen() {
         series={null}
         groups={groups.data.groups}
         seriesList={list.data.series}
-        today={todayIn(me.data.profile.tzid)}
+        today={todayFor(me.data.profile)}
       />
     </ScreenFrame>
   );

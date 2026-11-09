@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router';
-import type { ISODate, ScheduleGroup, Series } from '@tasks/core';
+import { type ISODate, isArchived, type ScheduleGroup, type Series } from '@tasks/core';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import {
   ColorSwatches,
@@ -31,7 +31,6 @@ import {
   checkUpdateSeries,
   type FieldName,
   firstProblemField,
-  isArchived,
   LABELS,
   NEW_GROUP,
   problemsFromErrors,
@@ -76,7 +75,7 @@ export function SeriesForm({
   groups: readonly ScheduleGroup[];
   /** Every series, for a new class: its first day suggests the earliest future first day in its group. */
   seriesList?: readonly Series[];
-  /** Today in the user's zone: the default first day. */
+  /** The user's day (`todayFor`): the default first day, and what counts as archived. */
   today: ISODate;
 }) {
   const router = useRouter();

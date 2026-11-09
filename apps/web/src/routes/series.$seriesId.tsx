@@ -5,7 +5,7 @@ import { GoneScreen, ScreenFrame } from '../components/ScreenFrame.tsx';
 import { isUnauthenticated } from '../lib/api.ts';
 import { groupsQuery, meQuery, seriesListQuery } from '../lib/queries.ts';
 import { requireSession } from '../lib/require-session.ts';
-import { todayIn } from '../series/form-values.ts';
+import { todayFor } from '../lib/time.ts';
 import { SeriesForm } from '../series/SeriesForm.tsx';
 
 // `/series/<id>`: the form to change or delete one class. The calendar opens
@@ -49,11 +49,7 @@ function EditSeriesScreen({ seriesId }: { seriesId: string }) {
 
   return (
     <ScreenFrame title="Edit class" back="calendar">
-      <SeriesForm
-        series={series}
-        groups={groups.data.groups}
-        today={todayIn(me.data.profile.tzid)}
-      />
+      <SeriesForm series={series} groups={groups.data.groups} today={todayFor(me.data.profile)} />
     </ScreenFrame>
   );
 }
