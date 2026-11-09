@@ -2,6 +2,7 @@ import { dehydrate, onlineManager, QueryClient } from '@tanstack/react-query';
 import {
   persistQueryClientRestore,
   persistQueryClientSave,
+  persistQueryClientSubscribe,
 } from '@tanstack/react-query-persist-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { occurrence } from '../calendar/model/test-builders.ts';
@@ -123,6 +124,33 @@ describe('toAsyncStorage', () => {
   });
 });
 
+describe('a restored answer', () => {
+  it('is shown at once, then fetched again however recently it was saved', async () => {
+    const persister = createPersister(memoryStore(), 0);
+    const week = ['calendar', '2026-10-12', '2026-10-18'];
+    const before = new QueryClient();
+    before.setQueryData(week, { occurrences: ['saved'] }, { updatedAt: Date.now() });
+    await persistQueryClientSave({
+      queryClient: before,
+      persister,
+      buster: CACHE_BUSTER,
+      dehydrateOptions,
+    });
+
+    const after = new QueryClient();
+    await persistQueryClientRestore({ queryClient: after, persister, buster: CACHE_BUSTER });
+    expect(after.getQueryData(week)).toEqual({ occurrences: ['saved'] });
+
+    // The calendar counts a week as fresh for a minute. A copy saved a moment
+    // ago may still be a change or two behind (the write waits up to a second),
+    // so a restored week is asked for again all the same.
+    const queryFn = vi.fn(async () => ({ occurrences: ['from the server'] }));
+    await after.fetchQuery({ queryKey: week, queryFn, staleTime: 60_000 });
+    expect(queryFn).toHaveBeenCalledOnce();
+    expect(after.getQueryData(week)).toEqual({ occurrences: ['from the server'] });
+  });
+});
+
 describe('lastGoodAnswers', () => {
   it('saves a query whose refetch failed as a plain success with its answer', async () => {
     const persister = createPersister(memoryStore(), 0);
@@ -207,6 +235,25 @@ describe('the queue of occurrence changes', () => {
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify(SKIP) }),
     );
     expect(queuedChanges(after)).toEqual([]);
+  });
+
+  it('saves a change the moment it is queued, even just after another save', async () => {
+    const store = memoryStore();
+    const before = createQueryClient();
+    // Saving the way the running app does: after every change to the cache.
+    const stops = savedCopies(store).map((copy) =>
+      persistQueryClientSubscribe({ queryClient: before, ...copy }),
+    );
+    onlineManager.setOnline(false);
+    // A refetch lands, and both copies are saved at once...
+    before.setQueryData(['me'], { user: { name: 'Alice' } });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // ...then a cancel, a moment later. The app is closed 50 ms after it.
+    queueOccurrenceChange(before, CHANGE);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    for (const stop of stops) stop();
+
+    expect(queuedChanges(await restore(store))).toEqual([{ ...CHANGE, waiting: true }]);
   });
 
   it('saves a change that was mid-request as waiting, so the reload sends it again', async () => {

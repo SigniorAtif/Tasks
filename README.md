@@ -64,10 +64,13 @@ pnpm start       # the API the production way (serves STATIC_DIR if set)
 pnpm db:migrate  # apply database migrations
 pnpm test        # every package's tests; starts the local Postgres first if it isn't running
 pnpm test:tz     # time-sensitive tests under UTC, Asia/Kolkata and America/New_York
+pnpm e2e         # build the PWA, then the end-to-end test in Chromium (below)
 pnpm coverage    # branch coverage, gated at 90% on the recurrence engine
 pnpm typecheck
 pnpm check       # Biome: lint and format (pnpm check:fix to apply fixes)
 ```
+
+`pnpm e2e` runs `e2e/` with Playwright: it starts the API on port 3100, serving the fresh build, against a database of its own (`tasks_e2e`, emptied each run), and signs in with `dev:session`. It needs the local Postgres running, and Chromium once per machine: `pnpm --filter @tasks/e2e exec playwright install chromium`.
 
 In the API package: `pnpm --filter @tasks/api seed <file.json> [email]` (and `seed:sample`, `seed:private`) loads a timetable file into the local database.
 
@@ -80,6 +83,7 @@ To try the installable PWA (the service worker only runs in a production build),
 | `packages/core` | Pure TypeScript shared by every app: the shared types (`src/types.ts`), the HTTP contract (`src/api.ts`), the request schemas both sides validate with (`src/schemas.ts`), the timetable file format (`src/timetable.ts`), the group palette and the recurrence engine (`src/recurrence/`). No I/O, no clock. |
 | `apps/api` | The Hono API: env validation, logging, errors, `/healthz`, Better Auth (Google + an allowlist), `/api/v1/me`, the calendar routes (`/api/v1/groups`, `/series`, `/calendar`), the seed script, and Drizzle migrations in `drizzle/`. The calendar tables use Postgres row-level security: each request runs as the signed-in user. Node runs its TypeScript directly; there is no build step. |
 | `apps/web` | The React PWA: Vite, TanStack Router and Query, Tailwind, `vite-plugin-pwa`. The calendar grid is in `src/calendar/`, the class form in `src/series/`; the query cache is kept in IndexedDB so recent weeks open offline. |
+| `e2e/` | The Playwright end-to-end test: a real browser against the built app, the API and Postgres. |
 | `fixtures/` | Made-up example files, such as a sample timetable. |
 | `compose.yaml` | The local development database. |
 | `Dockerfile`, `deploy/` | The production image, the production Compose stack (Caddy, API, Postgres), the deploy script and the runbook for the one-time server setup (`deploy/README.md`). |
