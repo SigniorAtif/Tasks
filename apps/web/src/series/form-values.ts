@@ -21,6 +21,7 @@ import {
   updateSeriesSchema,
   type Weekday,
 } from '@tasks/core';
+import { sortedByName } from '../groups/group-list.ts';
 import type { FieldError } from '../lib/api.ts';
 import {
   type FieldMap,
@@ -112,15 +113,17 @@ export function firstProblemField(problems: Problems<FieldName>): FieldName | un
 // ---------------------------------------------------------------------------
 
 /**
- * The groups the "Group" select offers: every one not archived (core's
- * `isArchived`, against the user's day), plus the series' own.
+ * The groups the "Group" select offers, by name as on the Groups screen: every
+ * one not archived (core's `isArchived`, against the user's day), plus the series' own.
  */
 export function selectableGroups(
   groups: readonly ScheduleGroup[],
   today: ISODate,
   currentGroupId?: string,
 ): ScheduleGroup[] {
-  return groups.filter((group) => !isArchived(group, today) || group.id === currentGroupId);
+  return sortedByName(groups).filter(
+    (group) => !isArchived(group, today) || group.id === currentGroupId,
+  );
 }
 
 /** Where each series sits and when it starts: all a first-day suggestion needs. */

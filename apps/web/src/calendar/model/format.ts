@@ -72,6 +72,12 @@ export function dayLabel(date: ISODate): string {
   return `${weekdayShort(d)} ${d.day} ${monthShort(d)}`;
 }
 
+/** `18 Dec 2026`: a date that may be months away, so it carries its year. */
+export function dateLabel(date: ISODate): string {
+  const d = Temporal.PlainDate.from(date);
+  return `${d.day} ${monthShort(d)} ${d.year}`;
+}
+
 /** `Tuesday 13 October`: what a screen reader hears for a day. */
 export function longDayLabel(date: ISODate): string {
   const d = Temporal.PlainDate.from(date);

@@ -40,6 +40,7 @@ const sem3: ScheduleGroup = {
 const archived: ScheduleGroup = {
   ...sem3,
   id: '0199d6a0-0000-7000-8000-000000000009',
+  name: 'Classes · Sem 2 (sample)',
   untilDate: '2026-07-01',
 };
 
@@ -83,6 +84,12 @@ describe('starting values', () => {
     expect(selectableGroups([sem3], '2026-11-27')).toEqual([sem3]);
     expect(selectableGroups([sem3], '2026-11-28')).toEqual([]);
     expect(selectableGroups([{ ...sem3, untilDate: null }], '2099-01-01')).toHaveLength(1);
+  });
+
+  it('lists groups in the same order as the Groups screen: by name, numbers counted', () => {
+    const named = (id: string, name: string) => ({ ...sem3, id, name, untilDate: null });
+    const choices = selectableGroups([named('a', 'Sem 10'), named('b', 'Sem 9')], TODAY);
+    expect(choices.map((g) => g.name)).toEqual(['Sem 9', 'Sem 10']);
   });
 
   it('offers archived groups only when the series already belongs to one', () => {

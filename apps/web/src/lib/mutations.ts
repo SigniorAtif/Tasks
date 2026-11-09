@@ -20,6 +20,7 @@ import {
   paths,
   type ScheduleGroup,
   type Series,
+  type UpdateGroup,
   type UpdateOccurrence,
   type UpdateSeries,
 } from '@tasks/core';
@@ -60,6 +61,11 @@ export async function invalidateAfterWrite(
 /** `POST /api/v1/groups`. 201 with the new group, or 200 with the existing one for a repeated id. */
 export function createGroup(input: CreateGroup): Promise<ScheduleGroup> {
   return apiSend<ScheduleGroup>('POST', paths.groups, input);
+}
+
+/** `PATCH /api/v1/groups/:id` with only the fields that changed. */
+export function updateGroup({ id, changes }: { id: string; changes: UpdateGroup }) {
+  return apiSend<ScheduleGroup>('PATCH', `${paths.groups}/${id}`, changes);
 }
 
 /** `POST /api/v1/series`. Same idempotent answer as `createGroup`. */
@@ -129,6 +135,15 @@ export function useCreateGroup() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createGroup,
+    onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
+  });
+}
+
+/** A group's colour and last day show on the calendar, so the weeks are fetched again too. */
+export function useUpdateGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateGroup,
     onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
   });
 }

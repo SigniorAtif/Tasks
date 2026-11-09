@@ -5,6 +5,7 @@ import { SyncBadge } from './SyncBadge.tsx';
 /** Where a screen's back link (and a form's Cancel) goes. */
 export const BACK = {
   calendar: { to: '/', label: 'Calendar', long: 'Back to the calendar' },
+  groups: { to: '/groups', label: 'Groups', long: 'Back to Groups' },
 } as const;
 
 export type BackTo = keyof typeof BACK;
