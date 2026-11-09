@@ -1,11 +1,11 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, Navigate } from '@tanstack/react-router';
+import { ScreenFrame } from '../components/ScreenFrame.tsx';
 import { isUnauthenticated } from '../lib/api.ts';
 import { groupsQuery, meQuery, seriesListQuery } from '../lib/queries.ts';
 import { requireSession } from '../lib/require-session.ts';
 import { todayIn } from '../series/form-values.ts';
 import { SeriesForm } from '../series/SeriesForm.tsx';
-import { SeriesScreen } from '../series/SeriesScreen.tsx';
 
 // `/series/new`: the form to add a class.
 export const Route = createFileRoute('/series/new')({
@@ -31,13 +31,13 @@ function NewSeriesScreen() {
   if (isUnauthenticated(me.error)) return <Navigate to="/login" replace />;
 
   return (
-    <SeriesScreen title="Add a class">
+    <ScreenFrame title="Add a class" back="calendar">
       <SeriesForm
         series={null}
         groups={groups.data.groups}
         seriesList={list.data.series}
         today={todayIn(me.data.profile.tzid)}
       />
-    </SeriesScreen>
+    </ScreenFrame>
   );
 }

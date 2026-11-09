@@ -5,6 +5,7 @@ import {
   apiGet,
   apiSend,
   describeError,
+  describeSaveError,
   isUnauthenticated,
   NetworkError,
   toApiError,
@@ -245,5 +246,20 @@ describe('describeError', () => {
 
   it('copes with things that are not errors', () => {
     expect(describeError('boom').message).toBe('boom');
+  });
+});
+
+describe('describeSaveError', () => {
+  it('says the row is gone for a 404, with the request id to quote', () => {
+    const gone = toApiError(404, { ...problem401, status: 404, code: 'not_found' }, null);
+    expect(describeSaveError(gone, "This group doesn't exist any more")).toEqual({
+      title: "This group doesn't exist any more",
+      message: 'It may have been deleted on another device.',
+      small: 'request req-1',
+    });
+  });
+
+  it('describes any other failure as usual', () => {
+    expect(describeSaveError(new NetworkError(), 'gone').title).toBe("You're offline");
   });
 });

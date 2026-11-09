@@ -23,6 +23,15 @@ import {
 } from '@tasks/core';
 import { Temporal } from 'temporal-polyfill';
 import type { FieldError } from '../lib/api.ts';
+import {
+  type FieldMap,
+  fieldSentence,
+  firstProblem,
+  mergeProblems,
+  type Problems,
+  problemsFor,
+  schemaErrors,
+} from '../lib/form-problems.ts';
 import { isKnownZone } from '../lib/time.ts';
 
 /** The days, Monday first (B11), as the toggle buttons show them. */
@@ -95,21 +104,9 @@ export const LABELS: Record<FieldName, string> = {
   untilDate: 'Last day',
 };
 
-/** What's wrong with a submission: one message per field, plus any that belong to no field. */
-export interface Problems {
-  fields: Partial<Record<FieldName, string>>;
-  other: string[];
-}
-
-export const NO_PROBLEMS: Problems = { fields: {}, other: [] };
-
-export function hasProblems(problems: Problems): boolean {
-  return Object.keys(problems.fields).length > 0 || problems.other.length > 0;
-}
-
 /** The first field with a problem, in screen order: the one to move the focus to. */
-export function firstProblemField(problems: Problems): FieldName | undefined {
-  return FIELD_ORDER.find((field) => problems.fields[field] !== undefined);
+export function firstProblemField(problems: Problems<FieldName>): FieldName | undefined {
+  return firstProblem(problems, FIELD_ORDER);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,112 +302,52 @@ export function changedFields(
 // Problems: from the schemas here, or from the server's 422
 // ---------------------------------------------------------------------------
 
-/** Where each body path is shown. A longer path falls back to its start: `rule.byDay.0` → days. */
-const SERIES_PATHS: Record<string, FieldName> = {
-  title: 'title',
-  subject: 'subject',
-  location: 'location',
-  groupId: 'groupId',
-  rule: 'days',
-  'rule.byDay': 'days',
-  'rule.interval': 'interval',
-  startTime: 'startTime',
-  durationMin: 'durationMin',
-  startDate: 'startDate',
-  untilDate: 'untilDate',
-};
-
-const GROUP_PATHS: Record<string, FieldName> = {
-  name: 'groupName',
-  colorToken: 'groupColor',
-};
-
-function fieldForPath(path: string, paths: Record<string, FieldName>): FieldName | undefined {
-  for (const parts = path.split('.'); parts.length > 0; parts.pop()) {
-    const field = paths[parts.join('.')];
-    if (field !== undefined) return field;
-  }
-  return undefined;
-}
-
 /** Schema messages name other fields by their JSON names; say what the screen says. */
 const FIELD_WORDS: Record<string, string> = {
   startDate: 'the first day',
 };
 
-/**
- * A schema message as a sentence about one field. The schemas' messages are
- * written to follow a field name ("must not be empty"), so they get the
- * label in front: "Title must not be empty". Others are just capitalised.
- */
+/** A schema message as a sentence about one field: "Title must not be empty". */
 export function fieldMessage(field: FieldName, message: string): string {
   const text = message.replace(/\bstartDate\b/g, (word) => FIELD_WORDS[word] ?? word);
-  if (/^(must|is|has)\b/.test(text)) return `${LABELS[field]} ${text}`;
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  return fieldSentence(LABELS[field], text);
 }
+
+/** Where each series body path is shown. A longer path falls back to its start: `rule.byDay.0` → days. */
+const SERIES_FIELDS: FieldMap<FieldName> = {
+  paths: {
+    title: 'title',
+    subject: 'subject',
+    location: 'location',
+    groupId: 'groupId',
+    rule: 'days',
+    'rule.byDay': 'days',
+    'rule.interval': 'interval',
+    startTime: 'startTime',
+    durationMin: 'durationMin',
+    startDate: 'startDate',
+    untilDate: 'untilDate',
+  },
+  sentence: fieldMessage,
+};
+
+/** The series form's inline "New group" fields. */
+const NEW_GROUP_FIELDS: FieldMap<FieldName> = {
+  paths: { name: 'groupName', colorToken: 'groupColor' },
+  sentence: fieldMessage,
+};
 
 /** Turns `{ path, message }` pairs (the server's 422, or our own check) into `Problems`. */
 export function problemsFromErrors(
   errors: readonly FieldError[],
   body: 'series' | 'group',
-): Problems {
-  const paths = body === 'series' ? SERIES_PATHS : GROUP_PATHS;
-  const problems: Problems = { fields: {}, other: [] };
-  for (const { path, message } of errors) {
-    const field = fieldForPath(path, paths);
-    if (field === undefined) problems.other.push(path === '' ? message : `${path}: ${message}`);
-    // Only the first message per field: one thing to fix at a time.
-    else problems.fields[field] ??= fieldMessage(field, message);
-  }
-  return problems;
-}
-
-export function mergeProblems(a: Problems, b: Problems): Problems {
-  return { fields: { ...b.fields, ...a.fields }, other: [...a.other, ...b.other] };
-}
-
-type ParseOptions = NonNullable<Parameters<typeof createSeriesSchema.safeParse>[1]>;
-
-/**
- * Messages for the checks the schemas don't word themselves (zod's defaults read
- * like "Too small: expected number to be >=1"). `undefined` keeps zod's own.
- */
-const friendlierMessages: ParseOptions['error'] = (issue) => {
-  if (issue.code === 'invalid_type' && issue.expected === 'number') return 'must be a number';
-  if (issue.code === 'invalid_type' && issue.expected === 'int') return 'must be a whole number';
-  if (issue.code === 'too_small' && issue.origin === 'number') {
-    return `must be at least ${issue.minimum}`;
-  }
-  if (issue.code === 'too_big' && issue.origin === 'number') {
-    return `must be at most ${issue.maximum}`;
-  }
-  if (issue.code === 'too_big' && issue.origin === 'string') {
-    return `must be at most ${issue.maximum} characters`;
-  }
-  return undefined;
-};
-
-/** The part of a zod schema `check` uses, so it takes any of the three. */
-interface Schema {
-  safeParse(
-    input: unknown,
-    options: ParseOptions,
-  ): { error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } };
-}
-
-/** Runs a schema and turns its issues into `{ path, message }` pairs, like the server's. */
-function check(schema: Schema, input: unknown): FieldError[] {
-  const { error } = schema.safeParse(input, { error: friendlierMessages });
-  if (error === undefined) return [];
-  return error.issues.map((issue) => ({
-    path: issue.path.map(String).join('.'),
-    message: issue.message,
-  }));
+): Problems<FieldName> {
+  return problemsFor(errors, body === 'series' ? SERIES_FIELDS : NEW_GROUP_FIELDS);
 }
 
 /** The new group's fields, checked by the API's own `createGroupSchema`. */
-export function checkGroup(input: CreateGroup): Problems {
-  return problemsFromErrors(check(createGroupSchema, input), 'group');
+export function checkGroup(input: CreateGroup): Problems<FieldName> {
+  return problemsFromErrors(schemaErrors(createGroupSchema, input), 'group');
 }
 
 /**
@@ -420,23 +357,26 @@ export function checkGroup(input: CreateGroup): Problems {
  * the dates yet. Checking just the two dates with the same schema shows every
  * problem at once instead of one round at a time.
  */
-function checkDateOrder(input: { startDate?: string; untilDate?: string | null }): Problems {
+function checkDateOrder(input: {
+  startDate?: string;
+  untilDate?: string | null;
+}): Problems<FieldName> {
   const dates = { startDate: input.startDate, untilDate: input.untilDate };
-  return problemsFromErrors(check(updateSeriesSchema, dates), 'series');
+  return problemsFromErrors(schemaErrors(updateSeriesSchema, dates), 'series');
 }
 
 /** A new series, checked by the API's own `createSeriesSchema`. */
-export function checkCreateSeries(input: CreateSeries): Problems {
+export function checkCreateSeries(input: CreateSeries): Problems<FieldName> {
   return mergeProblems(
-    problemsFromErrors(check(createSeriesSchema, input), 'series'),
+    problemsFromErrors(schemaErrors(createSeriesSchema, input), 'series'),
     checkDateOrder(input),
   );
 }
 
 /** An edited series: every field, so the date order is checked too, by `updateSeriesSchema`. */
-export function checkUpdateSeries(input: UpdateSeries): Problems {
+export function checkUpdateSeries(input: UpdateSeries): Problems<FieldName> {
   return mergeProblems(
-    problemsFromErrors(check(updateSeriesSchema, input), 'series'),
+    problemsFromErrors(schemaErrors(updateSeriesSchema, input), 'series'),
     checkDateOrder(input),
   );
 }
