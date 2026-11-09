@@ -37,6 +37,8 @@ What to notice:
 - every 60 s while the screen is open and the app is in front (`refetchInterval`);
 - when you switch back to the app (`refetchOnWindowFocus`, on by default). That's how the deployed commit (in the account menu since v0.2) notices a new deploy.
 
+**Fresh or stale.** Each answer counts as **fresh** for a while after it arrives (`staleTime`), and **stale** after that. A fresh answer is shown without asking the server; a stale one is shown and fetched again in the background when a screen starts using it, when you come back to the app, or when the network returns. The default `staleTime` is 0, so most answers are stale the moment they arrive. The calendar keeps its weeks fresh for a minute (`CALENDAR_STALE_MS`), so paging back to a week fetched a moment ago doesn't ask twice. An answer can also be made stale on purpose, whatever its age: that's **invalidating** it (`invalidateQueries`, which sets the `isInvalidated` flag in its state). Saving a series invalidates every calendar week, and since v0.3 every answer restored from the phone comes back invalidated ([[Offline reads]]).
+
 **Retries.** A failed request is tried again, but only when that could help: a network blip or a 5xx, twice. A 4xx means "your request is the problem" (401: no session), and asking again gets the same answer, so it isn't retried.
 
 *From `apps/web/src/lib/query-client.ts`:*

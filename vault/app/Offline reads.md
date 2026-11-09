@@ -18,7 +18,7 @@ All in `apps/web/src/`.
 
 | File | What it does |
 |---|---|
-| `lib/persist.ts` | The saved copy. `restoreQueryCache(queryClient)` puts it back at start-up and keeps saving after every change; `shouldPersistQuery` decides what goes in; `lastGoodAnswers` saves a query whose refetch failed as its last good answer; `forgetCachedData(queryClient)` deletes everything, in memory and on the device, on sign-out. Constants: `CACHE_BUSTER = 'v0.3.0'`, `CACHE_MAX_AGE_MS` (30 days), `RESTORE_TIMEOUT_MS` (1 s). Since v0.3 it also keeps a second copy, the queue of waiting changes ([[Offline cancels]]) |
+| `lib/persist.ts` | The saved copy. `restoreQueryCache(queryClient)` puts it back at start-up and keeps saving after every change; `shouldPersistQuery` decides what goes in; `lastGoodAnswers` saves a query whose refetch failed as its last good answer; `savedAsStale` marks every saved answer to be fetched again once restored; `forgetCachedData(queryClient)` deletes everything, in memory and on the device, on sign-out. Constants: `CACHE_BUSTER = 'v0.3.0'`, `CACHE_MAX_AGE_MS` (30 days), `RESTORE_TIMEOUT_MS` (1 s). Since v0.3 it also keeps a second copy, the queue of waiting changes ([[Offline cancels]]) |
 | `lib/query-client.ts` | TanStack Query's settings: `networkMode: 'offlineFirst'`, `gcTime: Infinity`, the retry rule, and writes that fail fast instead of waiting |
 | `main.tsx` | Awaits `restoreQueryCache` **before** drawing the router |
 | `lib/require-session.ts` | `requireSession(queryClient)`, the `beforeLoad` of the series screens: is someone signed in? Offline, the restored user counts |
@@ -106,7 +106,7 @@ async function startApp() {
 
 `startApp` is an `async` function, and its `await` pauses it until the cache is back, so `root.render`, and with it the router and every `beforeLoad`, only runs after that. By then `ensureQueryData` finds `['me']` in the cache and makes no request. (Since v0.3, `startApp` itself runs only once this tab is the one running the app: [[Offline cancels]].)
 
-4. **The screen.** It draws from the restored answers. Each screen then refetches what it shows, because the answers are "stale" ([[Server state and caching]]). With no signal, the fetch fails at once with a `NetworkError` (`lib/api.ts`).
+4. **The screen.** It draws from the restored answers. Each screen then refetches what it shows, because every restored answer comes back marked stale, however recently it was saved ([[Server state and caching]]; why, in "A trap found by the end-to-end test" below). With no signal, the fetch fails at once with a `NetworkError` (`lib/api.ts`).
 5. **The badge.** The newest fetch of `me` or a calendar week got no answer, so `<SyncBadge />` says "offline · last synced 2:02 PM". 2:02 PM is when the server last answered (`dataUpdatedAt`, saved with each answer), shown in your profile's zone (`Asia/Kolkata`).
 6. **Back online.** The browser fires `online`, TanStack Query refetches everything on screen, the answers arrive, the badge disappears, and about a second later the saved copy is updated.
 
@@ -152,7 +152,7 @@ export function createPersister(store: KeyValueStore, throttleTime = 1_000) {
     storage: toAsyncStorage(store),
     key: STORAGE_KEY,
     throttleTime,
-    serialize: (client) => JSON.stringify(lastGoodAnswers(client)),
+    serialize: (client) => JSON.stringify(savedAsStale(lastGoodAnswers(client))),
   });
 }
 ```
@@ -160,7 +160,7 @@ export function createPersister(store: KeyValueStore, throttleTime = 1_000) {
 What to notice:
 - The three conditions joined by `&&` ("and") in `shouldPersistQuery` are the first three rows of the table. `queryKey[0]` is the first item of a key, so every week (`['calendar', from, to]`) counts as `'calendar'`.
 - `Pick<Query, 'queryKey' | 'state'>` means "anything with these two fields", which lets the tests pass a plain object instead of a real query ([[TypeScript essentials]]).
-- `serialize` is the last step before IndexedDB: `lastGoodAnswers` (the trap below), then `JSON.stringify`, giving the one string stored under `tasks-query-cache`.
+- `serialize` is the last step before IndexedDB: `lastGoodAnswers` (the first trap below), then `savedAsStale` (the second), then `JSON.stringify`, giving the one string stored under `tasks-query-cache`.
 
 **`gcTime: Infinity`, and a timer trap.** `gcTime` is how long TanStack Query keeps a query in memory once no screen shows it (5 minutes by default). The persister saves what's in memory, so a query dropped from memory is also dropped from the saved copy at the next save. With the default, the week you looked at yesterday would be restored at start-up and then deleted 5 minutes later, because nobody's looking at it. So `gcTime` must be at least the 30 days the copy is kept. But 30 days can't be written as a timer. Browsers store a `setTimeout` delay in 32 bits, and anything over 2³¹ − 1 ms (about 24.8 days) **fires immediately**, so `setTimeout(drop, 30 days)` would drop the query at once, the opposite of what we want. Instead, queries are never dropped from memory (`Infinity` means no timer at all), and the 30-day limit is applied when saving (the third rule above).
 
@@ -202,6 +202,29 @@ What to notice:
 - It builds a changed *copy* for the saved version. The cache in memory, and so the screen, keeps its error state.
 - `...query.state` copies every field, `data` and `dataUpdatedAt` included, and the four lines after it overwrite only the failure fields.
 - A query that isn't in error goes through unchanged (`: query`).
+
+**A trap found by the end-to-end test: a restored week a second behind.** The copy is written at most once a second (`throttleTime`), so an app closed within a second of a change leaves a copy that's a change or two behind. That alone would be fine, because the screen fetches what it shows again. But calendar weeks count as fresh for a minute after they're fetched (`CALENDAR_STALE_MS`, so paging back to a week fetched a moment ago doesn't ask twice), and a restored week keeps the time it was fetched. So a week fetched 1.7 s before the reload came back "fresh", wasn't asked for again, and the screen showed the old one. The end-to-end test hit it on its first run: add a class, cancel it, reload, and the page said "No classes this week" ([[End-to-end test]]). On a phone: close the app within a second of a change, open it again within a minute.
+
+The fix is `savedAsStale`: every answer is saved marked **invalidated**, TanStack Query's flag for "stale, whatever its age".
+
+*From `apps/web/src/lib/persist.ts`:*
+```ts
+export function savedAsStale(client: PersistedClient): PersistedClient {
+  const queries = client.clientState.queries.map((query) => ({
+    ...query,
+    state: { ...query.state, isInvalidated: true },
+  }));
+  return { ...client, clientState: { ...client.clientState, queries } };
+}
+```
+
+What to notice:
+- Like `lastGoodAnswers`, it changes only the copy being saved. The cache in memory, where the flag would make the open screen refetch, is untouched.
+- `isInvalidated` is part of each query's state, so restoring (hydrating) puts it back with everything else. A screen that shows the answer then fetches it again at once, whatever its `staleTime`.
+- `dataUpdatedAt` is kept, so the badge's "last synced" still says when the server last answered.
+- Only calendar weeks behave differently. `me`, `groups` and `series` have the default `staleTime` of 0, so they were stale the moment they arrived and were always fetched again.
+
+The cost is one request per visible week each time the app opens. Offline it fails at once and the saved week stays on screen, as it already did for any copy older than a minute. Test: "a restored answer is shown at once, then fetched again however recently it was saved" in `lib/persist.test.ts`; before the fix its fetch function was called 0 times.
 
 ## offlineFirst, and when to stop retrying
 
@@ -342,11 +365,12 @@ The sign-out button (`src/components/SignOutButton.tsx`) calls `await forgetCach
 
 ## How it was checked
 
-Unit tests cover the filter, the adapter against an in-memory map, a save-and-restore round trip, the buster, `lastGoodAnswers`, and every badge rule and format. In a real browser (`vite build` then `vite preview`, Chrome at phone size): load `/` and the form online, switch the network off, and reload. The shell came from the service worker, the user from IndexedDB, the badge said "offline · last synced 3:48 PM" (10:18 UTC in Kolkata), and Save was off. Switching the network off with the form open turned Save off at once. A fresh browser that never had a user, opened offline, showed "You're offline".
+Unit tests cover the filter, the adapter against an in-memory map, a save-and-restore round trip, the buster, `lastGoodAnswers`, and every badge rule and format. In a real browser (`vite build` then `vite preview`, Chrome at phone size): load `/` and the form online, switch the network off, and reload. The shell came from the service worker, the user from IndexedDB, the badge said "offline · last synced 3:48 PM" (10:18 UTC in Kolkata), and Save was off. Switching the network off with the form open turned Save off at once. A fresh browser that never had a user, opened offline, showed "You're offline". Since v0.3 the end-to-end test also reloads straight after a change and checks the calendar shows it ([[End-to-end test]]).
 
 ## Check yourself
 
 - **Predict:** you move `await restoreQueryCache(queryClient)` in `main.tsx` to after `root.render(...)`. What do you see when you open the app in aeroplane mode, and why? (Hint: what does `ensureQueryData` find?)
 - **Trace:** you're on KIIT Wi-Fi before logging in to the portal, and `navigator.onLine` is `true`. Follow the `me` refetch: how many tries, what error, and what do the badge and the Save button show?
 - **Break it:** delete `gcTime: Number.POSITIVE_INFINITY` from `lib/query-client.ts`. You look at next week, close the app, and open it an hour later, offline. Is next week still there? What if you open it 3 minutes later?
+- **Break it:** make `savedAsStale` return the client unchanged. You cancel a class and reload half a second later. What does the calendar show, for how long, and why is `me` fetched again all the same?
 - **Break it:** change `shouldPersistQuery` back to `query.state.status === 'success' && ...`. Open the app offline twice in a row. What does the second open show, and which test fails?
