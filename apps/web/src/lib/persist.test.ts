@@ -123,6 +123,33 @@ describe('toAsyncStorage', () => {
   });
 });
 
+describe('a restored answer', () => {
+  it('is shown at once, then fetched again however recently it was saved', async () => {
+    const persister = createPersister(memoryStore(), 0);
+    const week = ['calendar', '2026-10-12', '2026-10-18'];
+    const before = new QueryClient();
+    before.setQueryData(week, { occurrences: ['saved'] }, { updatedAt: Date.now() });
+    await persistQueryClientSave({
+      queryClient: before,
+      persister,
+      buster: CACHE_BUSTER,
+      dehydrateOptions,
+    });
+
+    const after = new QueryClient();
+    await persistQueryClientRestore({ queryClient: after, persister, buster: CACHE_BUSTER });
+    expect(after.getQueryData(week)).toEqual({ occurrences: ['saved'] });
+
+    // The calendar counts a week as fresh for a minute. A copy saved a moment
+    // ago may still be a change or two behind (the write waits up to a second),
+    // so a restored week is asked for again all the same.
+    const queryFn = vi.fn(async () => ({ occurrences: ['from the server'] }));
+    await after.fetchQuery({ queryKey: week, queryFn, staleTime: 60_000 });
+    expect(queryFn).toHaveBeenCalledOnce();
+    expect(after.getQueryData(week)).toEqual({ occurrences: ['from the server'] });
+  });
+});
+
 describe('lastGoodAnswers', () => {
   it('saves a query whose refetch failed as a plain success with its answer', async () => {
     const persister = createPersister(memoryStore(), 0);

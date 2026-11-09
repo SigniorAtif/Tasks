@@ -3,9 +3,10 @@
 // TanStack Query's cache lives in memory and is gone when the app closes. Here
 // a "persister" writes a copy of it to IndexedDB (the browser's database on the
 // device) about a second after every change, and puts it back into memory when
-// the app starts. So on a train with no signal, the app still opens with your
-// name and the weeks you looked at recently, and a badge says when they were
-// last fetched.
+// the app starts, where a screen shows it at once and fetches it again (the
+// copy may be a change behind). So on a train with no signal, the app still
+// opens with your name and the weeks you looked at recently, and a badge says
+// when they were last fetched.
 //
 // The service worker still never caches /api: this copy is the only one (D-046).
 //
@@ -137,6 +138,23 @@ export function lastGoodAnswers(client: PersistedClient): PersistedClient {
   return { ...client, clientState: { ...client.clientState, queries } };
 }
 
+/**
+ * Saves every query marked to be fetched again. The copy is written up to a
+ * second after a change, so an app closed within that second leaves a copy a
+ * change or two behind, and a week fetched a moment earlier still counts as
+ * fresh (the calendar's `staleTime` is a minute). Restored, an answer is shown
+ * at once and then fetched again as soon as a screen uses it, however recently
+ * it was saved. Its `dataUpdatedAt` stays, so the badge still says when it
+ * last came from the server.
+ */
+export function savedAsStale(client: PersistedClient): PersistedClient {
+  const queries = client.clientState.queries.map((query) => ({
+    ...query,
+    state: { ...query.state, isInvalidated: true },
+  }));
+  return { ...client, clientState: { ...client.clientState, queries } };
+}
+
 /** The three `idb-keyval` functions the persister needs. Tests pass an in-memory map instead. */
 export interface KeyValueStore {
   get(key: string): Promise<string | undefined>;
@@ -163,7 +181,7 @@ export function createPersister(store: KeyValueStore, throttleTime = 1_000) {
     storage: toAsyncStorage(store),
     key: STORAGE_KEY,
     throttleTime,
-    serialize: (client) => JSON.stringify(lastGoodAnswers(client)),
+    serialize: (client) => JSON.stringify(savedAsStale(lastGoodAnswers(client))),
   });
 }
 
