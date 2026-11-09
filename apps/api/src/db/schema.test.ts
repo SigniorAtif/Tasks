@@ -1,10 +1,13 @@
 // Checks the migrations did what the schema says, against real Postgres.
 
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { Rule } from '@tasks/core';
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDatabase, testDb, testPool } from '../test/database.ts';
 import type { Database } from './client.ts';
+import { MIGRATIONS_FOLDER } from './migrations.ts';
 import {
   authAccount,
   authSession,
@@ -52,7 +55,7 @@ describe('the first migration', () => {
     const user = await insertUser('alice@example.com');
     await testDb.insert(profile).values({ userId: user.id });
     const [row] = await testDb.select().from(profile).where(eq(profile.userId, user.id));
-    expect(row).toMatchObject({ tzid: 'Asia/Kolkata', dayBoundary: '04:00:00' });
+    expect(row).toMatchObject({ tzid: 'Asia/Kolkata', dayBoundary: '00:00:00' });
   });
 
   it("deletes a user's sessions, accounts and profile along with the user", async () => {
@@ -125,6 +128,31 @@ async function asUser<T>(userId: string | null, fn: (tx: Database) => Promise<T>
     return fn(tx as unknown as Database);
   });
 }
+
+describe('migration 0004: the day starts at midnight', () => {
+  it('moves profiles on the old 04:00 default to midnight, and leaves a chosen time alone', async () => {
+    const onOldDefault = await insertUser('alice@example.com');
+    const chosen = await insertUser('bob@example.com');
+    await testDb.insert(profile).values([
+      { userId: onOldDefault.id, dayBoundary: '04:00' },
+      { userId: chosen.id, dayBoundary: '03:00' },
+    ]);
+
+    // The test database already has every migration; run 0004's SQL again over these rows.
+    const file = await readFile(
+      path.join(MIGRATIONS_FOLDER, '0004_midnight_day_start.sql'),
+      'utf8',
+    );
+    for (const statement of file.split('--> statement-breakpoint')) {
+      await testPool.query(statement);
+    }
+
+    const boundaryOf = async (userId: string) =>
+      (await testDb.select().from(profile).where(eq(profile.userId, userId)))[0]?.dayBoundary;
+    expect(await boundaryOf(onOldDefault.id)).toBe('00:00:00');
+    expect(await boundaryOf(chosen.id)).toBe('03:00:00');
+  });
+});
 
 describe('the calendar tables', () => {
   it('give a group a last day and no first day (ADR v0.3)', async () => {

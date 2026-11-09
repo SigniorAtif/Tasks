@@ -1,7 +1,7 @@
 // These must pass whatever zone the test machine is in: `pnpm test:tz` runs
 // them under UTC, Asia/Kolkata and America/New_York.
 import { describe, expect, it } from 'vitest';
-import { formatInZone, isKnownZone, serverNow } from './time.ts';
+import { formatInZone, isKnownZone, serverNow, todayFor } from './time.ts';
 
 const at = (iso: string) => Date.parse(iso);
 
@@ -55,5 +55,23 @@ describe('isKnownZone', () => {
   it('knows IANA names and rejects made-up ones', () => {
     expect(isKnownZone('Asia/Kolkata')).toBe(true);
     expect(isKnownZone('Mars/Olympus_Mons')).toBe(false);
+  });
+});
+
+describe('todayFor', () => {
+  const kolkata = { tzid: 'Asia/Kolkata', dayBoundary: '04:00' };
+
+  it("is the user's day in their zone, which starts at their day boundary", () => {
+    // 20:00 UTC on the 12th is 01:30 on the 13th in Kolkata: still the 12th's night.
+    expect(todayFor(kolkata, at('2026-10-12T20:00:00Z'))).toBe('2026-10-12');
+    // 23:00 UTC is 04:30 in Kolkata: the 13th has begun.
+    expect(todayFor(kolkata, at('2026-10-12T23:00:00Z'))).toBe('2026-10-13');
+  });
+
+  it("uses the phone's zone when this browser doesn't know the profile's", () => {
+    const unknown = { tzid: 'Mars/Olympus_Mons', dayBoundary: '00:00' };
+    const noon = at('2026-10-12T12:00:00Z');
+    // en-CA writes dates as YYYY-MM-DD; with no timeZone, Intl uses the phone's.
+    expect(todayFor(unknown, noon)).toBe(new Intl.DateTimeFormat('en-CA').format(noon));
   });
 });

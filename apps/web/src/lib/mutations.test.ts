@@ -9,6 +9,7 @@ import {
   invalidateAfterWrite,
   newId,
   putOccurrence,
+  updateGroup,
   updateSeries,
 } from './mutations.ts';
 
@@ -71,6 +72,20 @@ describe('updateSeries', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/series/x',
       expect.objectContaining({ method: 'PATCH', body: '{"title":"DS"}' }),
+    );
+  });
+});
+
+describe('updateGroup', () => {
+  it('PATCHes only the fields it is given', async () => {
+    const fetchMock = answerWith(200, { id: 'g', name: 'Pottery evenings' });
+    await updateGroup({ id: 'g', changes: { name: 'Pottery evenings', untilDate: null } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/groups/g',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: '{"name":"Pottery evenings","untilDate":null}',
+      }),
     );
   });
 });

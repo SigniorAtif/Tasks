@@ -80,9 +80,9 @@ To try the installable PWA (the service worker only runs in a production build),
 
 | Path | What it is |
 |---|---|
-| `packages/core` | Pure TypeScript shared by every app: the shared types (`src/types.ts`), the HTTP contract (`src/api.ts`), the request schemas both sides validate with (`src/schemas.ts`), the timetable file format (`src/timetable.ts`), the group palette and the recurrence engine (`src/recurrence/`). No I/O, no clock. |
+| `packages/core` | Pure TypeScript shared by every app: the shared types (`src/types.ts`), the HTTP contract (`src/api.ts`), the request schemas both sides validate with (`src/schemas.ts`), the timetable file format (`src/timetable.ts`), the group palette, the user's day and what counts as archived (`src/days.ts`) and the recurrence engine (`src/recurrence/`). No I/O, no clock. |
 | `apps/api` | The Hono API: env validation, logging, errors, `/healthz`, Better Auth (Google + an allowlist), `/api/v1/me`, the calendar routes (`/api/v1/groups`, `/series`, `/calendar`), the seed script, and Drizzle migrations in `drizzle/`. The calendar tables use Postgres row-level security: each request runs as the signed-in user. Node runs its TypeScript directly; there is no build step. |
-| `apps/web` | The React PWA: Vite, TanStack Router and Query, Tailwind, `vite-plugin-pwa`. The calendar grid is in `src/calendar/`, the class form in `src/series/`; the query cache is kept in IndexedDB so recent weeks open offline. |
+| `apps/web` | The React PWA: Vite, TanStack Router and Query, Tailwind, `vite-plugin-pwa`. The calendar grid is in `src/calendar/`, the class form in `src/series/`, the Groups screen and group form in `src/groups/`, and what every screen shares in `src/components/`; the query cache is kept in IndexedDB so recent weeks open offline. |
 | `e2e/` | The Playwright end-to-end test: a real browser against the built app, the API and Postgres. |
 | `fixtures/` | Made-up example files, such as a sample timetable. |
 | `compose.yaml` | The local development database. |

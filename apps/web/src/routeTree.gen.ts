@@ -11,6 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root.tsx'
 import { Route as IndexRouteImport } from './routes/index.tsx'
 import { Route as LoginRouteImport } from './routes/login.tsx'
+import { Route as GroupsIndexRouteImport } from './routes/groups.index.tsx'
+import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId.tsx'
+import { Route as GroupsNewRouteImport } from './routes/groups.new.tsx'
 import { Route as SeriesSeriesIdRouteImport } from './routes/series.$seriesId.tsx'
 import { Route as SeriesNewRouteImport } from './routes/series.new.tsx'
 
@@ -22,6 +25,21 @@ const IndexRoute = IndexRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsIndexRoute = GroupsIndexRouteImport.update({
+  id: '/groups/',
+  path: '/groups/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
+  id: '/groups/$groupId',
+  path: '/groups/$groupId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsNewRoute = GroupsNewRouteImport.update({
+  id: '/groups/new',
+  path: '/groups/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SeriesSeriesIdRoute = SeriesSeriesIdRouteImport.update({
@@ -38,35 +56,69 @@ const SeriesNewRoute = SeriesNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/groups/$groupId': typeof GroupsGroupIdRoute
+  '/groups/new': typeof GroupsNewRoute
   '/series/$seriesId': typeof SeriesSeriesIdRoute
   '/series/new': typeof SeriesNewRoute
+  '/groups/': typeof GroupsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/groups/$groupId': typeof GroupsGroupIdRoute
+  '/groups/new': typeof GroupsNewRoute
   '/series/$seriesId': typeof SeriesSeriesIdRoute
   '/series/new': typeof SeriesNewRoute
+  '/groups': typeof GroupsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/groups/$groupId': typeof GroupsGroupIdRoute
+  '/groups/new': typeof GroupsNewRoute
   '/series/$seriesId': typeof SeriesSeriesIdRoute
   '/series/new': typeof SeriesNewRoute
+  '/groups/': typeof GroupsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/series/$seriesId' | '/series/new'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/groups/$groupId'
+    | '/groups/new'
+    | '/series/$seriesId'
+    | '/series/new'
+    | '/groups/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/series/$seriesId' | '/series/new'
-  id: '__root__' | '/' | '/login' | '/series/$seriesId' | '/series/new'
+  to:
+    | '/'
+    | '/login'
+    | '/groups/$groupId'
+    | '/groups/new'
+    | '/series/$seriesId'
+    | '/series/new'
+    | '/groups'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/groups/$groupId'
+    | '/groups/new'
+    | '/series/$seriesId'
+    | '/series/new'
+    | '/groups/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  GroupsGroupIdRoute: typeof GroupsGroupIdRoute
+  GroupsNewRoute: typeof GroupsNewRoute
   SeriesSeriesIdRoute: typeof SeriesSeriesIdRoute
   SeriesNewRoute: typeof SeriesNewRoute
+  GroupsIndexRoute: typeof GroupsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -83,6 +135,27 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/': {
+      id: '/groups/'
+      path: '/groups'
+      fullPath: '/groups/'
+      preLoaderRoute: typeof GroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/$groupId': {
+      id: '/groups/$groupId'
+      path: '/groups/$groupId'
+      fullPath: '/groups/$groupId'
+      preLoaderRoute: typeof GroupsGroupIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/new': {
+      id: '/groups/new'
+      path: '/groups/new'
+      fullPath: '/groups/new'
+      preLoaderRoute: typeof GroupsNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/series/$seriesId': {
@@ -105,8 +178,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  GroupsGroupIdRoute: GroupsGroupIdRoute,
+  GroupsNewRoute: GroupsNewRoute,
   SeriesSeriesIdRoute: SeriesSeriesIdRoute,
   SeriesNewRoute: SeriesNewRoute,
+  GroupsIndexRoute: GroupsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

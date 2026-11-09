@@ -111,6 +111,24 @@ describe('POST /api/v1/groups', () => {
     expect(group).not.toHaveProperty('activeFrom');
   });
 
+  it('creates the group the form sends: a colour, attendance off and a last day', async () => {
+    const client = await signedIn();
+    const body = groupBody({
+      name: 'Evening classes',
+      colorToken: 'teal',
+      attendance: false,
+      untilDate: '2026-12-18',
+    });
+    const response = await client.post(GROUPS, body);
+    expect(response.status).toBe(201);
+    expect(await json<ScheduleGroup>(response)).toMatchObject({
+      name: 'Evening classes',
+      colorToken: 'teal',
+      attendance: false,
+      untilDate: '2026-12-18',
+    });
+  });
+
   it('answers 400 when the body is not JSON', async () => {
     const client = await signedIn();
     const response = await client.post(GROUPS, '{"name": ');
@@ -174,12 +192,13 @@ describe('GET /api/v1/groups/:id', () => {
 });
 
 describe('PATCH /api/v1/groups/:id', () => {
-  it('changes only the fields sent', async () => {
+  it('changes only the fields sent: the group form sends name, colour, attendance, last day', async () => {
     const client = await signedIn();
-    const group = await create(client);
+    const group = await create(client, { attendance: true });
     const response = await client.patch(`${GROUPS}/${group.id}`, {
       name: 'Classes · Sem 3',
       colorToken: 'violet',
+      attendance: false,
       untilDate: null,
     });
     expect(response.status).toBe(200);
@@ -187,6 +206,7 @@ describe('PATCH /api/v1/groups/:id', () => {
       ...group,
       name: 'Classes · Sem 3',
       colorToken: 'violet',
+      attendance: false,
       untilDate: null,
     });
   });

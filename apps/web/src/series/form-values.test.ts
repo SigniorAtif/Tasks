@@ -15,7 +15,6 @@ import {
   suggestedFirstDay,
   toCreateGroup,
   toCreateSeries,
-  todayIn,
   toFullUpdate,
   valuesFromSeries,
   withGroupChosen,
@@ -41,6 +40,7 @@ const sem3: ScheduleGroup = {
 const archived: ScheduleGroup = {
   ...sem3,
   id: '0199d6a0-0000-7000-8000-000000000009',
+  name: 'Classes · Sem 2 (sample)',
   untilDate: '2026-07-01',
 };
 
@@ -73,13 +73,6 @@ function filled(overrides: Partial<SeriesFormValues> = {}): SeriesFormValues {
 }
 
 describe('starting values', () => {
-  it("is today's date in the user's zone, not the phone's", () => {
-    // 20:00 UTC on the 12th is already 01:30 on the 13th in Kolkata.
-    const at = Date.parse('2026-10-12T20:00:00Z');
-    expect(todayIn('Asia/Kolkata', at)).toBe('2026-10-13');
-    expect(todayIn('America/New_York', at)).toBe('2026-10-12');
-  });
-
   it('picks the first group that is not archived, or "new group" when there is none', () => {
     expect(blankValues(TODAY, [archived, sem3]).groupId).toBe(GROUP_ID);
     expect(blankValues(TODAY, [archived]).groupId).toBe(NEW_GROUP);
@@ -91,6 +84,12 @@ describe('starting values', () => {
     expect(selectableGroups([sem3], '2026-11-27')).toEqual([sem3]);
     expect(selectableGroups([sem3], '2026-11-28')).toEqual([]);
     expect(selectableGroups([{ ...sem3, untilDate: null }], '2099-01-01')).toHaveLength(1);
+  });
+
+  it('lists groups in the same order as the Groups screen: by name, numbers counted', () => {
+    const named = (id: string, name: string) => ({ ...sem3, id, name, untilDate: null });
+    const choices = selectableGroups([named('a', 'Sem 10'), named('b', 'Sem 9')], TODAY);
+    expect(choices.map((g) => g.name)).toEqual(['Sem 9', 'Sem 10']);
   });
 
   it('offers archived groups only when the series already belongs to one', () => {

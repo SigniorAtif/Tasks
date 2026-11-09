@@ -10,6 +10,7 @@ export {
   paths,
   type SeriesList,
 } from './api.ts';
+export { isArchived, localDateOf } from './days.ts';
 export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {
   assertValidRule,
