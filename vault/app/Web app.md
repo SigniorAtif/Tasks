@@ -4,15 +4,17 @@
 
 `apps/web` (package `@tasks/web`) is the installable app you open on your phone. Why each tool was picked: [[Web stack choices]].
 
-It has four screens:
+It has seven screens:
 - `/login`: the "Continue with Google" button;
 - `/`: your calendar (one day on a phone, the week on a laptop);
 - `/series/new`: the form to add a class;
-- `/series/<id>`: the same form, to change or delete one class.
+- `/series/<id>`: the same form, to change or delete one class;
+- `/groups`: your groups, running ones first, then Archived (from the account menu);
+- `/groups/new` and `/groups/<id>`: the group form, to make or change one group.
 
 It's a **single-page app** ([[Single-page apps and routing]]). The server sends one HTML page and a JavaScript bundle, once. From then on, React draws every screen in the browser and only fetches JSON from the API.
 
-This note is the map: what each file does, and what happens when you open the app. The big parts have notes of their own: [[Calendar grid]] (drawing the week), [[Series form]] (adding and editing), [[Offline reads]] (opening without signal).
+This note is the map: what each file does, and what happens when you open the app. The big parts have notes of their own: [[Calendar grid]] (drawing the week), [[Series form]] (adding and editing), [[Groups screen]] (the groups and their form), [[Offline reads]] (opening without signal).
 
 ## Files
 
@@ -35,24 +37,27 @@ This note is the map: what each file does, and what happens when you open the ap
 | `src/routes/login.tsx` | `/login`: the Google button and its error messages |
 | `src/routes/index.tsx` | `/`: the calendar, with the "+ Add class" button, the offline badge and the account menu in its title bar. Tapping a class opens its sheet ([[Cancelling one occurrence]]) |
 | `src/routes/series.new.tsx`, `series.$seriesId.tsx` | The class form, new and edit ([[Series form]]). `$seriesId` in a file name means "this part of the URL is a value" |
+| `src/routes/groups.index.tsx`, `groups.new.tsx`, `groups.$groupId.tsx` | The Groups list, and the group form, new and edit ([[Groups screen]]). `index` means "exactly `/groups`" |
 | **Data** | |
 | `src/lib/api.ts` | The one way to call our API: `apiGet` for reads, `apiSend` for `POST`/`PATCH`/`DELETE`. Turns error responses into typed errors |
 | `src/lib/queries.ts` | The reads, one definition each: `meQuery`, `healthzQuery`, `groupsQuery`, `seriesListQuery`, `calendarQuery(window)`. Each has a cache key (`['calendar', '2026-10-12', '2026-10-18']`) |
-| `src/lib/mutations.ts` | The writes: create a group, create, change and delete a series, and change one occurrence (whose answer goes straight into the cached weeks instead of a refetch). A new row's id (UUIDv7) is made once per save and reused if the same save is retried; after success, each one marks the calendar and series as out of date, so they're fetched again |
+| `src/lib/mutations.ts` | The writes: create and change a group, create, change and delete a series, and change one occurrence (whose answer goes straight into the cached weeks instead of a refetch). A new row's id (UUIDv7) is made once per save and reused if the same save is retried; after success, each one marks the calendar and series as out of date, so they're fetched again |
 | `src/lib/query-client.ts` | TanStack Query's settings: when to retry, `offlineFirst` for reads, fail-fast for writes, keep answers in memory as long as they're saved |
 | `src/lib/persist.ts` | Saves the cache to IndexedDB and restores it at start-up; `forgetCachedData` wipes both on sign-out ([[Offline reads]]) |
 | `src/lib/sync-status.ts`, `use-sync-status.ts`, `use-online.ts` | Works out "offline · last synced 2:02 PM" for the badge, and whether the form may save |
 | `src/lib/require-session.ts` | For a route's `beforeLoad`: no session → `/login` before anything draws |
 | `src/lib/auth-client.ts` | Better Auth's browser client (sign in, sign out) |
 | `src/lib/login-messages.ts` | What the login screen says for each kind of failure |
-| `src/lib/time.ts` | Estimating the server's clock from `/me` (the calendar's "now" line uses it) and checking a zone name |
+| `src/lib/time.ts` | Estimating the server's clock from `/me` (the calendar's "now" line uses it), checking a zone name, and `todayFor`: your day, starting at your day boundary ([[The user's day]]) |
+| `src/lib/form-problems.ts`, `use-form-problems.ts` | What's wrong with a form, one message per field, and where the focus goes; both forms use them ([[Shared form pieces]]) |
 | `src/lib/use-now.ts` | Left over from v0.0's ticking clock; nothing uses it. Deleted on branch `chore/remove-unused-use-now`, which ships with the next release's PR |
 | `src/lib/pwa.ts` | Registers the service worker ([[PWAs and service workers]]) |
 | **Screens' parts** | |
 | `src/calendar/` | The calendar: `CalendarScreen` (title bar, navigation, data, the open sheet and the toast), `TimeGrid` (the grid), `OccurrenceBlock` (one block), `OccurrenceSheet` (cancel, restore, change reason), and `model/` (the pure maths: dates, segments, layout, formatting, palette, the sheet's buttons). See [[Calendar grid]] and [[Cancelling one occurrence]] |
-| `src/series/` | The class form and its pieces. See [[Series form]] |
-| `src/components/` | Small pieces: `Logo`, `GoogleIcon`, `Avatar`, `AccountMenu` (the avatar's pop-up: name, Sign out, deployed commit), `SignOutButton`, `DeployedCommit`, `SyncBadge`, `PendingScreen` (spinner), `ErrorScreen` (offline and error states), `Toast` (a message that goes by itself, with an optional button such as Undo) |
-| `src/**/*.test.ts` | Tests for the pure pieces (149, under two seconds) |
+| `src/series/` | The class form and its own pieces. See [[Series form]] |
+| `src/groups/` | The Groups list and the group form. See [[Groups screen]] |
+| `src/components/` | Small pieces: `Logo`, `GoogleIcon`, `Avatar`, `AccountMenu` (the avatar's pop-up: name, Groups, Sign out, deployed commit), `ScreenFrame` (back link, badge, title), `form-controls` (fields, swatches, banner, Save row; [[Shared form pieces]]), `SignOutButton`, `DeployedCommit`, `SyncBadge`, `PendingScreen` (spinner), `ErrorScreen` (offline and error states), `Toast` (a message that goes by itself, with an optional button such as Undo) |
+| `src/**/*.test.ts` | Tests for the pure pieces (218 after ticket #11, a few seconds) |
 
 ## From opening the app to seeing your week
 

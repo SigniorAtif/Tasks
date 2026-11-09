@@ -22,6 +22,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `any` | "Stop checking this value"; switches TypeScript off for it, so our code avoids it | [[TypeScript essentials]] |
 | API | The program on the server that answers the app's requests (`apps/api`) | [[API server]] |
 | `app.user_id` | The custom setting that tells RLS who is asking, set per transaction with `set_config` | [[Row-level security]], [[Row-level security in our database]] |
+| archived | A group or series whose last day is before your day; worked out from the last day, never stored | [[The user's day]], [[Cancel and group choices]] |
 | `aria-describedby` / `aria-invalid` | Link an input to its hint and error text, and mark it as wrong, so a screen reader reads them when the input is focused | [[Series form]] |
 | arm64 / amd64 | The two CPU families: phones and Oracle Ampere vs most laptops and VPSs | [[Containers and images]] |
 | `as` (type assertion) | Tells the checker "trust me, this is a T"; checks nothing at run time | [[TypeScript essentials]] |
@@ -49,6 +50,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Caddy | The front-door program on the server: HTTPS certificates, forwarding to the API | [[Reverse proxies and TLS]] |
 | `calc()` | CSS arithmetic with units: `calc(var(--start) * 1.2 * 1px)` | [[CSS variables]] |
 | calendar window | The days `GET /api/v1/calendar` is asked for, `from` to `to`, both included, at most 62 | [[Calendar API]] |
+| callback ref | A function passed as `ref`: React calls it with the element once it's on the page, and with `null` when it leaves | [[Shared form pieces]] |
 | captive portal | Wi-Fi that needs a login page first (KIIT's): the phone says "online" but requests fail until you log in | [[IndexedDB and offline storage]], [[Offline reads]] |
 | cgroups | Linux feature that limits a container's CPU and memory | [[Containers and images]] |
 | CI / CD | Automatic checks on every PR / automatic deploy after merging | [[CI and CD]], [[Deploy and CI]] |
@@ -80,8 +82,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Term | In one line | Explained in |
 |---|---|---|
 | daemon (`dockerd`) | A background service; Docker's does the real work, the `docker` command just asks it | [[Containers and images]] |
+| day boundary (`dayBoundary`) | The wall time your day starts at, 04:00 by default: until then it's still yesterday for you (D-035) | [[The user's day]] |
 | debounce | Wait until something stops happening, then act once; our notes save a second after the typing stops, not on every key | [[Swap, days off and series choices]] |
 | default deny | With RLS on, a row is hidden unless a policy lets it through; no policy, or no user set, means no rows | [[Row-level security]] |
+| default parameter | The value an argument takes when the caller leaves it out: `epochMs = Date.now()` | [[The user's day]] |
 | defence in depth | Two independent guards on the same risk, so one bug isn't enough (app filters plus RLS) | [[Row-level security]] |
 | dehydrate / hydrate | Turn TanStack Query's cache into plain data to save it / put saved data back into the cache | [[Offline reads]] |
 | deploy | Putting a new version on the server; ours is `deploy/deploy.sh` | [[Deploy and CI]] |
@@ -109,6 +113,8 @@ Every technical term used in this vault and the code: one line each, plus the no
 | expansion (layout) | After columns are assigned, a block stretches right over columns that are free for its whole time | [[Interval partitioning]] |
 | fast-forward / `--no-ff` | Merge styles; `--no-ff` always records a merge commit, keeping the branch visible | [[Local workflow]] |
 | `fetchQuery` | Fetch now and return the answer; with `staleTime: 0` it always asks the server, unlike `ensureQueryData` | [[Offline cancels]] |
+| `FieldMap` | One form's map from a body path (`rule.byDay`) to its field, and how to word a message there | [[Shared form pieces]] |
+| file-based routing | A route's address comes from its file's name: `groups.$groupId.tsx` → `/groups/<id>` | [[Groups screen]], [[Single-page apps and routing]] |
 | fixture | Fixed, made-up data that tests run against; ours is a sample semester, as TypeScript for the engine and as `fixtures/sample-timetable.json` | [[Timetable files and seeding]] |
 | fixture (Playwright) | Something the test runner sets up for a test and hands it, such as `page`, `context` or `browser` | [[End-to-end tests and Playwright]] |
 | flaky test | One that passes and fails on the same code, usually from timing or leftover state; worse than none | [[End-to-end tests and Playwright]] |
@@ -119,8 +125,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | generic (`<T>`) | A type with a blank the caller fills in: `apiGet<Me>`, `Promise<Profile>` | [[TypeScript essentials]] |
 | GHCR | GitHub's storage for images: CI pushes, the server pulls | [[Containers and images]] |
 | gitleaks | Scans the whole git history for leaked secrets | [[Secret scanning]] |
+| `GoneScreen` | "This group doesn't exist any more", with a link back: for an id that isn't in the cached list | [[Shared form pieces]] |
 | `GRANT` / `REVOKE` | Give / take away a privilege, e.g. `grant select on series to tasks_app` | [[Roles and privileges]] |
 | greedy algorithm | One that takes the best-looking choice at each step and never goes back; for interval partitioning it's exactly optimal | [[Interval partitioning]] |
+| `groupSections` | Splits the groups into running and archived, each sorted by name | [[Groups screen]] |
 | hand-over (one tab) | The running tab saves both copies at once and lets go of its lock, so the tab that asked can run the app | [[Offline cancels]] |
 | handler | The function that answers one route (`GET /api/v1/me` → `me.ts`) | [[API server]] |
 | hash | A one-way fingerprint of data (SHA-256) | [[Hashing and signing]] |
@@ -130,6 +138,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | health check | A command that asks "are you OK?" (`/healthz`, `pg_isready`) | [[Docker Compose]], [[API server]] |
 | HMAC | A signature made by hashing a message with a secret key | [[Hashing and signing]] |
 | Hono | The web framework our API is written with: routes and middleware | [[API server]], [[API stack choices]] |
+| hook (React) | A function named `use…` that keeps state for the component calling it: `useState`, or our `useFormProblems` | [[Shared form pieces]] |
 | HTTP / HTTPS | The request/response language of the web; HTTPS is HTTP inside TLS encryption | [[HTTP basics]], [[Reverse proxies and TLS]] |
 | HttpOnly | Cookie flag: JavaScript can't read it, only the browser sends it | [[Cookies and sessions]] |
 
@@ -151,13 +160,16 @@ Every technical term used in this vault and the code: one line each, plus the no
 | interface | A description of an object's fields and their types | [[TypeScript essentials]] |
 | interval / overlap | A start and an end, `[start, end)`; two overlap when each starts before the other ends (touching isn't overlap) | [[Interval partitioning]] |
 | interval partitioning | Putting overlapping intervals into as few columns as possible: sort by start, take the first free column | [[Interval partitioning]], [[Calendar grid]] |
+| `Intl.Collator` | The browser's text comparer for a language; `numeric: true` reads digits as numbers | [[Groups screen]] |
 | invalidate (a query) | Mark a cached answer out of date whatever its age (`isInvalidated`): refetched now if on screen, otherwise when next shown; every answer restored from the phone comes back invalidated | [[Series form]], [[Server state and caching]], [[Offline reads]] |
 | IP address | A machine's number on a network; `127.0.0.1` is "this machine" | [[HTTP basics]] |
+| `isArchived` | Core: `untilDate !== null && untilDate < today`; the one helper every screen asks | [[The user's day]] |
 | isolation level | How much concurrent transactions see of each other; Postgres's default is READ COMMITTED | [[Transactions]] |
 | JSON | The text format API bodies use: `{"sha":"dev"}` | [[HTTP basics]] |
 | JWT | A signed, readable token holding user data; we deliberately don't use them for sessions | [[Cookies and sessions]], [[Hashing and signing]] |
 | `keepPreviousData` | TanStack Query option: keep showing the last answer while the next query loads, so nothing flashes | [[Calendar grid]] |
 | `key` (React) | A component's identity; changing it makes React throw the old one away and mount a fresh one | [[Calendar grid]] |
+| `key` (React) | Tells React a component is a different one now, so it starts fresh instead of keeping the old state | [[Groups screen]] |
 | last good answer | What we save for a query whose latest refetch failed: its previous answer, as a success | [[Offline reads]] |
 | layer (image) | A cached snapshot of the files one Dockerfile step changed | [[Containers and images]] |
 | leader election | Choosing one tab (or one server) to do a job the others must not do at the same time | [[Web Locks and BroadcastChannel]] |
@@ -166,6 +178,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | literal type | A type that is one exact value, like `'not_held'` | [[TypeScript essentials]] |
 | Live region | An element (`role="status"`) whose new text screen readers announce; it must be in the page before the text arrives | [[Dialogs and toasts]] |
 | live region (`role="status"`, `role="alert"`) | An element whose text a screen reader announces when it changes; `status` waits politely, `alert` interrupts | [[Offline reads]], [[Series form]] |
+| `localDateOf` | Core: the user's day at a moment, from their zone and day boundary, compared on the wall clock | [[The user's day]] |
 | localhost guard | The seed refuses to run unless `DATABASE_URL` and `BETTER_AUTH_URL` both point at this machine | [[Timetable files and seeding]] |
 | localStorage / sessionStorage | Small, synchronous text-only browser storage, per origin / per tab | [[IndexedDB and offline storage]] |
 | `Location` header | Sent with a `201`: the URL where the new row now lives (`/api/v1/series/<id>`) | [[Calendar API]] |
@@ -186,6 +199,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | mutation cache | Where TanStack Query keeps every mutation while it runs; it can be counted, drawn, saved and subscribed to | [[Mutations and offline queues]] |
 | namespace (Linux) | Kernel feature that gives a container its own view of processes, files and network | [[Containers and images]] |
 | narrowing | TypeScript following your `if`: after `rule.freq === 'daily'`, it knows which shape `rule` is | [[TypeScript essentials]] |
+| natural sort | Ordering text so numbers count as numbers: "Sem 9" before "Sem 10" | [[Groups screen]], [[Groups screen choices]] |
 | `navigator.onLine` | The browser's "connected to a network" flag; `false` is reliable, `true` doesn't mean the internet works | [[IndexedDB and offline storage]] |
 | `networkMode` | What a query does while the browser says offline: `online` waits, `always` tries anyway, `offlineFirst` tries once | [[Offline reads]], [[Offline and form choices]] |
 | noUncheckedIndexedAccess | Our setting: `rows[0]` may be `undefined`, so you must check it | [[TypeScript essentials]] |
@@ -213,12 +227,14 @@ Every technical term used in this vault and the code: one line each, plus the no
 |---|---|---|
 | parameter (`$1`) | A value sent separately from the SQL text, which makes SQL injection impossible | [[Postgres and SQL basics]] |
 | parse, don't validate | Turn unknown input into a typed value or a list of errors, instead of a yes/no check | [[Validating input with schemas]] |
+| `Partial<T>` / `Record<K, V>` | TypeScript helpers: every field of T optional / an object with a V for each key in K | [[Shared form pieces]] |
 | `PATCH` vs `PUT` | Change the fields I send / replace the whole thing; our edits use `PATCH` | [[REST resources and CRUD]] |
 | paused (mutation) | A pending mutation that's waiting instead of sending: the browser says offline, or it isn't its turn in its scope | [[Mutations and offline queues]] |
 | persistent storage | `navigator.storage.persist()`: asks the browser not to evict this site's data | [[IndexedDB and offline storage]] |
 | persister | Saves TanStack Query's cache to storage (ours: IndexedDB) and restores it when the app starts | [[IndexedDB and offline storage]], [[Offline reads]] |
 | pino | Our logger: one JSON line per event | [[Structured logging]] |
 | PKCE | An extra OAuth check that stops a stolen sign-in code from being used by someone else | [[OAuth sign-in]] |
+| `PlainDate` / `PlainTime` | Temporal's date with no time or zone / wall time with no date or zone | [[The user's day]] |
 | Playwright | A library that drives a real browser from a script, with its own test runner (`@playwright/test`); ours runs the end-to-end test | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | pnpm / workspace | Package manager; a workspace links our packages to each other | [[Monorepo and workspaces]] |
 | policy (RLS) | A per-table condition deciding which rows a request may see (`USING`) and write (`WITH CHECK`) | [[Row-level security]] |
@@ -230,6 +246,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `private/` | The git-ignored folder in the main repo for real personal data, like your real timetable | [[Timetable files and seeding]] |
 | privilege | One permission on one object: `SELECT` on a table, `USAGE` on a schema | [[Roles and privileges]] |
 | problem+json | Our one error-body shape (RFC 9457) with a stable `code` | [[Error responses]] |
+| `Problems<Field>` | One form's problems: at most one message per field, plus any that belong to no field | [[Shared form pieces]] |
 | Prof, Me, Not today | The cancel buttons: Prof = not held, Me = skipped (attendance groups); Not today = no reason (other groups) | [[Cancelling one occurrence]] |
 | proxy (dev server) | Vite forwarding `/api` to the API so the browser sees one origin | [[Dev server proxy]] |
 | psql | Postgres's command-line client: `docker compose exec db psql -U tasks tasks` | [[Postgres and SQL basics]] |
@@ -259,8 +276,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `savedAsPaused` | Saves every queued change as paused, so `resumePausedMutations` picks it up after a reload | [[Offline cancels]] |
 | schema (database) | The tables and columns, defined in `apps/api/src/db/schema.ts`. Not the same as a validation schema | [[Database and migrations]] |
 | schema (validation) | A description of the shape and rules data must follow, which checks it and gives its type | [[Validating input with schemas]] |
+| `schemaErrors` | Runs a core zod schema on a form's body and returns `{ path, message }` pairs, the shape of the server's 422 | [[Shared form pieces]] |
 | scope (mutation) | Mutations with the same `scope.id` run one at a time, in the order they were made | [[Mutations and offline queues]] |
 | scope (OAuth) | One permission an app asks Google for; sign-in asks only for name and email, Drive would need `drive.file` | [[Swap, days off and series choices]], [[OAuth sign-in]] |
+| `ScreenFrame` | The frame of every screen off the calendar: back link, sync badge, title | [[Shared form pieces]] |
 | secret | Any value that grants access (`BETTER_AUTH_SECRET`, OAuth secret); never in git | [[Environment variables and config]], [[Secret scanning]] |
 | seed, seeding | Filling a database with starting data by running a script instead of typing it into the app | [[Timetable files and seeding]] |
 | `seed:sample` / `seed:private` | Write the made-up sample / your real git-ignored timetable into your local database, for one user | [[Timetable files and seeding]] |
@@ -274,6 +293,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `setMutationDefaults` | Options registered on the client for every mutation with a key, so one restored after a reload still knows how to send itself | [[Mutations and offline queues]] |
 | `setQueriesData` | TanStack Query: write new data into every cached query whose key starts with a prefix, without fetching | [[Cancelling one occurrence]] |
 | Snapshot (database) | The state of the database one statement (READ COMMITTED) reads; every part of a statement sees the same one | [[Upserts and row locks]] |
+| `sortedByName` | Groups by name with numbers counted: the one order every screen lists them in | [[Groups screen]] |
 | SPA | A single-page app: one HTML page, JavaScript swaps the screens | [[Single-page apps and routing]] |
 | SQL / SQL injection | The language for asking Postgres / an attack that sneaks SQL in through a value | [[Postgres and SQL basics]] |
 | SQLSTATE | Postgres' five-character error code, stable unlike the message: `23505` unique, `23503` foreign key, `23514` check, `42501` not allowed | [[Calendar API]] |
@@ -300,6 +320,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `timetableToRows` | Pure function: a checked timetable file → the rows `POST /api/v1/groups` and `/series` take | [[Timetable files and seeding]] |
 | TLS | The encryption under HTTPS, with certificates proving the server's identity | [[Reverse proxies and TLS]] |
 | Toast | A short message at the screen's edge that goes away by itself, sometimes with one button such as Undo | [[Dialogs and toasts]] |
+| `todayFor` | The web app's "today": `localDateOf` for now, with the profile's zone and boundary | [[The user's day]] |
 | Top layer | A layer the browser draws above the whole page; a modal `<dialog>` goes there, so no `z-index` covers it | [[Dialogs and toasts]] |
 | trace (Playwright) | A recording of a test run (page snapshots, network, console) kept when it fails; opened with `playwright show-trace` | [[End-to-end tests and Playwright]], [[End-to-end test]] |
 | transaction | Statements that all happen or none do (`BEGIN` … `COMMIT` / `ROLLBACK`) | [[Transactions]], [[Postgres and SQL basics]] |
@@ -312,6 +333,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `unknown` | "Could be anything; prove what it is first"; for data from outside | [[TypeScript essentials]] |
 | Upsert | Insert-or-update as one step, so two requests racing for the same key can't both insert | [[Upserts and row locks]] |
 | `useEffectEvent` | React: wraps a function so an effect calls its latest version without restarting when it changes | [[Dialogs and toasts]] |
+| `useFormProblems` | The hook both forms use for their problems, their failed save, and moving the focus | [[Shared form pieces]] |
 | `useMutationState` | A React hook that returns the mutations matching a filter and re-renders as they change | [[Mutations and offline queues]] |
 | `UserScope` | The scoped transaction plus whose it is; only `withUser` makes one, and every calendar repository function takes it | [[Row-level security in our database]] |
 | `USING` / `WITH CHECK` | The two halves of a policy: which existing rows you can see and touch / which new rows you may write | [[Row-level security]] |
@@ -328,9 +350,11 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `window.close()` | Closes the tab, but only one a script opened; for any other tab it does nothing | [[Web Locks and BroadcastChannel]] |
 | `withQueuedChanges` | Draws the cached weeks with every queued change applied on top, oldest first | [[Offline cancels]] |
 | `withUser` | Runs a function in one transaction as `tasks_app` with `app.user_id` set, so RLS limits every query to that user | [[Row-level security in our database]] |
+| your day (the user's day) | "Today" as the app means it: in your profile's zone, starting at your day boundary | [[The user's day]] |
 | `z.input` / `z.output` | A schema's two types: what a client may send / what the code gets after defaults and transforms | [[Validating input with schemas]] |
 | zod | Our schema library: parses settings at start-up and every request body and query string | [[Validating input with schemas]], [[Environment variables and config]] |
 | zod pipe | `a.pipe(b)`: check with `a`, and run `b` only if `a` passed; how the calendar route keeps bad dates away from the 62-day check | [[Calendar API]] |
+| `ZonedDateTime` | Temporal's moment plus a zone: what a wall clock there shows | [[The user's day]] |
 
 ## Check yourself
 - Pick five terms you couldn't define without looking. Read their notes, then write each one's line again from memory.

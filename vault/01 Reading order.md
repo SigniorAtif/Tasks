@@ -52,6 +52,7 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 3. Cancelling one class (ticket #8): [[Upserts and row locks]] and [[Dialogs and toasts]] first, then [[Cancelling one occurrence]]: the sheet, the `PATCH`, the row that's deleted when it says nothing, and Undo.
 4. Cancels that work offline (ticket #9): [[Mutations and offline queues]] and [[Web Locks and BroadcastChannel]] first, then [[Offline cancels]]: the queue, the clock mark, the saved copy, the startup order, signing out, and one tab at a time. The "why": [[Offline cancel choices]].
 5. The end-to-end test (ticket #10): [[End-to-end tests and Playwright]] first, then [[End-to-end test]]: the server it starts, the empty database, signing in without Google, the steps, the fresh browser, and the bug it found in the saved copy (the fix is in [[Offline reads]]). The "why": [[End-to-end test choices]].
+6. The Groups screen (ticket #11): [[Time zones and daylight saving]] first if it's been a while, then [[The user's day]] (when "today" starts, and when a group counts as ended), [[Shared form pieces]] (what the series form gave up so a second form could use it), and [[Groups screen]] (the list, the natural sort, the form). The "why": [[Groups screen choices]].
 
 ## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
 
