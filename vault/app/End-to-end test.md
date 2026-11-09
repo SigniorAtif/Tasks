@@ -223,7 +223,7 @@ Five runs in a row passed, each in about 3 seconds.
 - The job has its own Postgres service, which creates `tasks_e2e` for it.
 - `--with-deps` installs the Linux libraries Chromium needs; `--only-shell` downloads only the headless shell, which is all a machine with no screen uses.
 - `if: ${{ failure() }}`: the trace is uploaded only when something failed, and kept for 7 days.
-- The job takes about a minute. It only *blocks* a merge once it's added to the required checks in GitHub's branch protection settings, which is a setting, not a file.
+- The job takes about a minute. A red result blocks a merge into `main`: since 2026-11-10 it's one of the six required checks in the repository's ruleset ([[CI and CD]]). That's a GitHub setting, not a file, so you won't find it in the repo.
 
 ## Running it yourself
 

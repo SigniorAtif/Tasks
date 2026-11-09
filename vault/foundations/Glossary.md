@@ -34,7 +34,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Better Auth | The library that handles Google sign-in, sessions and cookies inside our API | [[Auth]], [[API stack choices]] |
 | Biome | Linter + formatter: finds mistakes and tidies code without running it (`pnpm check`) | [[Tooling choices]] |
 | Bottom sheet | A panel that slides up from the bottom of a phone screen, near your thumb; our occurrence sheet on a phone | [[Dialogs and toasts]] |
-| branch protection | A GitHub rule that blocks merging into `main` unless chosen CI jobs pass | [[CI and CD]] |
+| branch protection | A GitHub rule that blocks merging into `main` unless chosen CI jobs pass; ours is a ruleset | [[CI and CD]] |
 | branded type | A type with a marker property only one module can name, so only that module can make values of it; ours is `UserScope` | [[Row-level security in our database]] |
 | branding (types) | A type only one function can create, like `UserScope` from `withUser` | [[TypeScript essentials]], [[Row-level security in our database]] |
 | breakpoint | A screen width where the layout changes; ours is 768 px (Day view below, Week view from it) | [[Responsive layouts]] |
@@ -252,6 +252,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | rollback (optimistic update) | Putting back what the screen showed before a write that failed; drawing queued changes on top needs none | [[Mutations and offline queues]] |
 | route / routing | Matching a URL path to code: Hono on the server, TanStack Router in the app | [[API server]], [[Single-page apps and routing]] |
 | Row lock | Taken by an update or delete on a row and held until the transaction ends; others wanting that row wait | [[Upserts and row locks]] |
+| ruleset | GitHub's current form of branch protection: named rules for chosen branches; ours, "Main", requires a PR and the six CI checks | [[CI and CD]] |
 | `safeParse` | zod's "check and tell me": returns `{ success, data }` or `{ success, error }`, never throws | [[Validating input with schemas]] |
 | salt | Random data mixed into a password hash so equal passwords hash differently | [[Hashing and signing]] |
 | `satisfies` | Checks a value against a type without losing the value's exact type | [[TypeScript essentials]] |

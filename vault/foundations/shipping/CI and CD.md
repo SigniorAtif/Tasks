@@ -6,7 +6,7 @@ What happens automatically between "I opened a pull request" and "the new versio
 
 ## The two halves
 
-- **CI (continuous integration):** every pull request is checked on a fresh machine: lint, typecheck, tests, build. If any check is red, GitHub won't let the PR merge (branch protection). A typo can't reach `main`, even late at night before an exam.
+- **CI (continuous integration):** every pull request is checked on a fresh machine: lint, typecheck, tests, build. If any check is red, GitHub won't let the PR merge into `main` (branch protection). A typo can't reach `main`, even late at night before an exam. The rule covers `main` only: a PR into a release branch still runs every check and shows the red ✗, but nothing greys out its Merge button, so reading the checks there is on you.
 - **CD (continuous delivery/deployment):** every commit that lands on `main` is built into an image, deployed, then checked. Nobody SSHes in and runs commands by hand, so deploys are boring and repeatable. Boring is the goal.
 
 ## GitHub Actions vocabulary
@@ -22,7 +22,8 @@ What happens automatically between "I opened a pull request" and "the new versio
 | Variable | A plain, non-secret setting | `DEPLOY_ENABLED`, `PUBLIC_URL` |
 | `permissions` | What the job's automatic `GITHUB_TOKEN` may do | `contents: read`; `packages: write` only where the image is pushed |
 | `concurrency` | Rules for overlapping runs | CI cancels a run when you push again; deploys queue, never cancel |
-| Required status check | A job name branch protection insists is green | The five CI job names |
+| Required status check | A job name branch protection insists is green | The six CI job names |
+| Ruleset | GitHub's current form of branch protection: a named set of rules aimed at chosen branches, kept in the repository's settings, not in a file | "Main", on the default branch: no deleting it, no force pushes, changes only through a pull request, and the six checks green |
 
 Most of these words appear in one real job, the one that runs the API and web tests:
 
