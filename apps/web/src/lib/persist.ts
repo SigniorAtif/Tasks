@@ -11,7 +11,8 @@
 // The service worker still never caches /api: this copy is the only one (D-046).
 //
 // A second copy, under its own key, holds the queue of occurrence changes made
-// offline (occurrence-queue.ts), so a cancel survives the app being closed.
+// offline (occurrence-queue.ts), so a cancel survives the app being closed. It
+// is saved the moment the queue changes, not a second later.
 
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import type { Query, QueryClient } from '@tanstack/react-query';
@@ -189,6 +190,12 @@ export function createPersister(store: KeyValueStore, throttleTime = 1_000) {
  * Both saved copies, as the options `persistQueryClient` and its friends take:
  * the reads, under `cacheBuster` and kept 30 days, and the queue, under its own
  * format and kept until it's sent, however long that takes.
+ *
+ * `throttleTime` is for the reads. The queue is saved at once, every time: a
+ * reads copy a second behind is fetched again (`savedAsStale`), but a queue a
+ * second behind loses the cancel you made just before closing the app, and
+ * nothing can fetch that back. It's small (no reads in it), so writing it on
+ * every change costs little.
  */
 export function savedCopies(
   store: KeyValueStore,
@@ -205,7 +212,7 @@ export function savedCopies(
       persister: createAsyncStoragePersister({
         storage: toAsyncStorage(store),
         key: QUEUE_KEY,
-        throttleTime,
+        throttleTime: 0,
         serialize: (client) => JSON.stringify(savedAsPaused(client)),
       }),
       buster: QUEUE_FORMAT,
