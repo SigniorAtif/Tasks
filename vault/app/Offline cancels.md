@@ -309,7 +309,7 @@ The reads are saved under `tasks-query-cache` ([[Offline reads]]). The queue get
       persister: createAsyncStoragePersister({
         storage: toAsyncStorage(store),
         key: QUEUE_KEY,
-        throttleTime,
+        throttleTime: 0,
         serialize: (client) => JSON.stringify(savedAsPaused(client)),
       }),
       buster: QUEUE_FORMAT,
@@ -328,7 +328,11 @@ The reads are saved under `tasks-query-cache` ([[Offline reads]]). The queue get
 
 Why its own buster: bumping `CACHE_BUSTER` throws away the saved reads, which costs one slow start. If the queue shared that buster, the same bump would throw away changes the server never got (spec #6, edge case 8). `QUEUE_FORMAT`'s comment in `persist.ts` says it plainly: if a queued change's shape ever has to change, convert the old ones as they're read back.
 
-`queueDehydrateOptions` lets only queued occurrence changes into this copy (`isQueuedChange`), and the reads copy takes no mutations at all. No other write is ever saved (D-048). Both copies save at most once a second (`throttleTime`): at once if nothing was saved in the last second, otherwise a moment later.
+`queueDehydrateOptions` lets only queued occurrence changes into this copy (`isQueuedChange`), and the reads copy takes no mutations at all. No other write is ever saved (D-048).
+
+The two copies save at different speeds. The reads save at most once a second (`throttleTime: 1_000`): at once if nothing was saved in the last second, otherwise a moment later. The queue saves at once, on every change (`throttleTime: 0`). Why the difference: a reads copy a second behind costs nothing, because every restored answer is fetched again when the app opens (`savedAsStale`, [[Offline reads]]). A queue a second behind loses the cancel you tapped just before closing the app, and nothing can fetch that back: the server never heard of it. The queue holds no reads, so each write is a few hundred bytes, and writing it every time costs little.
+
+**A trap found later, in #10's review: the queue saved a second late.** Until then the queue was throttled like the reads. A refetch lands and both copies are saved; you tap Me a moment later; the queue's save now waits out the rest of that second. Close the app in that second, and the cancel is gone. Spec #6, user story 23 asks for exactly this case: a queued change survives closing the app. The fix was the `throttleTime: 0` above, on its own branch (`fix/queue-saved-at-once`), merged into PR #20.
 
 Every change is saved as paused:
 
@@ -516,7 +520,7 @@ runInOneTab({
 ```
 
 What to notice:
-- `handOverSavedCopies` stops the usual saving first, then writes both copies at once (`throttleTime: 0`). Normally a save can come up to a second late. Here, a late save from tab A could land after tab B had started, and write A's old queue over B's.
+- `handOverSavedCopies` stops the usual saving first, then writes both copies at once (`throttleTime: 0`). The reads are normally saved up to a second late. Here, a late save from tab A could land after tab B had started, and write A's old reads over B's.
 - `leave` stops saving too. After a `steal` that matters most: tab A wakes up holding an old queue, and what's saved belongs to tab B now.
 - `window.close()` works only for a tab a script opened. For any other tab it does nothing, and 100 ms later the reload starts the page over. The fresh page asks for the lock, finds it held, and shows the "open in another tab" screen.
 - Browsers without Web Locks or BroadcastChannel (older than 2022) skip all of this and just run the app.
@@ -574,7 +578,7 @@ The login route's `beforeLoad` skips the login screen for someone already signed
 In plain Node, with TanStack's real client, a stand-in `fetch`, and fake timers (`vi.useFakeTimers`) that jump through minutes of backoff in milliseconds:
 
 - `lib/occurrence-queue.test.ts` (17): a change waits offline and arrives once online; changes go one at a time and the newest stays; no mark on a quick first try, a mark after 2 s; a late fetch of the week can't undo a change; `404` and `422` drop, with the right toast; no answer and `5xx` retry 1 s, 2 s, 4 s apart; a `401` keeps the change and refetches the weeks, then sends it once the session is back; a failing change holds the ones behind it; a drop nobody heard reaches the next listener; the retry rule; `sendQueuedChanges`; the sign-out warning.
-- `lib/persist.test.ts` (+5): a change survives a reload and is sent once resumed; one caught mid-request is saved as paused; a `CACHE_BUSTER` bump drops the reads and keeps the queue; the hand-over writes both copies at once; nothing else is saved.
+- `lib/persist.test.ts` (+6): a change survives a reload and is sent once resumed; one caught mid-request is saved as paused; a `CACHE_BUSTER` bump drops the reads and keeps the queue; the hand-over writes both copies at once; nothing else is saved. One more came with the fix above: a change queued 10 ms after another save is in the saved queue 50 ms later. It saves the way the running app does (`persistQueryClientSubscribe`, TanStack's real throttle), and with the old throttle the saved queue was still empty.
 - `calendar/model/queued.test.ts` (8): `withQueuedChanges` and the drop messages.
 - `lib/one-tab.test.ts` (5): the second tab asks; Use here hands over in order (save, leave, start); many taps start the app once; a frozen tab has the lock stolen and leaves; the tab that left can take it back. Node has real Web Locks and BroadcastChannel, so these use the real ones.
 - `lib/sync-status.test.ts`: the waiting count in the badge's text.
@@ -588,6 +592,7 @@ In Chrome at phone size (412 × 915), on the built app (`vite preview`) with the
 - An expired session with a change queued: the change stayed, the screen went to sign in, and after signing in the server's row appeared and the badge emptied.
 - One tab: an offline restore made in tab 1 moved to tab 2 on Use here and reached the server. Tab 1 started over on the asking screen; a tab opened by a script closed itself.
 - The series deleted while the phone was offline on the new-series form: back on the calendar, the toast arrived and the block was gone.
+- The queue saved a second late (the trap above), with a throwaway Playwright script against the end-to-end setup ([[End-to-end test]]): the server blocked so the cancel stays queued; the signal dropped and came back, which makes the app refetch and save; Me tapped; a reload 100 ms later. With the old throttle the block came back without "I skipped"; with the fix it read "…, I skipped, waiting to sync".
 
 ## Check yourself
 
@@ -599,3 +604,4 @@ In Chrome at phone size (412 × 915), on the built app (`vite preview`) with the
 6. Tab A is frozen in the background, and you tap Use here in tab B. What happens over the next 5 seconds? What does tab A do when it wakes?
 7. Why can't Sign out just forget the phone's data when it's offline?
 8. **Predict:** you change `QUEUE_FORMAT` to `'v2'` and ship it. What happens on a phone holding two waiting changes?
+9. The reads are saved at most once a second, the queue on every change. Why is a second's delay harmless for one and a lost change for the other? What would saving the reads on every change cost?

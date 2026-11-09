@@ -64,7 +64,7 @@ What lost:
 - **Saving when the page is closed** (`pagehide`). Browsers don't promise to finish a write started then, least of all on a phone that kills the app.
 - **Making the test wait a second before reloading.** The test would pass, and the bug would stay for everyone else.
 
-Not fixed here: the queue of waiting changes is saved the same way, at most once a second, so an offline cancel followed by closing the app within that second can still be lost. It was found in this ticket's review and raised as its own piece of work.
+The review found the same gap in the queue of waiting changes: it was also saved at most once a second, so an offline cancel followed by closing the app within that second was lost. That was fixed in the same PR, on its own branch (`fix/queue-saved-at-once`), by saving the queue at once, every time (`throttleTime: 0`). It's the option rejected above for the reads, and it fits the queue for two reasons: nothing can fetch a lost change back, and the queue holds no reads, so a write is a few hundred bytes ([[Offline cancels]]).
 
 ## One browser, phone-sized
 

@@ -42,7 +42,7 @@ So browser storage is a **cache, never the only copy**. For us that's fine: the 
 
 D-046 says the app keeps **one** cache of API data.
 
-- TanStack Query already keeps every answer in memory ([[Server state and caching]]). A **persister** saves that whole cache to storage after it changes (at most once a second) and puts it back (**restores** it) when the app starts. Ours writes it to IndexedDB through idb-keyval.
+- TanStack Query already keeps every answer in memory ([[Server state and caching]]). A **persister** saves that whole cache to storage after it changes (ours saves the reads at most once a second, the queue of waiting changes at once) and puts it back (**restores** it) when the app starts. Ours writes it to IndexedDB through idb-keyval.
 - Two settings guard the saved copy. **`maxAge`** throws away a saved cache older than this (the library's default is 24 hours). **`buster`** is a version string: when a new app version changes the data's shape, an old saved cache is discarded instead of misread.
 - The service worker's Cache API keeps **only the app shell**, the app's own files ([[PWAs and service workers]]). It never keeps `/api` answers, because two caches of the same data drift apart: the service worker would show last Tuesday's week while TanStack Query has today's.
 - Not localStorage: it freezes the page while a large cache is written, holds only text, and is small.

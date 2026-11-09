@@ -292,7 +292,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | TCP | The reliable connection under HTTP: bytes arrive complete and in order | [[HTTP basics]] |
 | template literal type | A type that is a text pattern: `` `--palette-${ColorToken}` `` | [[TypeScript essentials]] |
 | test pyramid | Many unit tests, fewer integration tests, a handful of end-to-end tests: cheap ones for detail, costly ones for wiring | [[End-to-end tests and Playwright]] |
-| `throttleTime` | The persister saves at most once per this many ms (ours: 1 000): at once after a quiet second, else a moment later | [[Offline cancels]], [[Offline reads]] |
+| `throttleTime` | The persister saves at most once per this many ms. Ours: 1 000 for the reads (at once after a quiet second, else a moment later), 0 for the queue (at once, every change) | [[Offline cancels]], [[Offline reads]] |
 | `TimeGridProps` | The eight props the calendar grid takes: days, zone, occurrences, waiting keys, groups, now, zoom, on-tap | [[Calendar grid]] |
 | timer overflow (24.8 days) | Browsers store a `setTimeout` delay in 32 bits; a longer delay fires immediately | [[Offline reads]], [[Offline and form choices]] |
 | timetable file | The hand-writable JSON (`"format": "tasks.timetable"`, `"version": 1`) of groups and their class slots | [[Timetable files and seeding]] |

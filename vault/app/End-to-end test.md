@@ -188,7 +188,7 @@ async function signedInLike(browser: Browser, context: BrowserContext): Promise<
 The first run failed at the reload. The page said **"No classes this week"**, a second after it had shown Pottery. The trace's network log said why: after the reload the app fetched `me` and `groups`, and **no week**.
 
 What happened, in order:
-- The saved copy is written at most once a second.
+- The saved copy of the reads is written at most once a second.
 - The whole test, from the first page load to the reload, took less than that second. So the last copy written was from the very start: an empty week, from before Pottery existed.
 - The reload restored that empty week. It had been fetched 1.7 s earlier, and the calendar counts a week as fresh for a minute (`CALENDAR_STALE_MS`), so it wasn't asked for again.
 
