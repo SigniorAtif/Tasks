@@ -21,6 +21,9 @@ docs/brainstorm/99-critique.md
 node_modules/
 dist/
 coverage/
+# Playwright's results and traces (e2e/)
+test-results/
+playwright-report/
 *.tsbuildinfo
 
 # Local environment (secrets never get committed)

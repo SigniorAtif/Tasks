@@ -16,6 +16,7 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "test:tz": "pnpm -r run test:tz",
+    "e2e": "pnpm --filter @tasks/web build && pnpm --filter @tasks/e2e run e2e",
     "coverage": "pnpm -r run coverage"
   },
   "devDependencies": {
