@@ -1,9 +1,9 @@
 // Which day it is for the user, and whether a group or series has ended.
 //
-// The user's day doesn't start at midnight. It starts at their day boundary
-// (`dayBoundary` in the profile, 04:00 by default, D-035), so a class at 01:00 after a
-// late night still belongs to the evening before. "Today" here is that day,
-// in the user's zone (`tzid`), whatever the phone or server is set to.
+// The user's day starts at their day boundary (`dayBoundary` in the profile,
+// D-035). That's midnight unless it's set later: with 04:00, a class at 01:00
+// after a late night still belongs to the evening before. "Today" here is that
+// day, in the user's zone (`tzid`), whatever the phone or server is set to.
 
 import { Temporal } from 'temporal-polyfill';
 import type { IanaZone, ISODate, WallTime } from './types.ts';

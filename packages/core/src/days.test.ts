@@ -1,5 +1,6 @@
 import { Temporal } from 'temporal-polyfill';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_PROFILE } from './api.ts';
 import { isArchived, localDateOf } from './days.ts';
 
 /** A moment, written with its offset from UTC: `2026-11-28T04:00-05:00`. */
@@ -17,6 +18,14 @@ describe('archived: a last day that has passed, in the user’s day', () => {
     expect(archivedAt('2026-11-28T00:00')).toBe(false);
     expect(archivedAt('2026-11-28T03:59')).toBe(false);
     expect(archivedAt('2026-11-28T04:00')).toBe(true);
+  });
+
+  it('starts the day at midnight for a profile on the defaults', () => {
+    const { tzid, dayBoundary } = DEFAULT_PROFILE;
+    const archivedAt = (wall: string) =>
+      isArchived(sem3, localDateOf(inKolkata(wall), tzid, dayBoundary));
+    expect(archivedAt('2026-11-27T23:59')).toBe(false);
+    expect(archivedAt('2026-11-28T00:00')).toBe(true);
   });
 
   it('follows the zone and day boundary it is given, not the machine’s', () => {

@@ -57,12 +57,12 @@ export interface Healthz {
 export interface Profile {
   /** The zone "today" and the calendar are shown in. */
   tzid: IanaZone;
-  /** When one day rolls over into the next, in `tzid` (D-035). */
+  /** When one day rolls over into the next, in `tzid` (D-035): midnight unless set later. */
   dayBoundary: WallTime;
 }
 
 /** What a new user's profile starts as. */
-export const DEFAULT_PROFILE: Profile = { tzid: 'Asia/Kolkata', dayBoundary: '04:00' };
+export const DEFAULT_PROFILE: Profile = { tzid: 'Asia/Kolkata', dayBoundary: '00:00' };
 
 /** `GET /api/v1/me`. The signed-in user, their settings and the server's clock. */
 export interface Me {

@@ -42,8 +42,8 @@ function zoned(zone: IanaZone, nowEpochMs: number): Temporal.ZonedDateTime {
 /**
  * The calendar date it is in `zone` at that moment: what a wall calendar in
  * Bhubaneswar shows, whatever zone this phone is set to. This is the plain
- * date that changes at midnight, not the 04:00 "day boundary" (D-035), which
- * is about when a late night still counts as the day before.
+ * date that changes at midnight. The user's day (`todayFor`) starts there too
+ * by default, but follows the profile's day boundary (D-035) if it's later.
  */
 export function todayIn(zone: IanaZone, nowEpochMs: number): ISODate {
   return zoned(zone, nowEpochMs).toPlainDate().toString();
