@@ -2,6 +2,7 @@ import { dehydrate, onlineManager, QueryClient } from '@tanstack/react-query';
 import {
   persistQueryClientRestore,
   persistQueryClientSave,
+  persistQueryClientSubscribe,
 } from '@tanstack/react-query-persist-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { occurrence } from '../calendar/model/test-builders.ts';
@@ -234,6 +235,25 @@ describe('the queue of occurrence changes', () => {
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify(SKIP) }),
     );
     expect(queuedChanges(after)).toEqual([]);
+  });
+
+  it('saves a change the moment it is queued, even just after another save', async () => {
+    const store = memoryStore();
+    const before = createQueryClient();
+    // Saving the way the running app does: after every change to the cache.
+    const stops = savedCopies(store).map((copy) =>
+      persistQueryClientSubscribe({ queryClient: before, ...copy }),
+    );
+    onlineManager.setOnline(false);
+    // A refetch lands, and both copies are saved at once...
+    before.setQueryData(['me'], { user: { name: 'Alice' } });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // ...then a cancel, a moment later. The app is closed 50 ms after it.
+    queueOccurrenceChange(before, CHANGE);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    for (const stop of stops) stop();
+
+    expect(queuedChanges(await restore(store))).toEqual([{ ...CHANGE, waiting: true }]);
   });
 
   it('saves a change that was mid-request as waiting, so the reload sends it again', async () => {
