@@ -124,6 +124,12 @@ export interface Impact {
    * Hidden, never erased: they come back when the last day moves later.
    */
   changesAfter: number;
+  /**
+   * Whether deleting it would lose anything: an occurrence before today (the user's
+   * day), or any override. Delete asks for the name when it's true, and a plain
+   * confirm is enough when it's false. The same whatever the query asks.
+   */
+  hasHistory: boolean;
 }
 
 /**

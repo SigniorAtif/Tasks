@@ -12,7 +12,7 @@ export {
   type SeriesImpact,
   type SeriesList,
 } from './api.ts';
-export { archiveDay, isArchived, localDateOf } from './days.ts';
+export { archiveDay, dayBefore, isArchived, localDateOf } from './days.ts';
 export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {
   assertValidRule,

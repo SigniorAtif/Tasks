@@ -21,6 +21,11 @@ export function localDateOf(epochMs: number, tzid: IanaZone, dayBoundary: WallTi
   return (beforeBoundary ? date.subtract({ days: 1 }) : date).toString();
 }
 
+/** The day before `date`. */
+export function dayBefore(date: ISODate): ISODate {
+  return Temporal.PlainDate.from(date).subtract({ days: 1 }).toString();
+}
+
 /**
  * A group or series is archived once its last day is before `today`, the
  * user's day (`localDateOf`). Never stored: it follows from the last day, so
@@ -44,7 +49,7 @@ export function archiveDay(
   today: ISODate,
   group?: { untilDate: ISODate | null },
 ): ISODate | undefined {
-  const yesterday = Temporal.PlainDate.from(today).subtract({ days: 1 }).toString();
+  const yesterday = dayBefore(today);
   if (item.startDate !== undefined && item.startDate > yesterday) return undefined;
   const endsBy = (lastDay: ISODate | null | undefined) => lastDay != null && lastDay <= yesterday;
   if (endsBy(item.untilDate) || endsBy(group?.untilDate)) return undefined;
