@@ -69,15 +69,15 @@ What lost:
 
 ## "Archived" is worked out from the last day
 
-A group or series is archived once its last day has passed; nothing stores a separate "archived" flag. **Archive** sets the last day to today (or keeps an earlier one). Archived groups leave the pickers and sit in an Archived section.
+A group or series is archived once its last day has passed; nothing stores a separate "archived" flag. **Archive** sets the last day to today (or keeps an earlier one). *Changed while building #12: Archive sets yesterday, so the day you archive doesn't count and the group moves to Archived at once ([[Archive choices]]).* Archived groups leave the pickers and sit in an Archived section.
 
 One field can't disagree with itself. With a flag *and* a date, you could have "archived" with no end, or an end that passed without being "archived". "Sem 3 ends 27 Nov" archives itself on the 28th.
 
-The catch: a series that hasn't started can't be archived, because its last day (today) would come before its first day, which the database refuses. It only offers Delete, and with nothing to lose, that's a plain confirm.
+The catch: a series that hasn't started can't be archived, because its last day (today; since #12, yesterday, so a series starting today too) would come before its first day, which the database refuses. It only offers Delete, and with nothing to lose, that's a plain confirm.
 
 ## A last day in the past hides, never erases
 
-On 1 Dec you set Sem 3's last day to 20 Nov. Plain classes after it just stop showing. If any have something on them (a cancel, a note, a move), one line warns: "3 changes after 20 Nov will stop showing. They're kept: set the date back and they return."
+On 1 Dec you set Sem 3's last day to 20 Nov. Plain classes after it just stop showing. If any have something on them (a cancel, a note, a move), one line warns: "3 changes after 20 Nov will stop showing. They're kept: set the date back and they return." (Built in #12 as "3 changes after 20 Nov 2026 will stop showing. A later date brings them back.": [[Archive and last days]].)
 
 Why a count and not a list? A list with links exists to let you rescue things before they're destroyed, and nothing is destroyed here. The rows stay in the database, and the engine already treats them as *dormant* (`findOrphans` in `packages/core/src/recurrence/expand.ts` says so), so moving the date back brings them back.
 

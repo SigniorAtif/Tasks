@@ -22,8 +22,10 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `any` | "Stop checking this value"; switches TypeScript off for it, so our code avoids it | [[TypeScript essentials]] |
 | API | The program on the server that answers the app's requests (`apps/api`) | [[API server]] |
 | `app.user_id` | The custom setting that tells RLS who is asking, set per transaction with `set_config` | [[Row-level security]], [[Row-level security in our database]] |
+| Archive | The button on the group and class forms that sets the last day to yesterday, so the day you archive doesn't count; shown only when it changes something | [[Archive and last days]], [[Archive choices]] |
 | archived | A group or series whose last day is before your day; worked out from the last day, never stored | [[The user's day]], [[Cancel and group choices]] |
 | `aria-describedby` / `aria-invalid` | Link an input to its hint and error text, and mark it as wrong, so a screen reader reads them when the input is focused | [[Series form]] |
+| `aria-live="polite"` | Makes an element a polite live region without giving it a role; ours: the Last day warning | [[Archive and last days]] |
 | arm64 / amd64 | The two CPU families: phones and Oracle Ampere vs most laptops and VPSs | [[Containers and images]] |
 | `as` (type assertion) | Tells the checker "trust me, this is a T"; checks nothing at run time | [[TypeScript essentials]] |
 | `as const` | "This value never changes; remember its exact contents", e.g. the ten colour names | [[TypeScript essentials]] |
@@ -55,6 +57,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | cgroups | Linux feature that limits a container's CPU and memory | [[Containers and images]] |
 | CI / CD | Automatic checks on every PR / automatic deploy after merging | [[CI and CD]], [[Deploy and CI]] |
 | class line (slot) | One `day` + `start` + `end` in a timetable file; it becomes one weekly series | [[Timetable files and seeding]] |
+| closure | A function that keeps the variables around it when it was made; `showsWith` returns one that keeps its two lookup maps | [[Archive and last days]] |
 | Cloudflare | Sits in front of the server: DNS, edge HTTPS, blocks abuse, hides the server's IP | [[How a request travels]] |
 | cluster (layout) | Calendar blocks joined by overlaps, directly or through a chain; each is laid out on its own | [[Interval partitioning]] |
 | collection / item | A list resource (`/api/v1/series`) and one member of it (`/api/v1/series/:id`) | [[REST resources and CRUD]] |
@@ -97,6 +100,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | DNS | Turns a name (`tasks.ahmedatif.in`) into an IP address | [[How a request travels]] |
 | Docker Compose | Describes several containers in one YAML file and runs them together | [[Docker Compose]] |
 | Dockerfile | The recipe an image is built from | [[Containers and images]] |
+| dormant (override) | A change hidden by a last day, not erased: still in the database, and drawn again when the date moves later | [[Recurrence engine]], [[Archive and last days]] |
 | Drizzle | Our query builder: SQL queries written in TypeScript, checked against the schema | [[Postgres and SQL basics]], [[Database and migrations]] |
 | drop (queued change) | A queued change the server refused for good (a 404, another 4xx): it leaves the queue, the weeks are fetched again, and a toast says so | [[Offline cancels]] |
 | ENABLE / FORCE ROW LEVEL SECURITY | `ENABLE` turns RLS on for a table; `FORCE` makes it apply to the table's owner too | [[Row-level security]] |
@@ -111,6 +115,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `excluded` | Inside `on conflict … do update`, the row the insert tried to write | [[Upserts and row locks]] |
 | expand / contract | Migration style: add new things first, remove old ones later, so rollbacks stay safe | [[Database migrations]] |
 | expansion (layout) | After columns are assigned, a block stretches right over columns that are free for its whole time | [[Interval partitioning]] |
+| extra (override) | An override that adds a class on a date the rule doesn't make, like a make-up class; only its group's last day hides it | [[Recurrence engine]], [[Archive and last days]] |
 | fast-forward / `--no-ff` | Merge styles; `--no-ff` always records a merge commit, keeping the branch visible | [[Local workflow]] |
 | `fetchQuery` | Fetch now and return the answer; with `staleTime: 0` it always asks the server, unlike `ensureQueryData` | [[Offline cancels]] |
 | `FieldMap` | One form's map from a body path (`rule.byDay`) to its field, and how to word a message there | [[Shared form pieces]] |
@@ -151,6 +156,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | idempotent | Doing it twice has the same effect as once; our creates are, thanks to client-made ids | [[Idempotency and retries]], [[HTTP basics]] |
 | `ifAvailable` (Web Locks) | Ask for a lock without waiting: the callback gets `null` if another tab holds it | [[Web Locks and BroadcastChannel]] |
 | image | A frozen bundle of an OS userland, Node, our code and deps; built once, runs anywhere | [[Containers and images]] |
+| impact read | `GET /api/v1/groups/:id/impact` or `/series/:id/impact`, with `?lastDay=`: how many changes that last day would hide, `{ changesAfter }` | [[Archive and last days]], [[Archive choices]] |
 | `import type` | An import used only for types, deleted before running (`verbatimModuleSyntax`) | [[TypeScript essentials]] |
 | index (database) | A sorted side structure that makes lookups by a column fast | [[Postgres and SQL basics]] |
 | IndexedDB | The browser's built-in asynchronous database, one per origin; our cached API data lives there | [[IndexedDB and offline storage]], [[Offline reads]] |
@@ -219,6 +225,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | optional field (`?`) | A field that may be missing entirely; we use `\| null` instead for stored data | [[TypeScript essentials]], [[Core types]] |
 | origin | Scheme + host + port (`https://tasks.ahmedatif.in`); browsers' unit of trust | [[Origin]] |
 | ORM | A library that hides SQL behind objects (Prisma); Drizzle is closer to SQL | [[Postgres and SQL basics]] |
+| override | A row that says something about one occurrence: cancelled, a note, a new time (`modified`), or an extra class (`extra`) | [[Recurrence engine]], [[Cancelling one occurrence]] |
 | owner (table) | The role that created a table; may alter or drop it, and skips RLS unless `FORCE` is set | [[Roles and privileges]], [[Row-level security]] |
 
 ## P–Z
@@ -251,6 +258,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | proxy (dev server) | Vite forwarding `/api` to the API so the browser sees one origin | [[Dev server proxy]] |
 | psql | Postgres's command-line client: `docker compose exec db psql -U tasks tasks` | [[Postgres and SQL basics]] |
 | PWA | A website your phone can install like an app | [[PWAs and service workers]] |
+| query string | The `?lastDay=2026-11-20` part of an address: named values a `GET` carries, checked with a schema like a body | [[How a request travels]], [[Archive and last days]] |
 | `QUEUE_FORMAT` | The saved queue's own version string (`'v1'`); never bumped to start clean, so a new version can't throw away a waiting change | [[Offline cancels]] |
 | quota (storage) | The most a site may store in the browser; Chrome allows about 60% of the disk | [[IndexedDB and offline storage]] |
 | refresh token | A long-lived key from Google that gets the app a fresh, hour-long access pass without asking you again; we don't store one yet | [[Swap, days off and series choices]], [[OAuth sign-in]] |
@@ -292,6 +300,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `SET ROLE` / `SET LOCAL ROLE` | Act as another role from now / until the transaction ends | [[Roles and privileges]] |
 | `setMutationDefaults` | Options registered on the client for every mutation with a key, so one restored after a reload still knows how to send itself | [[Mutations and offline queues]] |
 | `setQueriesData` | TanStack Query: write new data into every cached query whose key starts with a prefix, without fetching | [[Cancelling one occurrence]] |
+| `skipToken` | TanStack Query's "don't ask yet": a query given it as `queryFn` sits idle until it has what it needs | [[Archive and last days]] |
 | Snapshot (database) | The state of the database one statement (READ COMMITTED) reads; every part of a statement sees the same one | [[Upserts and row locks]] |
 | `sortedByName` | Groups by name with numbers counted: the one order every screen lists them in | [[Groups screen]] |
 | SPA | A single-page app: one HTML page, JavaScript swaps the screens | [[Single-page apps and routing]] |
@@ -302,6 +311,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `staleTime` | How long TanStack Query treats an answer as fresh and won't refetch it; the calendar uses a minute. An invalidated answer is stale whatever its age | [[Calendar grid]], [[Server state and caching]], [[Offline reads]] |
 | status code | The 3-digit result of a request (200, 401, 404, 500) | [[HTTP basics]] |
 | `steal` (Web Locks) | Take a lock from its holder at once; the holder's request rejects, and its code must notice and stop | [[Web Locks and BroadcastChannel]] |
+| `stopShowing` | The engine's list of changes that show now and wouldn't with a new last day; the impact read counts it | [[Archive and last days]], [[Archive choices]] |
 | strict mode | Our TypeScript setting that, among other things, forbids `null` where a value is expected | [[TypeScript essentials]] |
 | structured clone | The browser's built-in deep copy, used to store values in IndexedDB | [[IndexedDB and offline storage]] |
 | superuser | A Postgres role that skips every permission check and RLS; our `tasks` login is one | [[Roles and privileges]] |
