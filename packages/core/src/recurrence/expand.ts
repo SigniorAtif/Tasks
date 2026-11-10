@@ -95,11 +95,9 @@ export function expand(input: ExpandInput): Occurrence[] {
     if (o.kind !== 'extra') continue;
     const s = seriesById.get(o.seriesId);
     if (!s) continue;
-    const date = Temporal.PlainDate.from(o.newDate);
-    const lastDay = groupOf(s).untilDate;
-    const afterLastDay =
-      lastDay !== null && Temporal.PlainDate.compare(date, Temporal.PlainDate.from(lastDay)) > 0;
-    if (inWindow(date) && !afterLastDay) out.push(resolveExtra(s, o));
+    if (inWindow(Temporal.PlainDate.from(o.newDate)) && extraShows(o, groupOf(s))) {
+      out.push(resolveExtra(s, o));
+    }
   }
 
   // Sort by the real moment, then by key so ties come out in the same order every time.
@@ -155,7 +153,48 @@ export function findOrphans(
   });
 }
 
+/** The groups and series an override is placed by: their dates decide whether it shows. */
+export type Placement = Pick<ExpandInput, 'groups' | 'series'>;
+
+/**
+ * The overrides that show with `current` groups and series and wouldn't with `proposed` ones:
+ * what a new last day (or, later, a new first day or timing) would hide. Hidden, never
+ * erased: they go dormant and come back when the date moves back. Overrides already
+ * hidden aren't in the list, so a later last day hides nothing.
+ */
+export function stopShowing(
+  overrides: readonly OccurrenceOverride[],
+  current: Placement,
+  proposed: Placement,
+): OccurrenceOverride[] {
+  const showsNow = showsWith(current);
+  const showsProposed = showsWith(proposed);
+  return overrides.filter((o) => showsNow(o) && !showsProposed(o));
+}
+
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether `expand()` shows the override's occurrence on some day: a change to a generated
+ * occurrence while the series still generates it, an extra up to its group's last day.
+ * Change it with `expand()`: when moves show where they landed (ADR v0.3, built in v0.3b),
+ * a moved occurrence is hidden only by its group's last day, like an extra.
+ */
+function showsWith({ groups, series }: Placement): (o: OccurrenceOverride) => boolean {
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const seriesById = new Map(series.map((s) => [s.id, s]));
+  return (o) => {
+    const s = seriesById.get(o.seriesId);
+    const g = s && groupById.get(s.groupId);
+    if (!s || !g) return false;
+    return o.kind === 'extra' ? extraShows(o, g) : occursOn(s, o.originalDate, g);
+  };
+}
+
+/** An extra shows up to its group's last day; its series' own dates don't hide it. */
+function extraShows(o: ExtraOverride, g: ScheduleGroup): boolean {
+  return g.untilDate === null || o.newDate <= g.untilDate;
+}
 
 /** An occurrence plus its start in nanoseconds since 1970, for sorting. */
 interface Resolved {

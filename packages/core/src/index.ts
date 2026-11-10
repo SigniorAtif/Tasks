@@ -26,6 +26,7 @@ export {
   findOrphans,
   type OccurrenceInput,
   occurrenceOn,
+  stopShowing,
 } from './recurrence/expand.ts';
 export { extraKey, occurrenceKey } from './recurrence/keys.ts';
 export {
