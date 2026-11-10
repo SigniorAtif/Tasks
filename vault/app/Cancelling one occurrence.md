@@ -137,19 +137,19 @@ Until now every write *invalidated* the calendar ([[Server state and caching]]):
 
 ## The sheet: which buttons
 
-Which buttons show is one pure function of two things: the occurrence, and its group's attendance setting. The occurrence is the one the calendar shows, with any queued change already applied ([[Offline cancels]]).
+Which buttons show is one pure function of two things: the occurrence, and its group's attendance setting. (Since ticket #15 it takes a third, the user's day, which only picks the small line under Prof and Me: [[Quips]].) The occurrence is the one the calendar shows, with any queued change already applied ([[Offline cancels]]).
 
 *From `apps/web/src/calendar/model/sheet.ts`:*
 ```ts
   if (occ.status !== 'cancelled') {
-    return { ...NOTHING, cancel: group.attendance ? [PROF, ME] : [NOT_TODAY] };
+    return { ...NOTHING, cancel: group.attendance ? [prof(day), me(day)] : [NOT_TODAY] };
   }
   return {
     state: reasonInWords(occ.cancelReason, group.attendance),
     cancel: [],
     restore: RESTORE,
     changeReason: group.attendance
-      ? [PROF, ME].filter((b) => b.change.cancelReason !== occ.cancelReason)
+      ? [prof(day), me(day)].filter((b) => b.change.cancelReason !== occ.cancelReason)
       : [],
   };
 ```
@@ -166,7 +166,7 @@ What to notice:
 - **Restore never shows on a class that's on.** The state decides; there's no separate "can restore" flag to fall out of step.
 - **A saved reason is shown as saved.** Turn a group's attendance off and its "I skipped" still reads "I skipped". Settings never rewrite history.
 - **No reason is never guessed.** A Not today cancel in a group that later tracks attendance reads "No reason given", and Change reason offers both Prof and Me. The calendar keeps drawing it like "not held".
-- **Prof and Me keep their first word.** Under each sits a small line ("Class didn't happen", "I didn't go"); ticket #15 makes the line rotate, never the word, so the right button is found at 8 am without reading.
+- **Prof and Me keep their first word.** Under each sits a small line ("Class didn't happen", "I didn't go"); since ticket #15 the line changes each day ([[Quips]]), never the word, so the right button is found at 8 am without reading.
 - **A waiting change shows as done.** The sheet gets the class as the calendar draws it, queued change applied, so a skip that hasn't reached the server yet already offers Restore. A line under the state says "Waiting to sync: saved on this phone, not yet on the server." No button is ever disabled: a second change just queues behind the first. (In ticket #8 the sheet took the change in flight as a third argument, `pending`, and disabled every button while it was out. Ticket #9 removed both.)
 
 The sheet itself is a native `<dialog>` opened with `showModal()`: focus, Escape and the inert page behind come from the browser ([[Dialogs and toasts]]). "Edit all Data Structures…" at the bottom links to the series form, which is what tapping a class used to do.
@@ -184,8 +184,10 @@ The screen makes the offer the moment you tap, not when the server answers:
     if (originalDate === null) return;
     queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change });
     if (change.status !== 'cancelled' || occ.status === 'cancelled') return;
+    const cancelled = applyChange(occ, change);
     setToast({
-      text: `${title} · ${statusLabel(applyChange(occ, change))}`,
+      text: `${title} · ${statusLabel(cancelled)}`,
+      quip: cancelQuip(cancelled, shown.occurrences, quipDay),
       action: {
         label: 'Undo',
         onClick: () =>
@@ -197,6 +199,7 @@ The screen makes the offer the moment you tap, not when the server answers:
 
 What to notice:
 - The sheet only hands over the change (its `onChange` prop) and closes itself. The screen queues it.
+- `quip` is the smaller second line under the fact, added in ticket #15: the day's line for that kind of cancel, or the roast at the third skip ([[Quips]]).
 - The early `return` keeps the toast to one case: a cancel (`change.status === 'cancelled'`) of a class that wasn't cancelled already. A restore, or a new reason on a class that's already cancelled, offers no Undo.
 - The toast's words come from `applyChange`, the same local guess the calendar draws, because the server hasn't answered yet.
 - Undo on a skip that's still waiting queues a Restore behind it. The server gets both, in order, and ends restored.
