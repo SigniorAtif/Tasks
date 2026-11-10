@@ -203,9 +203,9 @@
 }
 
 /* Not held (a holiday, or the prof cancelled): grey stripes, a faded edge,
-   the title struck through and a "Cancelled" pill. States differ by pattern,
-   border and words, never by colour alone. Whole-pixel stripe widths avoid
-   shimmering on phones with fractional pixel ratios. */
+   the title struck through and a pill saying why ("Prof cancelled"). States
+   differ by pattern, border and words, never by colour alone. Whole-pixel
+   stripe widths avoid shimmering on phones with fractional pixel ratios. */
 .tg-block[data-status="cancelled"] {
   background-color: var(--grid-surface-muted);
   background-image: repeating-linear-gradient(
@@ -245,6 +245,31 @@
   line-height: 1rem;
 }
 
+/* A change the server doesn't have yet (#9): a small clock in the top right
+   corner, on its own solid circle so stripes never run through it. The
+   title makes room for it. */
+.tg-block[data-waiting] {
+  padding-right: 18px;
+}
+
+.tg-waiting {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--grid-surface);
+  color: var(--grid-text);
+}
+
+.tg-waiting svg {
+  width: 10px;
+  height: 10px;
+}
+
 /* The current time, across today's column. */
 .tg-now {
   position: absolute;
@@ -277,6 +302,10 @@
 
   .tg-block[data-status="cancelled"] {
     border-style: dashed;
+  }
+
+  .tg-waiting {
+    border: 1px solid CanvasText;
   }
 
   .tg-now,

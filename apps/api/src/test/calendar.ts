@@ -77,8 +77,7 @@ export function groupBody(fields: Partial<CreateGroup> = {}): CreateGroup {
   return {
     id: newId(),
     name: 'Classes · Sem 3 (sample)',
-    activeFrom: '2026-07-13',
-    activeTo: '2026-11-27',
+    untilDate: '2026-11-27',
     ...fields,
   };
 }

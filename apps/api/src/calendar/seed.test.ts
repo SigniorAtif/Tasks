@@ -87,9 +87,9 @@ describe('seedTimetable', () => {
     const someone = await insertUser('alice@example.com');
     await testDb.insert(scheduleGroup).values([
       // The same user's group with another name stays.
-      { userId: you, name: 'Clubs', activeFrom: '2026-07-01' },
+      { userId: you, name: 'Clubs' },
       // Another user's group with a name from the file stays too.
-      { userId: someone, name: 'Health', activeFrom: '2026-07-01' },
+      { userId: someone, name: 'Health' },
     ]);
     await seedTimetable({ env, db: testDb }, sample, 'you@example.com');
     const firstIds = (await testDb.select().from(series)).map((row) => row.id);
@@ -181,9 +181,10 @@ describe('the seeded sample in the calendar', () => {
     });
     // 12 classes (the fortnightly lab is off that week) and a run every day.
     expect(response.occurrences).toHaveLength(12 + 7);
+    // Sorted by name.
     expect(groups.map((group: ScheduleGroup) => [group.name, group.colorToken])).toEqual([
-      ['Health', 'green'],
       ['Classes · Sem 3 (sample)', 'blue'],
+      ['Health', 'green'],
     ]);
   });
 });

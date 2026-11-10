@@ -242,8 +242,15 @@ export async function apiSend<T>(
   return answer as T;
 }
 
+/** What an error screen or a form's banner says: a title, a sentence, and sometimes small print. */
+export interface ErrorText {
+  title: string;
+  message: string;
+  small?: string | undefined;
+}
+
 /** A short, human description of any error, for the error and offline screens. */
-export function describeError(error: unknown): { title: string; message: string; small?: string } {
+export function describeError(error: unknown): ErrorText {
   if (error instanceof NetworkError) {
     return {
       title: "You're offline",
@@ -272,4 +279,20 @@ export function describeError(error: unknown): { title: string; message: string;
     title: 'Something went wrong',
     message: error instanceof Error ? error.message : String(error),
   };
+}
+
+/**
+ * Why a save or delete failed, for the banner above a form. A 404 means the
+ * row is gone, most likely deleted on another device: `gone` names it ("This
+ * group doesn't exist any more").
+ */
+export function describeSaveError(error: unknown, gone: string): ErrorText {
+  if (error instanceof ApiError && error.code === 'not_found') {
+    return {
+      title: gone,
+      message: 'It may have been deleted on another device.',
+      small: error.requestId === undefined ? undefined : `request ${error.requestId}`,
+    };
+  }
+  return describeError(error);
 }

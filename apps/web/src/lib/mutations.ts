@@ -1,19 +1,27 @@
 // The writes the screens make, as TanStack Query mutations. A mutation is a
 // request that changes something on the server: it isn't cached like a read,
 // but TanStack Query tracks whether it's running or failed, and what to do
-// once it worked. Here that's always the same: mark the cached reads that the
-// change makes out of date ("invalidate" them), so they're fetched again.
+// once it worked. Usually that's marking the cached reads the change makes out
+// of date ("invalidating" them), so they're fetched again. A change to one
+// occurrence instead gets the occurrence back and puts it straight into the
+// cached calendar weeks, with no refetch.
 //
-// Writes are online-only in v0.2 (D-048): nothing is queued while offline. The
-// screens disable their Save buttons when offline instead.
+// Writes are online-only (D-048): nothing is queued while offline, and the
+// screens disable their buttons instead. The one exception is a change to one
+// occurrence, which is queued (occurrence-queue.ts) so it works with no signal.
 
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  type CalendarResponse,
   type CreateGroup,
   type CreateSeries,
+  type ISODate,
+  type Occurrence,
   paths,
   type ScheduleGroup,
   type Series,
+  type UpdateGroup,
+  type UpdateOccurrence,
   type UpdateSeries,
 } from '@tasks/core';
 import { v7 as uuidv7 } from 'uuid';
@@ -55,6 +63,11 @@ export function createGroup(input: CreateGroup): Promise<ScheduleGroup> {
   return apiSend<ScheduleGroup>('POST', paths.groups, input);
 }
 
+/** `PATCH /api/v1/groups/:id` with only the fields that changed. */
+export function updateGroup({ id, changes }: { id: string; changes: UpdateGroup }) {
+  return apiSend<ScheduleGroup>('PATCH', `${paths.groups}/${id}`, changes);
+}
+
 /** `POST /api/v1/series`. Same idempotent answer as `createGroup`. */
 export function createSeries(input: CreateSeries): Promise<Series> {
   return apiSend<Series>('POST', paths.series, input);
@@ -66,17 +79,58 @@ export function updateSeries({ id, changes }: { id: string; changes: UpdateSerie
 }
 
 /**
- * `DELETE /api/v1/series/:id`. A 404 counts as done: the class is gone either
+ * `DELETE` the row at `path`. A 404 counts as done: the row is gone either
  * way. That happens when an earlier try worked but its answer was lost, so the
  * user tapped Delete again.
  */
-export async function deleteSeries(id: string): Promise<void> {
+async function deleteRow(path: string): Promise<void> {
   try {
-    await apiSend<undefined>('DELETE', `${paths.series}/${id}`);
+    await apiSend<undefined>('DELETE', path);
   } catch (error) {
     if (error instanceof ApiError && error.code === 'not_found') return;
     throw error;
   }
+}
+
+/** `DELETE /api/v1/series/:id`: the series and its overrides. */
+export const deleteSeries = (id: string) => deleteRow(`${paths.series}/${id}`);
+
+/** `DELETE /api/v1/groups/:id`: the group, its series and their overrides. */
+export const deleteGroup = (id: string) => deleteRow(`${paths.groups}/${id}`);
+
+/** A change to one occurrence, named by its series and the date the rule generated (D-022). */
+export interface OccurrenceChange {
+  seriesId: string;
+  originalDate: ISODate;
+  change: UpdateOccurrence;
+}
+
+/**
+ * `PATCH /api/v1/occurrences/:seriesId/:originalDate`: cancel, restore or change the
+ * reason. Answers with the occurrence as the server now computes it. Sending the
+ * same change twice is harmless.
+ */
+export function changeOccurrence({
+  seriesId,
+  originalDate,
+  change,
+}: OccurrenceChange): Promise<Occurrence> {
+  return apiSend<Occurrence>('PATCH', `${paths.occurrences}/${seriesId}/${originalDate}`, change);
+}
+
+/**
+ * Puts an occurrence the server sent into every cached calendar window that
+ * shows it, in place of the old copy. Windows without it are left alone, so
+ * nothing is fetched again.
+ */
+export function putOccurrence(queryClient: QueryClient, occurrence: Occurrence): void {
+  queryClient.setQueriesData<CalendarResponse>({ queryKey: ['calendar'] }, (window) => {
+    if (!window?.occurrences.some((o) => o.key === occurrence.key)) return window;
+    return {
+      ...window,
+      occurrences: window.occurrences.map((o) => (o.key === occurrence.key ? occurrence : o)),
+    };
+  });
 }
 
 // The hooks the screens use. Returning the invalidation from `onSuccess` keeps
@@ -87,6 +141,24 @@ export function useCreateGroup() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createGroup,
+    onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
+  });
+}
+
+/** A group's colour and last day show on the calendar, so the weeks are fetched again too. */
+export function useUpdateGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateGroup,
+    onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
+  });
+}
+
+/** Its series go with it, off the calendar and the series list. */
+export function useDeleteGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteGroup,
     onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
   });
 }

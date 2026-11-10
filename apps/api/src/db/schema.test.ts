@@ -1,10 +1,13 @@
 // Checks the migrations did what the schema says, against real Postgres.
 
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { Rule } from '@tasks/core';
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetDatabase, testDb, testPool } from '../test/database.ts';
 import type { Database } from './client.ts';
+import { MIGRATIONS_FOLDER } from './migrations.ts';
 import {
   authAccount,
   authSession,
@@ -52,7 +55,7 @@ describe('the first migration', () => {
     const user = await insertUser('alice@example.com');
     await testDb.insert(profile).values({ userId: user.id });
     const [row] = await testDb.select().from(profile).where(eq(profile.userId, user.id));
-    expect(row).toMatchObject({ tzid: 'Asia/Kolkata', dayBoundary: '04:00:00' });
+    expect(row).toMatchObject({ tzid: 'Asia/Kolkata', dayBoundary: '00:00:00' });
   });
 
   it("deletes a user's sessions, accounts and profile along with the user", async () => {
@@ -95,10 +98,7 @@ describe('the first migration', () => {
 const weekly: Rule = { freq: 'weekly', interval: 1, byDay: ['MO'] };
 
 async function insertGroup(userId: string, name = 'Classes') {
-  const [group] = await testDb
-    .insert(scheduleGroup)
-    .values({ userId, name, activeFrom: '2026-07-13' })
-    .returning();
+  const [group] = await testDb.insert(scheduleGroup).values({ userId, name }).returning();
   if (!group) throw new Error('insert returned nothing');
   return group;
 }
@@ -129,7 +129,45 @@ async function asUser<T>(userId: string | null, fn: (tx: Database) => Promise<T>
   });
 }
 
+describe('migration 0004: the day starts at midnight', () => {
+  it('moves profiles on the old 04:00 default to midnight, and leaves a chosen time alone', async () => {
+    const onOldDefault = await insertUser('alice@example.com');
+    const chosen = await insertUser('bob@example.com');
+    await testDb.insert(profile).values([
+      { userId: onOldDefault.id, dayBoundary: '04:00' },
+      { userId: chosen.id, dayBoundary: '03:00' },
+    ]);
+
+    // The test database already has every migration; run 0004's SQL again over these rows.
+    const file = await readFile(
+      path.join(MIGRATIONS_FOLDER, '0004_midnight_day_start.sql'),
+      'utf8',
+    );
+    for (const statement of file.split('--> statement-breakpoint')) {
+      await testPool.query(statement);
+    }
+
+    const boundaryOf = async (userId: string) =>
+      (await testDb.select().from(profile).where(eq(profile.userId, userId)))[0]?.dayBoundary;
+    expect(await boundaryOf(onOldDefault.id)).toBe('00:00:00');
+    expect(await boundaryOf(chosen.id)).toBe('03:00:00');
+  });
+});
+
 describe('the calendar tables', () => {
+  it('give a group a last day and no first day (ADR v0.3)', async () => {
+    const { rows: columns } = await testPool.query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'schedule_group'
+          and column_name like any (array['active%', 'archived%', 'until%'])`,
+    );
+    expect(columns.map((row) => row.column_name)).toEqual(['until_date']);
+    const { rows: checks } = await testPool.query(
+      `select 1 from pg_constraint where conname = 'schedule_group_active_range'`,
+    );
+    expect(checks).toEqual([]);
+  });
+
   it('refuse a rule the engine cannot run', async () => {
     const alice = await insertUser('alice@example.com');
     const group = await insertGroup(alice.id);
@@ -235,7 +273,7 @@ describe('row-level security on the calendar tables', () => {
     // Inserting a row that claims to be Bob's fails the WITH CHECK. Drizzle wraps
     // Postgres' error; the original is its `cause`.
     const refused = await asUser(alice.id, (tx) =>
-      tx.insert(scheduleGroup).values({ userId: bob.id, name: 'x', activeFrom: '2026-07-13' }),
+      tx.insert(scheduleGroup).values({ userId: bob.id, name: 'x' }),
     ).catch((error: unknown) => error);
     expect((refused as Error).cause).toMatchObject({
       code: '42501',

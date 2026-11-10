@@ -1,12 +1,12 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, Navigate } from '@tanstack/react-router';
 import { useState } from 'react';
+import { GoneScreen, ScreenFrame } from '../components/ScreenFrame.tsx';
 import { isUnauthenticated } from '../lib/api.ts';
 import { groupsQuery, meQuery, seriesListQuery } from '../lib/queries.ts';
 import { requireSession } from '../lib/require-session.ts';
-import { todayIn } from '../series/form-values.ts';
+import { todayFor } from '../lib/time.ts';
 import { SeriesForm } from '../series/SeriesForm.tsx';
-import { SeriesNotFound, SeriesScreen } from '../series/SeriesScreen.tsx';
 
 // `/series/<id>`: the form to change or delete one class. The calendar opens
 // it when a block is tapped (`occurrence.seriesId`).
@@ -43,15 +43,13 @@ function EditSeriesScreen({ seriesId }: { seriesId: string }) {
   const series = found ?? firstFound;
 
   if (isUnauthenticated(me.error)) return <Navigate to="/login" replace />;
-  if (series === undefined) return <SeriesNotFound />;
+  if (series === undefined) {
+    return <GoneScreen title="This class doesn't exist any more" back="calendar" />;
+  }
 
   return (
-    <SeriesScreen title="Edit class">
-      <SeriesForm
-        series={series}
-        groups={groups.data.groups}
-        today={todayIn(me.data.profile.tzid)}
-      />
-    </SeriesScreen>
+    <ScreenFrame title="Edit class" back="calendar">
+      <SeriesForm series={series} groups={groups.data.groups} today={todayFor(me.data.profile)} />
+    </ScreenFrame>
   );
 }

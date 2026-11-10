@@ -68,7 +68,7 @@ const classSchema = z
     end: wallTimeSchema,
     /** 2 = every other week, counted from the week of the first class. */
     everyWeeks: z.number().int().min(1).max(MAX_INTERVAL.weekly).default(1),
-    /** The first day it can happen. Defaults to the group's `activeFrom`. */
+    /** The first day it can happen. Defaults to the group line's `activeFrom`. */
     from: isoDateSchema.optional(),
     /** The last day it can happen. Defaults to "until the group ends". */
     until: isoDateSchema.nullable().optional(),
@@ -92,8 +92,10 @@ const groupSchema = z
   .strictObject({
     name: group.name,
     colorToken: group.colorToken,
-    activeFrom: group.activeFrom,
-    activeTo: group.activeTo,
+    /** The classes' default first day. A group has no first day, so it isn't stored. */
+    activeFrom: isoDateSchema,
+    /** The group's last day (stored as its `untilDate`). `null` = open-ended. */
+    activeTo: group.untilDate,
     observesHolidays: group.observesHolidays,
     attendance: group.attendance,
     attendanceThresholdPct: group.attendanceThresholdPct,
@@ -108,10 +110,11 @@ const groupSchema = z
         message: 'must be on or after activeFrom',
       });
     }
-    // A class without its own `from` starts with the group, so it can't end before it.
+    // A class without its own `from` takes the line's `activeFrom` as its first day,
+    // so it can't end before it.
     g.classes.forEach((row, index) => {
-      const usesGroupStart = row.from === undefined && isDate(g.activeFrom);
-      if (usesGroupStart && row.until != null && row.until < g.activeFrom) {
+      const usesDefaultFirstDay = row.from === undefined && isDate(g.activeFrom);
+      if (usesDefaultFirstDay && row.until != null && row.until < g.activeFrom) {
         ctx.addIssue({
           code: 'custom',
           path: ['classes', index, 'until'],
@@ -162,9 +165,9 @@ export function timetableToRows(
 ): { groups: CreateGroup[]; series: CreateSeries[] } {
   const groups: CreateGroup[] = [];
   const seriesRows: CreateSeries[] = [];
-  for (const { classes, ...fields } of file.groups) {
+  for (const { classes, activeFrom, activeTo, ...fields } of file.groups) {
     const groupId = newId();
-    groups.push({ id: groupId, ...fields });
+    groups.push({ id: groupId, ...fields, untilDate: activeTo });
     for (const row of classes) {
       seriesRows.push({
         id: newId(),
@@ -173,7 +176,7 @@ export function timetableToRows(
         subject: row.subject ?? row.title,
         location: row.location,
         rule: { freq: 'weekly', interval: row.everyWeeks, byDay: [row.day] },
-        startDate: row.from ?? fields.activeFrom,
+        startDate: row.from ?? activeFrom,
         untilDate: row.until ?? null,
         startTime: row.start,
         durationMin: minutesOf(row.end) - minutesOf(row.start),

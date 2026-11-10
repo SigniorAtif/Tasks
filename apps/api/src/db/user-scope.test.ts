@@ -19,7 +19,7 @@ async function insertUser(email: string): Promise<string> {
 }
 
 async function insertGroup(userId: string, name: string): Promise<void> {
-  await testDb.insert(scheduleGroup).values({ userId, name, activeFrom: '2026-07-13' });
+  await testDb.insert(scheduleGroup).values({ userId, name });
 }
 
 describe('withUser', () => {
@@ -66,9 +66,7 @@ describe('withUser', () => {
   it('rolls everything back when the function throws', async () => {
     const alice = await insertUser('alice@example.com');
     const failed = withUser(testDb, alice, async ({ tx, userId }) => {
-      await tx
-        .insert(scheduleGroup)
-        .values({ userId, name: 'Half done', activeFrom: '2026-07-13' });
+      await tx.insert(scheduleGroup).values({ userId, name: 'Half done' });
       throw new Error('something went wrong halfway');
     });
     await expect(failed).rejects.toThrow('something went wrong halfway');
@@ -79,7 +77,7 @@ describe('withUser', () => {
     const alice = await insertUser('alice@example.com');
     const bob = await insertUser('bob@example.com');
     const refused = await withUser(testDb, alice, ({ tx }) =>
-      tx.insert(scheduleGroup).values({ userId: bob, name: 'x', activeFrom: '2026-07-13' }),
+      tx.insert(scheduleGroup).values({ userId: bob, name: 'x' }),
     ).catch((error: unknown) => error);
     // Drizzle wraps Postgres' error; the original is its `cause`.
     expect((refused as Error).cause).toMatchObject({ code: '42501' });

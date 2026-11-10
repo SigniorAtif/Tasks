@@ -4,22 +4,32 @@ export {
   type ErrorCode,
   type GroupList,
   type Healthz,
+  type Impact,
   type Me,
   type Problem,
   type Profile,
   paths,
+  type SeriesImpact,
   type SeriesList,
 } from './api.ts';
+export { archiveDay, dayBefore, isArchived, localDateOf } from './days.ts';
 export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {
-  type ActiveRange,
   assertValidRule,
   expandDates,
+  type GroupLastDay,
   MAX_INTERVAL,
   occursOn,
   untilDateForCount,
 } from './recurrence/dates.ts';
-export { type ExpandInput, expand, findOrphans } from './recurrence/expand.ts';
+export {
+  type ExpandInput,
+  expand,
+  findOrphans,
+  type OccurrenceInput,
+  occurrenceOn,
+  stopShowing,
+} from './recurrence/expand.ts';
 export { extraKey, occurrenceKey } from './recurrence/keys.ts';
 export {
   type SeriesChanges,
@@ -35,13 +45,19 @@ export {
   colorTokenSchema,
   createGroupSchema,
   createSeriesSchema,
+  type ImpactQuery,
   ianaZoneSchema,
+  impactQuerySchema,
   isoDateSchema,
   MAX_CALENDAR_DAYS,
   ruleSchema,
+  type SeriesImpactQuery,
+  seriesImpactQuerySchema,
   type UpdateGroup,
+  type UpdateOccurrence,
   type UpdateSeries,
   updateGroupSchema,
+  updateOccurrenceSchema,
   updateSeriesSchema,
   wallTimeSchema,
 } from './schemas.ts';

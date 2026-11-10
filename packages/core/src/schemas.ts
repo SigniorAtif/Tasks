@@ -105,62 +105,52 @@ function normaliseDays(days: readonly Weekday[]): Weekday[] {
   return WEEKDAYS.filter((day) => days.includes(day));
 }
 
+const weeklyRuleSchema = z.object({
+  freq: z.literal('weekly'),
+  interval: z.number().int().min(1).max(MAX_INTERVAL.weekly),
+  byDay: z.array(z.enum(WEEKDAYS)).min(1, 'pick at least one day').transform(normaliseDays),
+});
+
 export const ruleSchema = z.discriminatedUnion('freq', [
   z.object({
     freq: z.literal('daily'),
     interval: z.number().int().min(1).max(MAX_INTERVAL.daily),
   }),
-  z.object({
-    freq: z.literal('weekly'),
-    interval: z.number().int().min(1).max(MAX_INTERVAL.weekly),
-    byDay: z.array(z.enum(WEEKDAYS)).min(1, 'pick at least one day').transform(normaliseDays),
-  }),
+  weeklyRuleSchema,
 ]);
 
 // ---------------------------------------------------------------------------
 // Groups
 // ---------------------------------------------------------------------------
 
-const activeRangeCheck = {
-  check: (g: { activeFrom?: string; activeTo?: string | null }) =>
-    g.activeFrom === undefined || g.activeTo == null || g.activeTo >= g.activeFrom,
-  params: { path: ['activeTo'], message: 'must be on or after activeFrom' },
-};
-
-/** `POST /api/v1/groups`. */
-export const createGroupSchema = z
-  .object({
-    id: newIdSchema,
-    name: text(80),
-    colorToken: colorTokenSchema.default(DEFAULT_COLOR_TOKEN),
-    activeFrom: isoDateSchema,
-    /** `null` = open-ended (a semester whose last day isn't known yet). */
-    activeTo: isoDateSchema.nullable().default(null),
-    observesHolidays: z.boolean().default(true),
-    attendance: z.boolean().default(true),
-    attendanceThresholdPct: z.number().int().min(0).max(100).default(75),
-    attendanceTrackingFrom: isoDateSchema.nullable().default(null),
-  })
-  .refine(activeRangeCheck.check, activeRangeCheck.params);
-
 /**
- * `PATCH /api/v1/groups/:id`: only the fields being changed. A range check that
- * needs the stored value too (a new `activeTo` against the old `activeFrom`) is the
- * database's job: its CHECK constraint refuses the update and the API answers 422.
+ * `POST /api/v1/groups`. A group is a folder: it has no first day, only an
+ * optional last day (ADR v0.3).
  */
+export const createGroupSchema = z.object({
+  id: newIdSchema,
+  name: text(80),
+  colorToken: colorTokenSchema.default(DEFAULT_COLOR_TOKEN),
+  /** Last day, inclusive. `null` = open-ended (a semester whose last day isn't known yet). */
+  untilDate: isoDateSchema.nullable().default(null),
+  observesHolidays: z.boolean().default(true),
+  attendance: z.boolean().default(true),
+  attendanceThresholdPct: z.number().int().min(0).max(100).default(75),
+  attendanceTrackingFrom: isoDateSchema.nullable().default(null),
+});
+
+/** `PATCH /api/v1/groups/:id`: only the fields being changed. */
 export const updateGroupSchema = z
   .object({
     name: text(80),
     colorToken: colorTokenSchema,
-    activeFrom: isoDateSchema,
-    activeTo: isoDateSchema.nullable(),
+    untilDate: isoDateSchema.nullable(),
     observesHolidays: z.boolean(),
     attendance: z.boolean(),
     attendanceThresholdPct: z.number().int().min(0).max(100),
     attendanceTrackingFrom: isoDateSchema.nullable(),
   })
-  .partial()
-  .refine(activeRangeCheck.check, activeRangeCheck.params);
+  .partial();
 
 // ---------------------------------------------------------------------------
 // Series
@@ -239,9 +229,74 @@ export const calendarQuerySchema = z
     }
   });
 
+// ---------------------------------------------------------------------------
+// What a change would hide
+// ---------------------------------------------------------------------------
+
+/**
+ * `GET /api/v1/groups/:id/impact?lastDay=2026-11-27`, and the same on a series:
+ * the last day being considered. Without one, nothing changes and nothing is hidden.
+ */
+export const impactQuerySchema = z.object({ lastDay: isoDateSchema.optional() });
+
+/**
+ * `GET /api/v1/series/:id/impact`: a series can also be asked about a new first day
+ * (`?firstDay=2026-10-01`), since moving it later hides what came before, and a new
+ * weekly timing (`?byDay=MO,FR&interval=2`, always the two together), which hides
+ * what was on the days it no longer produces.
+ */
+export const seriesImpactQuerySchema = impactQuerySchema
+  .extend({
+    firstDay: isoDateSchema.optional(),
+    byDay: z
+      .string()
+      .transform((days) => days.split(','))
+      .pipe(weeklyRuleSchema.shape.byDay)
+      .optional(),
+    interval: z.coerce.number().pipe(weeklyRuleSchema.shape.interval).optional(),
+  })
+  .superRefine(({ byDay, interval }, ctx) => {
+    if (byDay === undefined && interval !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['byDay'], message: 'is needed with interval' });
+    } else if (byDay !== undefined && interval === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['interval'], message: 'is needed with byDay' });
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// One occurrence
+// ---------------------------------------------------------------------------
+
+/**
+ * `PATCH /api/v1/occurrences/:seriesId/:originalDate`. Cancel with
+ * `{ status: 'cancelled', cancelReason }`, where the reason is `not_held` (Prof),
+ * `skipped` (Me) or `null` (Not today); restore with `{ status: null, cancelReason: null }`.
+ * The server doesn't check the reason against the group's attendance setting: that
+ * setting only decides which buttons the sheet shows.
+ */
+export const updateOccurrenceSchema = z
+  .object({
+    /** `null` = inherit from the series: scheduled again. */
+    status: z.enum(['cancelled']).nullable(),
+    cancelReason: z.enum(['not_held', 'skipped']).nullable(),
+  })
+  .refine(({ status, cancelReason }) => cancelReason === null || status === 'cancelled', {
+    path: ['cancelReason'],
+    message: 'must be null unless status is cancelled',
+  });
+
 // What callers send (before defaults and normalising), for the PWA's forms and tests.
 export type CreateGroup = z.input<typeof createGroupSchema>;
 export type UpdateGroup = z.input<typeof updateGroupSchema>;
 export type CreateSeries = z.input<typeof createSeriesSchema>;
 export type UpdateSeries = z.input<typeof updateSeriesSchema>;
 export type CalendarQuery = z.input<typeof calendarQuerySchema>;
+export type UpdateOccurrence = z.input<typeof updateOccurrenceSchema>;
+export type ImpactQuery = z.input<typeof impactQuerySchema>;
+
+/**
+ * A series' impact question as the server reads it: the days as a list, the
+ * interval a number. The PWA builds one from its form and writes it into the
+ * query string.
+ */
+export type SeriesImpactQuery = z.output<typeof seriesImpactQuerySchema>;

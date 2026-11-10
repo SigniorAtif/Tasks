@@ -5,6 +5,8 @@
 // Rules for changing this file inside /api/v1: only add things (new fields,
 // new codes). Clients ignore fields they don't know and treat an unknown error
 // code like `internal_error`.
+// One exception so far: ADR v0.3 removed the group's `activeFrom`, `activeTo` and
+// `archivedAt`, while the only client was our PWA, served from the same image.
 
 import type {
   IanaZone,
@@ -25,12 +27,20 @@ export const paths = {
   /** Everything else is versioned under this prefix and needs a session. */
   apiV1: '/api/v1',
   me: '/api/v1/me',
-  /** `GET` lists, `POST` creates; `/api/v1/groups/:id` for `GET`, `PATCH`, `DELETE`. */
+  /**
+   * `GET` lists, `POST` creates; `/api/v1/groups/:id` for `GET`, `PATCH`, `DELETE`;
+   * `GET /api/v1/groups/:id/impact` for what a new last day would hide (`Impact`).
+   */
   groups: '/api/v1/groups',
   /** Same shape as `groups`. */
   series: '/api/v1/series',
   /** `GET ?from=YYYY-MM-DD&to=YYYY-MM-DD`: the expanded occurrences (B6). */
   calendar: '/api/v1/calendar',
+  /**
+   * `PATCH /api/v1/occurrences/:seriesId/:originalDate` cancels, restores or changes the
+   * reason of one occurrence, and answers with the `Occurrence` as it is now.
+   */
+  occurrences: '/api/v1/occurrences',
 } as const;
 
 /**
@@ -50,12 +60,12 @@ export interface Healthz {
 export interface Profile {
   /** The zone "today" and the calendar are shown in. */
   tzid: IanaZone;
-  /** When one day rolls over into the next, in `tzid` (D-035). */
+  /** When one day rolls over into the next, in `tzid` (D-035): midnight unless set later. */
   dayBoundary: WallTime;
 }
 
 /** What a new user's profile starts as. */
-export const DEFAULT_PROFILE: Profile = { tzid: 'Asia/Kolkata', dayBoundary: '04:00' };
+export const DEFAULT_PROFILE: Profile = { tzid: 'Asia/Kolkata', dayBoundary: '00:00' };
 
 /** `GET /api/v1/me`. The signed-in user, their settings and the server's clock. */
 export interface Me {
@@ -82,7 +92,7 @@ export interface Me {
 //   404 `not_found`. Nobody can learn which ids other people use.
 // ---------------------------------------------------------------------------
 
-/** `GET /api/v1/groups`: every group, archived ones too, oldest `activeFrom` first. */
+/** `GET /api/v1/groups`: every group, archived ones too, sorted by name. */
 export interface GroupList {
   groups: ScheduleGroup[];
 }
@@ -100,6 +110,43 @@ export interface CalendarResponse {
   from: ISODate;
   to: ISODate;
   occurrences: Occurrence[];
+}
+
+/**
+ * `GET /api/v1/groups/:id/impact` and `/api/v1/series/:id/impact`, with an optional
+ * `?lastDay=YYYY-MM-DD`: what giving the group or series that last day would hide.
+ * The server works it out because the phone holds only the weeks it has loaded.
+ */
+export interface Impact {
+  /**
+   * How many changes (cancels, and later notes, moves and extras) show now and wouldn't
+   * with `lastDay`: "3 changes after 27 Nov will stop showing". 0 without a `lastDay`.
+   * Hidden, never erased: they come back when the last day moves later.
+   */
+  changesAfter: number;
+  /**
+   * Whether deleting it would lose anything: an occurrence before today (the user's
+   * day), or any override. Delete asks for the name when it's true, and a plain
+   * confirm is enough when it's false. The same whatever the query asks.
+   */
+  hasHistory: boolean;
+}
+
+/**
+ * A series' answer, which can also weigh a new first day (`?firstDay=`) and a new
+ * timing (`?byDay=&interval=`). Each change is counted once, by the date it shows
+ * on, so the form can word each warning.
+ */
+export interface SeriesImpact extends Impact {
+  /** Before a later `firstDay`: "1 change before 1 Oct will stop showing". 0 without one. */
+  changesBefore: number;
+  /**
+   * Between the two, on a day the class no longer meets: one the new timing doesn't
+   * produce, or, every 2 or more weeks, one a new first day moves it off (its weeks
+   * count from the first day's week). 0 without either. From v0.3b a new timing
+   * applies from a chosen day (ADR v0.3b), and this counts only the changes from then on.
+   */
+  changesOffTiming: number;
 }
 
 /** Stable, machine-readable error codes. Clients branch on these, never on `title` or `detail`. */

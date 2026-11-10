@@ -9,14 +9,12 @@ import type { ExpandInput } from '../expand.ts';
 const sem = group({
   id: 'sem3',
   name: 'Classes · Sem 3 (sample)',
-  activeFrom: '2026-07-13',
-  activeTo: '2026-11-27',
+  untilDate: '2026-11-27',
   observesHolidays: true,
 });
 const health = group({
   id: 'health',
   name: 'Health',
-  activeFrom: '2026-07-01',
   observesHolidays: false,
   attendance: false,
 });

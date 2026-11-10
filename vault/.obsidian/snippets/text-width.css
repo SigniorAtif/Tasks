@@ -1,0 +1,11 @@
+/*
+ * Text width
+ *
+ * With "Readable line length" on, Obsidian caps the note column at
+ * --file-line-width (700px by default). Raise it here; change the number
+ * to taste. Diagrams (wide-diagrams.css) follow the column automatically.
+ */
+
+body {
+  --file-line-width: 900px;
+}

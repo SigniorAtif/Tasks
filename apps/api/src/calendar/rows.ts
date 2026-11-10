@@ -28,13 +28,11 @@ export function toGroup(row: GroupRow): ScheduleGroup {
     id: row.id,
     name: row.name,
     colorToken: row.colorToken,
-    activeFrom: row.activeFrom,
-    activeTo: row.activeTo,
+    untilDate: row.untilDate,
     observesHolidays: row.observesHolidays,
     attendance: row.attendance,
     attendanceThresholdPct: row.attendanceThresholdPct,
     attendanceTrackingFrom: row.attendanceTrackingFrom,
-    archivedAt: toInstant(row.archivedAt),
   };
 }
 

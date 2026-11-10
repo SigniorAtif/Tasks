@@ -6,7 +6,7 @@
 // class in Bhubaneswar as 10:00 AM. The app is English-only for now, so the
 // locale is fixed, which also keeps the tests' expected strings stable.
 
-import type { IanaZone, ISODate, Occurrence } from '@tasks/core';
+import type { CancelReason, IanaZone, ISODate, Occurrence } from '@tasks/core';
 import { Temporal } from 'temporal-polyfill';
 
 const WEEKDAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -70,6 +70,12 @@ export function dayHeader(date: ISODate): { weekday: string; day: number } {
 export function dayLabel(date: ISODate): string {
   const d = Temporal.PlainDate.from(date);
   return `${weekdayShort(d)} ${d.day} ${monthShort(d)}`;
+}
+
+/** `18 Dec 2026`: a date that may be months away, so it carries its year. */
+export function dateLabel(date: ISODate): string {
+  const d = Temporal.PlainDate.from(date);
+  return `${d.day} ${monthShort(d)} ${d.year}`;
 }
 
 /** `Tuesday 13 October`: what a screen reader hears for a day. */
@@ -137,7 +143,7 @@ export function timeRangeLabel(start: number, end: number, zone: IanaZone): stri
 
 /** The short word a block shows for its state, or `null` for an ordinary one. */
 export function statusLabel(occ: Occurrence): string | null {
-  if (occ.status === 'cancelled') return occ.cancelReason === 'skipped' ? 'Skipped' : 'Cancelled';
+  if (occ.status === 'cancelled') return userReason(occ) ?? 'Cancelled';
   if (occ.moved) return 'Moved';
   if (occ.extra) return 'Extra';
   return null;
@@ -158,7 +164,7 @@ export function blockDescription(occ: Occurrence, zone: IanaZone, groupName?: st
 
   if (occ.status === 'cancelled') {
     const word = occ.cancelReason === 'skipped' ? 'skipped' : 'cancelled';
-    parts.push(occ.holidayLabel ? `${word}: ${occ.holidayLabel}` : word);
+    parts.push(occ.holidayLabel ? `${word}: ${occ.holidayLabel}` : (userReason(occ) ?? word));
   } else if (occ.moved) {
     parts.push('moved from its usual time');
   } else if (occ.extra) {
@@ -166,4 +172,16 @@ export function blockDescription(occ: Occurrence, zone: IanaZone, groupName?: st
   }
   if (occ.note) parts.push(`note: ${occ.note}`);
   return parts.join(', ');
+}
+
+/** Why the user cancelled, in words: `Prof cancelled` or `I skipped`. `null` for no reason. */
+export function reasonLabel(reason: CancelReason | null): string | null {
+  if (reason === 'not_held') return 'Prof cancelled';
+  if (reason === 'skipped') return 'I skipped';
+  return null;
+}
+
+/** A holiday or day off isn't the prof: its own label says why (v0.3b). */
+function userReason(occ: Occurrence): string | null {
+  return occ.cancelOrigin === 'holiday' ? null : reasonLabel(occ.cancelReason);
 }

@@ -11,7 +11,8 @@
 // Everything works on epoch milliseconds (ms since 1970-01-01T00:00Z), the one
 // number every clock agrees on.
 
-import type { IanaZone, Instant } from '@tasks/core';
+import { type IanaZone, type Instant, type ISODate, localDateOf, type Profile } from '@tasks/core';
+import { Temporal } from 'temporal-polyfill';
 
 /**
  * The server's clock now, estimated from a reading taken earlier.
@@ -32,6 +33,16 @@ export function isKnownZone(tzid: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * The user's day now (core's `localDateOf`, D-035): their zone, starting at
+ * their day boundary. A zone this browser doesn't know falls back to the phone's own,
+ * so an old browser still gets a date instead of an error.
+ */
+export function todayFor(profile: Profile, epochMs: number = Date.now()): ISODate {
+  const tzid = isKnownZone(profile.tzid) ? profile.tzid : Temporal.Now.timeZoneId();
+  return localDateOf(epochMs, tzid, profile.dayBoundary);
 }
 
 export interface ZonedTime {

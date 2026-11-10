@@ -15,18 +15,21 @@ const PADDING_PX = 4;
 /**
  * One occurrence's piece on one day, as a button: tap or press Enter to open
  * it. Where it sits and how it looks are data attributes and CSS variables
- * read by time-grid.css; this component only decides the words.
+ * read by time-grid.css; this component only decides the words, and draws the
+ * "waiting" mark while a change to it hasn't reached the server.
  */
 export function OccurrenceBlock({
   block,
   zone,
   group,
+  waiting,
   pxPerMin,
   onOpen,
 }: {
   block: Positioned;
   zone: IanaZone;
   group: GridGroup | undefined;
+  waiting: boolean;
   pxPerMin: number;
   onOpen: ((occurrence: Occurrence) => void) | undefined;
 }) {
@@ -35,7 +38,8 @@ export function OccurrenceBlock({
   // The drawn height, as time-grid.css computes it (less a 2 px gap below).
   const heightPx = (block.endMin - block.startMin) * pxPerMin - 2;
   const short = heightPx < SHORT_BLOCK_PX;
-  const description = blockDescription(occ, zone, group?.name);
+  const described = blockDescription(occ, zone, group?.name);
+  const description = waiting ? `${described}, waiting to sync` : described;
   const status = statusLabel(occ);
   // The room is the last line: show it only if it fits whole, not half cut off.
   const linesWithRoom = status === null ? 3 : 4;
@@ -53,6 +57,7 @@ export function OccurrenceBlock({
       // A cancellation with no reason (a group without attendance) looks "not held".
       data-reason={cancelled ? (occ.cancelReason ?? 'not_held') : undefined}
       data-short={short || undefined}
+      data-waiting={waiting || undefined}
       data-over-cancelled={block.overCancelled || undefined}
       data-cut-before={block.continuesBefore || undefined}
       data-cut-after={block.continuesAfter || undefined}
@@ -77,6 +82,22 @@ export function OccurrenceBlock({
       </span>
       {status !== null && <span className={cancelled ? 'tg-pill' : 'tg-tag'}>{status}</span>}
       {showLocation && <span className="tg-meta">{occ.location}</span>}
+      {waiting && (
+        <span className="tg-waiting">
+          {/* A clock: still on its way. The block's label says it in words. */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+        </span>
+      )}
     </button>
   );
 }

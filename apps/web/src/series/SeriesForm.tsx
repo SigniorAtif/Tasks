@@ -1,8 +1,27 @@
-import { Link, useRouter } from '@tanstack/react-router';
-import type { ISODate, ScheduleGroup, Series } from '@tasks/core';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
-import { ApiError, describeError } from '../lib/api.ts';
+import { useRouter } from '@tanstack/react-router';
+import {
+  archiveDay,
+  type ISODate,
+  isArchived,
+  paths,
+  type ScheduleGroup,
+  type Series,
+} from '@tasks/core';
+import { type FormEvent, useRef, useState } from 'react';
+import {
+  ArchiveSection,
+  ColorSwatches,
+  DeleteSection,
+  describedBy,
+  Field,
+  FieldNotes,
+  FormBanner,
+  inputClass,
+  SaveRow,
+} from '../components/form-controls.tsx';
+import { ApiError, describeSaveError } from '../lib/api.ts';
+import { hasProblems, mergeProblems, NO_PROBLEMS } from '../lib/form-problems.ts';
+import { useHasHistory, useHiddenChangesNote, useSeriesChangeNotes } from '../lib/impact.ts';
 import {
   newId,
   useCreateGroup,
@@ -10,15 +29,9 @@ import {
   useDeleteSeries,
   useUpdateSeries,
 } from '../lib/mutations.ts';
+import { useFormProblems } from '../lib/use-form-problems.ts';
 import { useSyncStatus } from '../lib/use-sync-status.ts';
-import {
-  ColorSwatches,
-  DayToggles,
-  describedBy,
-  Field,
-  FieldNotes,
-  inputClass,
-} from './controls.tsx';
+import { DayToggles } from './controls.tsx';
 import {
   blankValues,
   changedFields,
@@ -27,12 +40,9 @@ import {
   checkUpdateSeries,
   type FieldName,
   firstProblemField,
-  hasProblems,
+  impactAsk,
   LABELS,
-  mergeProblems,
   NEW_GROUP,
-  NO_PROBLEMS,
-  type Problems,
   problemsFromErrors,
   type SeriesFormValues,
   selectableGroups,
@@ -40,6 +50,7 @@ import {
   toCreateSeries,
   toFullUpdate,
   valuesFromSeries,
+  withGroupChosen,
 } from './form-values.ts';
 
 const HINTS = {
@@ -47,9 +58,11 @@ const HINTS = {
   subject: 'Attendance is counted by subject. Leave it empty to use the title.',
   location: 'Optional. A room, like C-301.',
   groupName: 'Like “Classes · Sem 3”.',
-  groupActiveFrom: 'Nothing in the group shows before this day.',
   untilDate: 'Optional. Empty means until the group ends.',
 };
+
+/** The banner's title when the class was deleted elsewhere (a 404). */
+const CLASS_GONE = "This class doesn't exist any more";
 
 /** Quick picks next to the minutes box: the usual class and lab lengths. */
 const QUICK_DURATIONS = [
@@ -57,33 +70,24 @@ const QUICK_DURATIONS = [
   { minutes: 120, label: '2 hours' },
 ];
 
-const OFFLINE_NOTE = "You're offline. Changes need a connection.";
-
-/** What the banner above the form says for a failed save or delete. */
-function failureText(error: unknown) {
-  if (error instanceof ApiError && error.code === 'not_found') {
-    return {
-      title: "This class doesn't exist any more",
-      message: 'It may have been deleted on another device.',
-      small: error.requestId === undefined ? undefined : `request ${error.requestId}`,
-    };
-  }
-  return describeError(error);
-}
-
 /**
- * The form to add a class (`series` is `null`) or change one. Checks what was
- * typed with the API's own schemas before sending anything, creates a new group
- * first when one was asked for, and goes back to the calendar once it's saved.
+ * The form to add a class (`series` is `null`) or change one, with Archive and
+ * Delete below the Save row (a class that hasn't started offers only Delete).
+ * Checks what was typed with the API's own schemas before sending anything,
+ * creates a new group first when one was asked for, and goes back to the
+ * calendar once it's saved.
  */
 export function SeriesForm({
   series,
   groups,
+  seriesList = [],
   today,
 }: {
   series: Series | null;
   groups: readonly ScheduleGroup[];
-  /** Today in the user's zone: the default first day. */
+  /** Every series, for a new class: its first day suggests the earliest future first day in its group. */
+  seriesList?: readonly Series[];
+  /** The user's day (`todayFor`): the default first day, what counts as archived, the day Archive ends before. */
   today: ISODate;
 }) {
   const router = useRouter();
@@ -92,18 +96,15 @@ export function SeriesForm({
   const online = useSyncStatus().state !== 'offline';
   // What the form started with: an edit sends only what differs from it.
   const [initial] = useState(() =>
-    series === null ? blankValues(today, groups) : valuesFromSeries(series, today),
+    series === null ? blankValues(today, groups, seriesList) : valuesFromSeries(series),
   );
   const [values, setValues] = useState<SeriesFormValues>(initial);
-  const [problems, setProblems] = useState<Problems>(NO_PROBLEMS);
-  const [failure, setFailure] = useState<unknown>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { problems, failure, banner, register, reset, clearProblem, showProblems, showFailure } =
+    useFormProblems<FieldName>(firstProblemField);
 
   // Ids for the rows this form creates: made on the first Save and kept, so
   // pressing Save again after a failure re-sends the same ids (D-042).
   const pendingIds = useRef<{ group?: string; series?: string }>({});
-  const inputs = useRef<Partial<Record<FieldName, HTMLElement | null>>>({});
-  const banner = useRef<HTMLDivElement>(null);
 
   const createGroup = useCreateGroup();
   const createSeries = useCreateSeries();
@@ -111,19 +112,32 @@ export function SeriesForm({
   const deleteSeries = useDeleteSeries();
   const saving = createGroup.isPending || createSeries.isPending || updateSeries.isPending;
   const busy = saving || deleteSeries.isPending;
+  const [archiving, setArchiving] = useState(false);
 
-  const choices = selectableGroups(groups, series?.groupId);
+  // Archive takes the earlier of the last day as typed, the group's and
+  // yesterday (none for a class that starts today or later). What Archive, or
+  // the first day, last day and timing as typed, would hide is said before saving.
+  const rowPath = series === null ? null : `${paths.series}/${series.id}`;
+  const typed = {
+    startDate: values.startDate,
+    untilDate: values.untilDate === '' ? null : values.untilDate,
+  };
+  const archiveOn =
+    series === null
+      ? undefined
+      : archiveDay(
+          typed,
+          today,
+          groups.find((g) => g.id === values.groupId),
+        );
+  const notes = useSeriesChangeNotes(rowPath, impactAsk(values, initial));
+  const hiddenByArchive = useHiddenChangesNote(rowPath, archiveOn, initial.untilDate);
+  const hasHistory = useHasHistory(rowPath);
+
+  const choices = selectableGroups(groups, today, series?.groupId);
   const makingGroup = values.groupId === NEW_GROUP;
   const errors = problems.fields;
 
-  /** Editing a field takes its error away: the user is fixing it. Save checks again. */
-  function clearProblem(field: FieldName) {
-    setProblems((p) => {
-      if (p.fields[field] === undefined) return p;
-      const { [field]: _fixed, ...rest } = p.fields;
-      return { ...p, fields: rest };
-    });
-  }
   function set<K extends Exclude<keyof SeriesFormValues, 'newGroup'>>(
     key: K,
     value: SeriesFormValues[K],
@@ -135,7 +149,15 @@ export function SeriesForm({
     setValues((v) => ({ ...v, newGroup: { ...v.newGroup, ...change } }));
     if (change.name !== undefined) clearProblem('groupName');
     if (change.colorToken !== undefined) clearProblem('groupColor');
-    if (change.activeFrom !== undefined) clearProblem('groupActiveFrom');
+  }
+  /** A new class's first day follows the group picked, until the user changes it. */
+  function chooseGroup(groupId: string) {
+    if (series === null) {
+      setValues((v) => withGroupChosen(v, groupId, seriesList, today));
+      clearProblem('groupId');
+    } else {
+      set('groupId', groupId);
+    }
   }
   /** The id for the group or series this form creates: the same one on every try. */
   function pendingId(kind: 'group' | 'series'): string {
@@ -143,44 +165,39 @@ export function SeriesForm({
     pendingIds.current[kind] = id;
     return id;
   }
-  /** Remembers a field's element, so a problem can move the focus to it. */
-  const register = (field: FieldName) => (element: HTMLElement | null) => {
-    inputs.current[field] = element;
-  };
-
-  /** Shows the problems and moves the focus to the first one. */
-  function showProblems(found: Problems) {
-    // Draw the messages first, so the input that gets the focus already
-    // points at its error and a screen reader reads it out.
-    flushSync(() => setProblems(found));
-    const field = firstProblemField(found);
-    if (field === undefined) banner.current?.focus();
-    else inputs.current[field]?.focus();
-  }
-
-  function showFailure(error: unknown) {
-    flushSync(() => setFailure(error));
-    banner.current?.focus();
-  }
-
-  async function save(event: FormEvent<HTMLFormElement>) {
+  function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || !online) return;
-    setProblems(NO_PROBLEMS);
-    setFailure(null);
+    void submit(values);
+  }
 
-    const groupId = makingGroup ? pendingId('group') : values.groupId;
+  /** Save, with Archive's last day. */
+  async function archive(day: ISODate) {
+    const next = { ...values, untilDate: day };
+    setValues(next);
+    clearProblem('untilDate');
+    setArchiving(true);
+    await submit(next);
+    setArchiving(false);
+  }
+
+  /** Checks and sends `next`, then goes back to the calendar. */
+  async function submit(next: SeriesFormValues) {
+    if (busy || !online) return;
+    reset();
+
+    const making = next.groupId === NEW_GROUP;
+    const groupId = making ? pendingId('group') : next.groupId;
 
     // Check everything before sending anything.
-    const groupBody = makingGroup ? toCreateGroup(values, groupId) : null;
+    const groupBody = making ? toCreateGroup(next, groupId) : null;
     const createBody =
       series === null
-        ? toCreateSeries(values, { series: pendingId('series'), group: groupId })
+        ? toCreateSeries(next, { series: pendingId('series'), group: groupId })
         : null;
     const found = mergeProblems(
       groupBody === null ? NO_PROBLEMS : checkGroup(groupBody),
       createBody === null
-        ? checkUpdateSeries(toFullUpdate(values, groupId))
+        ? checkUpdateSeries(toFullUpdate(next, groupId))
         : checkCreateSeries(createBody),
     );
     if (hasProblems(found)) return showProblems(found);
@@ -192,7 +209,7 @@ export function SeriesForm({
       if (createBody !== null) {
         await createSeries.mutateAsync(createBody);
       } else if (series !== null) {
-        const changes = changedFields(values, initial, groupId);
+        const changes = changedFields(next, initial, groupId);
         if (Object.keys(changes).length > 0) {
           await updateSeries.mutateAsync({ id: series.id, changes });
         }
@@ -213,7 +230,7 @@ export function SeriesForm({
 
   async function remove() {
     if (series === null || busy || !online) return;
-    setFailure(null);
+    reset();
     try {
       await deleteSeries.mutateAsync(series.id);
     } catch (error) {
@@ -222,31 +239,13 @@ export function SeriesForm({
     await router.navigate({ to: '/' });
   }
 
-  const failureMessage = failure === null ? null : failureText(failure);
-
   return (
     <form noValidate onSubmit={save} className="flex flex-col gap-5">
-      <div ref={banner} tabIndex={-1} role="alert" className="outline-none empty:hidden">
-        {failureMessage !== null && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            <p className="font-semibold">{failureMessage.title}</p>
-            <p className="mt-1">{failureMessage.message}</p>
-            {failureMessage.small !== undefined && (
-              <p className="mt-1 font-mono text-xs opacity-75">{failureMessage.small}</p>
-            )}
-          </div>
-        )}
-        {problems.other.length > 0 && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            <p className="font-semibold">The server didn't accept this:</p>
-            <ul className="mt-1 list-disc pl-5">
-              {problems.other.map((message) => (
-                <li key={message}>{message}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      <FormBanner
+        ref={banner}
+        failure={failure === null ? null : describeSaveError(failure, CLASS_GONE)}
+        other={problems.other}
+      />
 
       <Field id="series-title" label={LABELS.title} hint={HINTS.title} error={errors.title}>
         <input
@@ -297,13 +296,13 @@ export function SeriesForm({
             id="series-group"
             ref={register('groupId')}
             value={values.groupId}
-            onChange={(e) => set('groupId', e.target.value)}
+            onChange={(e) => chooseGroup(e.target.value)}
             className={inputClass}
             {...describedBy('series-group', { error: errors.groupId })}
           >
             {choices.map((group) => (
               <option key={group.id} value={group.id}>
-                {group.archivedAt === null ? group.name : `${group.name} (archived)`}
+                {isArchived(group, today) ? `${group.name} (archived)` : group.name}
               </option>
             ))}
             <option value={NEW_GROUP}>New group…</option>
@@ -344,25 +343,6 @@ export function SeriesForm({
             error={errors.groupColor}
             checkedRef={register('groupColor')}
           />
-          <Field
-            id="group-active-from"
-            label={LABELS.groupActiveFrom}
-            hint={HINTS.groupActiveFrom}
-            error={errors.groupActiveFrom}
-          >
-            <input
-              id="group-active-from"
-              ref={register('groupActiveFrom')}
-              type="date"
-              value={values.newGroup.activeFrom}
-              onChange={(e) => setNewGroup({ activeFrom: e.target.value })}
-              className={inputClass}
-              {...describedBy('group-active-from', {
-                hint: HINTS.groupActiveFrom,
-                error: errors.groupActiveFrom,
-              })}
-            />
-          </Field>
         </fieldset>
       )}
 
@@ -375,14 +355,20 @@ export function SeriesForm({
         firstRef={register('days')}
       />
 
-      <Field id="series-interval" label={LABELS.interval} error={errors.interval}>
+      {/* The timing warning covers the days above too. */}
+      <Field
+        id="series-interval"
+        label={LABELS.interval}
+        error={errors.interval}
+        warning={notes.timing ?? ''}
+      >
         <select
           id="series-interval"
           ref={register('interval')}
           value={values.interval}
           onChange={(e) => set('interval', Number(e.target.value))}
           className={inputClass}
-          {...describedBy('series-interval', { error: errors.interval })}
+          {...describedBy('series-interval', { error: errors.interval, warning: notes.timing })}
         >
           {[1, 2, 3, 4].map((n) => (
             <option key={n} value={n}>
@@ -439,7 +425,12 @@ export function SeriesForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field id="series-start-date" label={LABELS.startDate} error={errors.startDate}>
+        <Field
+          id="series-start-date"
+          label={LABELS.startDate}
+          error={errors.startDate}
+          warning={notes.firstDay ?? ''}
+        >
           <input
             id="series-start-date"
             ref={register('startDate')}
@@ -447,7 +438,10 @@ export function SeriesForm({
             value={values.startDate}
             onChange={(e) => set('startDate', e.target.value)}
             className={inputClass}
-            {...describedBy('series-start-date', { error: errors.startDate })}
+            {...describedBy('series-start-date', {
+              error: errors.startDate,
+              warning: notes.firstDay,
+            })}
           />
         </Field>
         <Field
@@ -455,6 +449,7 @@ export function SeriesForm({
           label={LABELS.untilDate}
           hint={HINTS.untilDate}
           error={errors.untilDate}
+          warning={notes.lastDay ?? ''}
         >
           <input
             id="series-until-date"
@@ -467,120 +462,44 @@ export function SeriesForm({
             {...describedBy('series-until-date', {
               hint: HINTS.untilDate,
               error: errors.untilDate,
+              warning: notes.lastDay,
             })}
           />
         </Field>
       </div>
 
-      <div className="flex flex-col gap-2">
-        {!online && (
-          <p id="series-offline" className="text-sm text-amber-800 dark:text-amber-300">
-            {OFFLINE_NOTE}
-          </p>
-        )}
-        <div className="flex gap-3">
-          <button
-            type="submit"
-            disabled={busy || !online}
-            aria-describedby={online ? undefined : 'series-offline'}
-            className="flex-1 rounded-lg bg-indigo-600 px-4 py-3 font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          <Link
-            to="/"
-            className="rounded-lg px-4 py-3 font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800"
-          >
-            Cancel
-          </Link>
-        </div>
-      </div>
+      <SaveRow
+        saving={saving && !archiving}
+        disabled={busy || !online}
+        offline={!online}
+        cancelTo="calendar"
+      />
 
-      {series !== null && (
-        <DeleteSection
-          confirming={confirmingDelete}
-          onConfirmingChange={setConfirmingDelete}
-          onDelete={remove}
-          deleting={deleteSeries.isPending}
+      {archiveOn !== undefined && (
+        <ArchiveSection
+          what="class"
+          day={archiveOn}
+          hiddenNote={hiddenByArchive}
+          onArchive={() => void archive(archiveOn)}
+          archiving={archiving}
           disabled={busy || !online}
           offline={!online}
         />
       )}
-    </form>
-  );
-}
 
-/**
- * Delete, in two steps without a pop-up: the first tap asks "Delete this
- * class?" in place, the second deletes. A mistaken tap costs nothing.
- */
-function DeleteSection({
-  confirming,
-  onConfirmingChange,
-  onDelete,
-  deleting,
-  disabled,
-  offline,
-}: {
-  confirming: boolean;
-  onConfirmingChange: (confirming: boolean) => void;
-  onDelete: () => void;
-  deleting: boolean;
-  disabled: boolean;
-  offline: boolean;
-}) {
-  const keepButton = useRef<HTMLButtonElement>(null);
-  // Moving to the question moves the focus to its safe answer.
-  useEffect(() => {
-    if (confirming) keepButton.current?.focus();
-  }, [confirming]);
-
-  const quiet =
-    'rounded-lg px-4 py-2.5 font-medium ring-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60';
-
-  return (
-    <section
-      aria-label="Delete this class"
-      className="mt-2 border-t border-slate-200 pt-5 dark:border-slate-800"
-    >
-      {confirming ? (
-        <div className="flex flex-col gap-3">
-          <p className="font-medium">Delete this class?</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Every week of it disappears from the calendar, past weeks too.
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={disabled}
-              aria-describedby={offline ? 'series-offline' : undefined}
-              className={`${quiet} flex-1 bg-red-600 text-white ring-red-600 hover:bg-red-700 dark:bg-red-500 dark:ring-red-500`}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </button>
-            <button
-              ref={keepButton}
-              type="button"
-              onClick={() => onConfirmingChange(false)}
-              disabled={deleting}
-              className={`${quiet} text-slate-700 ring-slate-300 hover:bg-slate-100 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800`}
-            >
-              Keep it
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onConfirmingChange(true)}
-          disabled={disabled}
-          aria-describedby={offline ? 'series-offline' : undefined}
-          className={`${quiet} w-full text-red-700 ring-red-200 hover:bg-red-50 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950`}
-        >
-          Delete this class
-        </button>
+      {series !== null && (
+        <DeleteSection
+          what="class"
+          name={series.title}
+          hasHistory={hasHistory}
+          onDelete={() => void remove()}
+          deleting={deleteSeries.isPending}
+          onArchive={archiveOn === undefined ? undefined : () => void archive(archiveOn)}
+          disabled={busy || !online}
+          offline={!online}
+          today={today}
+        />
       )}
-    </section>
+    </form>
   );
 }

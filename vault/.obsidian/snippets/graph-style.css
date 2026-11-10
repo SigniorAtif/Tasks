@@ -1,0 +1,25 @@
+/* Graph view colours. Obsidian reads `color` and `opacity` from hidden
+   `.graph-view.color-*` divs it creates on <body>, so these selectors must
+   not be scoped to the graph pane. Folder colours live in graph.json. */
+
+.theme-dark .graph-view.color-fill            { color: #7d8590; }               /* notes in no group */
+.theme-dark .graph-view.color-fill-focused    { color: #ffd479; }               /* the open note */
+.theme-dark .graph-view.color-fill-highlight  { color: #ffffff; }               /* hovered note */
+.theme-dark .graph-view.color-circle          { color: #ffd479; }               /* ring on the open note */
+.theme-dark .graph-view.color-line            { color: #8b98b0; opacity: 0.22; }
+.theme-dark .graph-view.color-line-highlight  { color: #9cc2ff; opacity: 0.9; } /* links of the hovered note */
+.theme-dark .graph-view.color-arrow           { color: #8b98b0; opacity: 0.5; }
+.theme-dark .graph-view.color-text            { color: #d5dbe5; }
+
+.theme-light .graph-view.color-fill           { color: #8c959f; }
+.theme-light .graph-view.color-fill-focused   { color: #d4a017; }
+.theme-light .graph-view.color-fill-highlight { color: #1f2328; }
+.theme-light .graph-view.color-line           { color: #6e7781; opacity: 0.25; }
+.theme-light .graph-view.color-line-highlight { color: #2f6fde; opacity: 0.9; }
+.theme-light .graph-view.color-text           { color: #24292f; }
+
+/* Soft vignette behind the global and local graph. */
+.theme-dark .workspace-leaf-content[data-type="graph"] .view-content,
+.theme-dark .workspace-leaf-content[data-type="localgraph"] .view-content {
+  background: radial-gradient(ellipse at 50% 45%, #1c2230 0%, #15181f 55%, #101216 100%);
+}

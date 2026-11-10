@@ -59,7 +59,7 @@ describe('GET /api/v1/me', () => {
         name: 'Alice',
         image: 'https://example.com/alice.png',
       },
-      profile: { tzid: 'Asia/Kolkata', dayBoundary: '04:00' },
+      profile: { tzid: 'Asia/Kolkata', dayBoundary: '00:00' },
       serverTime: '2026-10-12T04:30:00.000Z',
     });
     expect(response.headers.get('cache-control')).toBe('private, no-store');
@@ -77,7 +77,7 @@ describe('GET /api/v1/me', () => {
     await testDb.delete(profile);
 
     const { me } = await getMe(app, cookie);
-    expect(me.profile).toEqual({ tzid: 'Asia/Kolkata', dayBoundary: '04:00' });
+    expect(me.profile).toEqual({ tzid: 'Asia/Kolkata', dayBoundary: '00:00' });
     expect(await testDb.select().from(profile)).toHaveLength(1);
   });
 });
@@ -100,14 +100,14 @@ describe('two users', () => {
     const asAlice = (await getMe(app, aliceCookie)).me;
     const asBob = (await getMe(app, bobCookie)).me;
     expect(asAlice.user).toMatchObject({ id: aliceId, email: 'alice@example.com' });
-    expect(asAlice.profile).toEqual({ tzid: 'Asia/Kolkata', dayBoundary: '04:00' });
+    expect(asAlice.profile).toEqual({ tzid: 'Asia/Kolkata', dayBoundary: '00:00' });
     expect(asBob.user).toMatchObject({ id: bobId, email: 'bob@example.com' });
     expect(asBob.profile).toEqual({ tzid: 'Europe/London', dayBoundary: '03:00' });
 
     // And the lookup function itself filters by the id it's given.
     expect(await findProfile(testDb, aliceId)).toEqual({
       tzid: 'Asia/Kolkata',
-      dayBoundary: '04:00',
+      dayBoundary: '00:00',
     });
     expect(await findProfile(testDb, bobId)).toEqual({
       tzid: 'Europe/London',

@@ -1,11 +1,14 @@
 // The home screen's body: a title bar with Previous / Today / Next, the grid,
-// and its loading, empty and error states. It owns two pieces of UI state:
-// the anchor date (which day the user is looking at) and, from the window's
-// width, the view (one day on a phone, the week from 768 px).
+// and its loading, empty and error states. It owns the UI state: the anchor
+// date (which day the user is looking at), from the window's width the view
+// (one day on a phone, the week from 768 px), the occurrence whose sheet is
+// open, and the toast that offers Undo after a cancel.
 //
 // Data: the whole Monday-to-Sunday week around the anchor, in both views, so
 // moving between days of one week needs no request, and the week next to it
 // on either side is fetched in the background so Previous and Next are instant.
+// It's drawn with the queued occurrence changes applied (model/queued.ts), so
+// a cancel shows at once, even offline.
 
 import {
   keepPreviousData,
@@ -14,11 +17,16 @@ import {
   useSuspenseQuery,
 } from '@tanstack/react-query';
 import { Navigate } from '@tanstack/react-router';
-import type { DateWindow, ISODate, Occurrence } from '@tasks/core';
+import type { DateWindow, ISODate, Occurrence, UpdateOccurrence } from '@tasks/core';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { LoadingLine } from '../components/LoadingLine.tsx';
+import { Toast, type ToastMessage } from '../components/Toast.tsx';
 import { describeError, isUnauthenticated } from '../lib/api.ts';
+import { onChangeDropped, queueOccurrenceChange } from '../lib/occurrence-queue.ts';
 import { calendarQuery, groupsQuery, meQuery } from '../lib/queries.ts';
-import { isKnownZone } from '../lib/time.ts';
+import { cancelQuip, everyClassCancelled, quip } from '../lib/quips.ts';
+import { isKnownZone, todayFor } from '../lib/time.ts';
+import { useQueuedChanges } from '../lib/use-queued-changes.ts';
 import {
   addDays,
   type CalendarView,
@@ -29,7 +37,10 @@ import {
   todayIn,
   weekDays,
 } from './model/dates.ts';
-import { dayHeader, dayLabel, longDayLabel, weekLabel } from './model/format.ts';
+import { dayHeader, dayLabel, longDayLabel, statusLabel, weekLabel } from './model/format.ts';
+import { applyChange, droppedNotice, withQueuedChanges } from './model/queued.ts';
+import { RESTORE } from './model/sheet.ts';
+import { OccurrenceSheet } from './OccurrenceSheet.tsx';
 import { type GridGroup, TimeGrid } from './TimeGrid.tsx';
 import { useMediaQuery } from './use-media-query.ts';
 import { useServerMinute } from './use-server-minute.ts';
@@ -58,14 +69,11 @@ const weekWindow = (monday: ISODate): DateWindow => ({ from: monday, to: addDays
 export function CalendarScreen({
   leading,
   trailing,
-  onOpen,
 }: {
   /** Drawn at the start of the title bar (the logo). */
   leading?: ReactNode;
   /** Drawn at its end (the account menu). */
   trailing?: ReactNode;
-  /** A block was tapped: passed straight to the grid. */
-  onOpen?: (occurrence: Occurrence) => void;
 }) {
   // In the cache already: the route's beforeLoad fetched it.
   const me = useSuspenseQuery(meQuery);
@@ -75,6 +83,9 @@ export function CalendarScreen({
   const zone = zoneKnown ? profile.tzid : 'UTC';
   const nowMs = useServerMinute(serverTime, me.dataUpdatedAt);
   const today = todayIn(zone, nowMs);
+  // The day the quips go by: it starts at the profile's day boundary, so a
+  // line read at 1 am is still yesterday's when the day starts at 4.
+  const quipDay = todayFor(profile, nowMs);
 
   const view: CalendarView = useMediaQuery(WEEK_VIEW_QUERY) ? 'week' : 'day';
   const [anchor, setAnchor] = useState<ISODate>(today);
@@ -114,6 +125,42 @@ export function CalendarScreen({
     return byId;
   }, [groups.data]);
 
+  const queued = useQueuedChanges();
+  const shown = useMemo(
+    () => withQueuedChanges(calendar.data?.occurrences ?? NO_OCCURRENCES, queued),
+    [calendar.data, queued],
+  );
+
+  // The occurrence whose sheet is open, as it was shown when its block was tapped.
+  const [opened, setOpened] = useState<Occurrence | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // A queued change the server refused for good: a 404 when its series was
+  // deleted or no longer has that date, or anything else the server said no to.
+  useEffect(
+    () => onChangeDropped(queryClient, (dropped) => setToast({ text: droppedNotice(dropped) })),
+    [queryClient],
+  );
+
+  // Queues the change; the calendar shows it at once. A cancel of a class that
+  // was on offers Undo, which queues exactly what Restore sends.
+  const queueChange = (occ: Occurrence, change: UpdateOccurrence) => {
+    const { seriesId, originalDate, title } = occ;
+    if (originalDate === null) return;
+    queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change });
+    if (change.status !== 'cancelled' || occ.status === 'cancelled') return;
+    const cancelled = applyChange(occ, change);
+    setToast({
+      text: `${title} · ${statusLabel(cancelled)}`,
+      quip: cancelQuip(cancelled, shown.occurrences, quipDay),
+      action: {
+        label: 'Undo',
+        onClick: () =>
+          queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change: RESTORE }),
+      },
+    });
+  };
+
   // The session ended while the screen was open.
   if (isUnauthenticated(calendar.error) || isUnauthenticated(groups.error)) {
     return <Navigate to="/login" replace />;
@@ -122,11 +169,14 @@ export function CalendarScreen({
   const previous = stepAnchor(anchor, view, -1, today);
   const next = stepAnchor(anchor, view, 1, today);
   const unit = view === 'week' ? 'week' : 'day';
-  const occurrences = calendar.data?.occurrences ?? NO_OCCURRENCES;
 
   let overlay: ReactNode = null;
   if (calendar.isPending) {
-    overlay = <Notice role="status">Loading your week…</Notice>;
+    overlay = (
+      <Notice role="status">
+        <LoadingLine day={quipDay} />
+      </Notice>
+    );
   } else if (calendar.isError && calendar.data === undefined) {
     const { title, message } = describeError(calendar.error);
     overlay = (
@@ -142,9 +192,23 @@ export function CalendarScreen({
         </button>
       </Notice>
     );
-  } else if (!calendar.isPlaceholderData && occurrences.length === 0) {
-    overlay = <Notice role="status">No classes this week</Notice>;
+  } else if (!calendar.isPlaceholderData && !shown.occurrences.some((o) => days.includes(o.date))) {
+    let empty = 'No classes this week';
+    if (view === 'day') empty = anchor === today ? 'No classes today' : 'No classes this day';
+    overlay = (
+      <Notice role="status">
+        <span className="block font-medium">{empty}</span>
+        <span className="block text-slate-600 dark:text-slate-400">
+          {quip('emptyDay', quipDay)}
+        </span>
+      </Notice>
+    );
   }
+  // An easter egg, only while the user's own day is on screen.
+  const allCancelled =
+    days.includes(quipDay) && everyClassCancelled(shown.occurrences, quipDay)
+      ? quip('allCancelled', quipDay)
+      : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -208,19 +272,38 @@ export function CalendarScreen({
         <Banner>Can't reach the server. Showing this week as it was last loaded.</Banner>
       )}
 
+      {allCancelled !== null && (
+        // Not a live region: the toast already announced the cancel that got here.
+        <p className="mx-3 mb-2 text-sm text-slate-600 dark:text-slate-400">{allCancelled}</p>
+      )}
+
       <div className="relative min-h-0 flex-1 border-t border-slate-200 dark:border-slate-800">
         <TimeGrid
           key={gridKey}
           days={days}
           zone={zone}
-          occurrences={occurrences}
+          occurrences={shown.occurrences}
+          waitingKeys={shown.waitingKeys}
           groups={groupsById}
           nowMs={nowMs}
           pxPerMin={PX_PER_MIN[view]}
-          onOpen={onOpen}
+          onOpen={setOpened}
         />
         {overlay}
       </div>
+
+      {opened !== null && (
+        <OccurrenceSheet
+          occurrence={opened}
+          waiting={shown.waitingKeys.has(opened.key)}
+          group={groups.data?.groups.find((group) => group.id === opened.groupId)}
+          zone={zone}
+          today={quipDay}
+          onClose={() => setOpened(null)}
+          onChange={(change) => queueChange(opened, change)}
+        />
+      )}
+      <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

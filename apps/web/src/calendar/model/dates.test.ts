@@ -57,7 +57,7 @@ describe('todayIn', () => {
     expect(todayIn('America/New_York', at('2026-10-12T20:00:00Z'))).toBe('2026-10-12');
   });
 
-  it('changes at midnight, not at the 04:00 day boundary', () => {
+  it('changes at midnight, whatever the day boundary', () => {
     expect(todayIn('Asia/Kolkata', at('2026-10-12T18:29:59Z'))).toBe('2026-10-12'); // 23:59:59
     expect(todayIn('Asia/Kolkata', at('2026-10-12T18:30:00Z'))).toBe('2026-10-13'); // 00:00
   });
