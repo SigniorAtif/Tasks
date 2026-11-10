@@ -4,13 +4,14 @@ export {
   type ErrorCode,
   type GroupList,
   type Healthz,
+  type Impact,
   type Me,
   type Problem,
   type Profile,
   paths,
   type SeriesList,
 } from './api.ts';
-export { isArchived, localDateOf } from './days.ts';
+export { archiveDay, isArchived, localDateOf } from './days.ts';
 export { COLOR_TOKENS, type ColorToken, DEFAULT_COLOR_TOKEN } from './palette.ts';
 export {
   assertValidRule,
@@ -26,6 +27,7 @@ export {
   findOrphans,
   type OccurrenceInput,
   occurrenceOn,
+  stopShowing,
 } from './recurrence/expand.ts';
 export { extraKey, occurrenceKey } from './recurrence/keys.ts';
 export {
@@ -42,7 +44,9 @@ export {
   colorTokenSchema,
   createGroupSchema,
   createSeriesSchema,
+  type ImpactQuery,
   ianaZoneSchema,
+  impactQuerySchema,
   isoDateSchema,
   MAX_CALENDAR_DAYS,
   ruleSchema,

@@ -1,7 +1,7 @@
 import { Temporal } from 'temporal-polyfill';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PROFILE } from './api.ts';
-import { isArchived, localDateOf } from './days.ts';
+import { archiveDay, isArchived, localDateOf } from './days.ts';
 
 /** A moment, written with its offset from UTC: `2026-11-28T04:00-05:00`. */
 const at = (instant: string) => Temporal.Instant.from(instant).epochMilliseconds;
@@ -51,5 +51,30 @@ describe('archived: a last day that has passed, in the user’s day', () => {
 
   it('never archives a group or series with no last day', () => {
     expect(isArchived({ untilDate: null }, '2099-01-01')).toBe(false);
+  });
+});
+
+describe('Archive: the last day it sets', () => {
+  const today = '2026-11-10';
+
+  it('is today for a group or series with no last day, or a later one', () => {
+    expect(archiveDay({ untilDate: null }, today)).toBe(today);
+    expect(archiveDay({ untilDate: '2026-11-27' }, today)).toBe(today);
+  });
+
+  it('is nothing to set when the last day is already today or earlier: never later', () => {
+    expect(archiveDay({ untilDate: today }, today)).toBeUndefined();
+    expect(archiveDay({ untilDate: '2026-10-30' }, today)).toBeUndefined();
+  });
+
+  it("is nothing when the group's last day is already today or earlier: the class has ended", () => {
+    const ended = { untilDate: '2026-10-30' };
+    expect(archiveDay({ untilDate: null }, today, ended)).toBeUndefined();
+    expect(archiveDay({ untilDate: null }, today, { untilDate: '2026-12-18' })).toBe(today);
+  });
+
+  it('is nothing for a series that starts after today: it can only be deleted', () => {
+    expect(archiveDay({ startDate: '2026-11-11', untilDate: null }, today)).toBeUndefined();
+    expect(archiveDay({ startDate: today, untilDate: null }, today)).toBe(today);
   });
 });

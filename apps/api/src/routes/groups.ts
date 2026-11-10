@@ -3,7 +3,13 @@
 // runs each request's queries as the signed-in user. The status codes are
 // described once, in the comment block of `packages/core/src/api.ts`.
 
-import { createGroupSchema, type GroupList, paths, updateGroupSchema } from '@tasks/core';
+import {
+  createGroupSchema,
+  type GroupList,
+  impactQuerySchema,
+  paths,
+  updateGroupSchema,
+} from '@tasks/core';
 import type { Hono } from 'hono';
 import {
   createGroup,
@@ -12,7 +18,9 @@ import {
   listGroups,
   updateGroup,
 } from '../calendar/groups.ts';
+import { groupImpact } from '../calendar/impact.ts';
 import type { AppEnv } from '../http/context.ts';
+import { validationFailed } from '../http/errors.ts';
 import { jsonBody } from '../http/json-body.ts';
 import { noSuchRow, rowId } from '../http/row-id.ts';
 
@@ -46,6 +54,16 @@ export function groupsRoutes(app: Hono<AppEnv>): void {
     const group = await c.var.asUser((scope) => updateGroup(scope, id, changes));
     if (!group) throw noSuchRow('group');
     return c.json(group);
+  });
+
+  // What a new last day would hide: `?lastDay=YYYY-MM-DD`, optional.
+  app.get(`${one}/impact`, async (c) => {
+    const id = rowId(c.req.param('id'), 'group');
+    const query = impactQuerySchema.safeParse(c.req.query());
+    if (!query.success) throw validationFailed(query.error);
+    const impact = await c.var.asUser((scope) => groupImpact(scope, id, query.data.lastDay));
+    if (!impact) throw noSuchRow('group');
+    return c.json(impact);
   });
 
   app.delete(one, async (c) => {

@@ -228,6 +228,16 @@ export const calendarQuerySchema = z
   });
 
 // ---------------------------------------------------------------------------
+// What a change would hide
+// ---------------------------------------------------------------------------
+
+/**
+ * `GET /api/v1/groups/:id/impact?lastDay=2026-11-27`, and the same on a series:
+ * the last day being considered. Without one, nothing changes and nothing is hidden.
+ */
+export const impactQuerySchema = z.object({ lastDay: isoDateSchema.optional() });
+
+// ---------------------------------------------------------------------------
 // One occurrence
 // ---------------------------------------------------------------------------
 
@@ -256,3 +266,4 @@ export type CreateSeries = z.input<typeof createSeriesSchema>;
 export type UpdateSeries = z.input<typeof updateSeriesSchema>;
 export type CalendarQuery = z.input<typeof calendarQuerySchema>;
 export type UpdateOccurrence = z.input<typeof updateOccurrenceSchema>;
+export type ImpactQuery = z.input<typeof impactQuerySchema>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cancel, dayOff, extra, group, modified, move, series } from '../test/builders.ts';
 import type { Occurrence } from '../types.ts';
-import { type ExpandInput, expand, findOrphans, occurrenceOn } from './expand.ts';
+import { type ExpandInput, expand, findOrphans, occurrenceOn, stopShowing } from './expand.ts';
 
 // A Mon/Wed/Fri 10:00 class in Asia/Kolkata (UTC+05:30), starting Mon 5 Oct 2026.
 const dbms = series();
@@ -445,6 +445,85 @@ describe('occurrenceOn: one occurrence by its original date', () => {
 
   it('rejects a raw offset, like expand()', () => {
     expect(() => one('2026-10-05', { series: series({ tzid: '+05:30' }) })).toThrow(RangeError);
+  });
+});
+
+describe('last days hide changes, never erase them', () => {
+  // DBMS is skipped on Mon 30 Nov; the last day then moves to Fri 27 Nov and back out.
+  const skipped = cancel('s', '2026-11-30', 'skipped');
+  const week = { from: '2026-11-30', to: '2026-12-06' };
+
+  it("a cancel after the group's last day is dormant, and comes back when the date moves later", () => {
+    const ended = run({
+      groups: [group({ untilDate: '2026-11-27' })],
+      overrides: [skipped],
+      window: week,
+    });
+    expect(ended).toEqual([]);
+
+    const later = run({
+      groups: [group({ untilDate: '2026-12-04' })],
+      overrides: [skipped],
+      window: week,
+    });
+    expect(byKey(later, 's:2026-11-30')).toMatchObject({
+      status: 'cancelled',
+      cancelReason: 'skipped',
+    });
+  });
+
+  it("the same with the series' own last day", () => {
+    const ended = run({
+      series: [series({ untilDate: '2026-11-27' })],
+      overrides: [skipped],
+      window: week,
+    });
+    expect(ended).toEqual([]);
+
+    const later = run({
+      series: [series({ untilDate: '2026-12-04' })],
+      overrides: [skipped],
+      window: week,
+    });
+    expect(byKey(later, 's:2026-11-30')).toMatchObject({
+      status: 'cancelled',
+      cancelReason: 'skipped',
+    });
+  });
+});
+
+describe('stopShowing: the changes a new last day would hide', () => {
+  // Cancels on Wed 25 Nov and Mon 30 Nov, a make-up class on Tue 1 Dec.
+  const before = cancel('s', '2026-11-25', 'not_held');
+  const after = cancel('s', '2026-11-30', 'skipped');
+  const makeUp = extra('m1', 's', '2026-12-01', '09:00');
+  const overrides = [before, after, makeUp];
+
+  it("a group's last day hides the cancels and extras after it", () => {
+    const current = { groups: [classes], series: [dbms] };
+    const proposed = { groups: [group({ untilDate: '2026-11-27' })], series: [dbms] };
+    expect(stopShowing(overrides, current, proposed)).toEqual([after, makeUp]);
+  });
+
+  it("a series' last day hides its cancels, but an extra shows where it was placed", () => {
+    const current = { groups: [classes], series: [dbms] };
+    const proposed = { groups: [classes], series: [series({ untilDate: '2026-11-27' })] };
+    expect(stopShowing(overrides, current, proposed)).toEqual([after]);
+  });
+
+  it('leaves out changes already hidden, so a later last day hides nothing', () => {
+    const endsFriday = { groups: [group({ untilDate: '2026-11-27' })], series: [dbms] };
+    const endsMonday = { groups: [group({ untilDate: '2026-11-23' })], series: [dbms] };
+    const endsInDecember = { groups: [group({ untilDate: '2026-12-31' })], series: [dbms] };
+    expect(stopShowing(overrides, endsFriday, endsMonday)).toEqual([before]);
+    expect(stopShowing(overrides, endsFriday, endsInDecember)).toEqual([]);
+  });
+
+  it('never counts an orphan: a change on a date the rule no longer makes', () => {
+    const tuesday = cancel('s', '2026-12-01', 'skipped');
+    const current = { groups: [classes], series: [dbms] };
+    const proposed = { groups: [group({ untilDate: '2026-11-27' })], series: [dbms] };
+    expect(stopShowing([tuesday], current, proposed)).toEqual([]);
   });
 });
 
