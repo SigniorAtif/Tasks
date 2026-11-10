@@ -19,11 +19,13 @@ import {
 import { Navigate } from '@tanstack/react-router';
 import type { DateWindow, ISODate, Occurrence, UpdateOccurrence } from '@tasks/core';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { LoadingLine } from '../components/LoadingLine.tsx';
 import { Toast, type ToastMessage } from '../components/Toast.tsx';
 import { describeError, isUnauthenticated } from '../lib/api.ts';
 import { onChangeDropped, queueOccurrenceChange } from '../lib/occurrence-queue.ts';
 import { calendarQuery, groupsQuery, meQuery } from '../lib/queries.ts';
-import { isKnownZone } from '../lib/time.ts';
+import { cancelQuip, everyClassCancelled, quip } from '../lib/quips.ts';
+import { isKnownZone, todayFor } from '../lib/time.ts';
 import { useQueuedChanges } from '../lib/use-queued-changes.ts';
 import {
   addDays,
@@ -81,6 +83,9 @@ export function CalendarScreen({
   const zone = zoneKnown ? profile.tzid : 'UTC';
   const nowMs = useServerMinute(serverTime, me.dataUpdatedAt);
   const today = todayIn(zone, nowMs);
+  // The day the quips go by: it starts at the profile's day boundary, so a
+  // line read at 1 am is still yesterday's when the day starts at 4.
+  const quipDay = todayFor(profile, nowMs);
 
   const view: CalendarView = useMediaQuery(WEEK_VIEW_QUERY) ? 'week' : 'day';
   const [anchor, setAnchor] = useState<ISODate>(today);
@@ -144,8 +149,10 @@ export function CalendarScreen({
     if (originalDate === null) return;
     queueOccurrenceChange(queryClient, { seriesId, originalDate, title, change });
     if (change.status !== 'cancelled' || occ.status === 'cancelled') return;
+    const cancelled = applyChange(occ, change);
     setToast({
-      text: `${title} · ${statusLabel(applyChange(occ, change))}`,
+      text: `${title} · ${statusLabel(cancelled)}`,
+      quip: cancelQuip(cancelled, shown.occurrences, quipDay),
       action: {
         label: 'Undo',
         onClick: () =>
@@ -165,7 +172,11 @@ export function CalendarScreen({
 
   let overlay: ReactNode = null;
   if (calendar.isPending) {
-    overlay = <Notice role="status">Loading your week…</Notice>;
+    overlay = (
+      <Notice role="status">
+        <LoadingLine day={quipDay} />
+      </Notice>
+    );
   } else if (calendar.isError && calendar.data === undefined) {
     const { title, message } = describeError(calendar.error);
     overlay = (
@@ -181,9 +192,23 @@ export function CalendarScreen({
         </button>
       </Notice>
     );
-  } else if (!calendar.isPlaceholderData && shown.occurrences.length === 0) {
-    overlay = <Notice role="status">No classes this week</Notice>;
+  } else if (!calendar.isPlaceholderData && !shown.occurrences.some((o) => days.includes(o.date))) {
+    let empty = 'No classes this week';
+    if (view === 'day') empty = anchor === today ? 'No classes today' : 'No classes this day';
+    overlay = (
+      <Notice role="status">
+        <span className="block font-medium">{empty}</span>
+        <span className="block text-slate-600 dark:text-slate-400">
+          {quip('emptyDay', quipDay)}
+        </span>
+      </Notice>
+    );
   }
+  // An easter egg, only while the user's own day is on screen.
+  const allCancelled =
+    days.includes(quipDay) && everyClassCancelled(shown.occurrences, quipDay)
+      ? quip('allCancelled', quipDay)
+      : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -247,6 +272,11 @@ export function CalendarScreen({
         <Banner>Can't reach the server. Showing this week as it was last loaded.</Banner>
       )}
 
+      {allCancelled !== null && (
+        // Not a live region: the toast already announced the cancel that got here.
+        <p className="mx-3 mb-2 text-sm text-slate-600 dark:text-slate-400">{allCancelled}</p>
+      )}
+
       <div className="relative min-h-0 flex-1 border-t border-slate-200 dark:border-slate-800">
         <TimeGrid
           key={gridKey}
@@ -268,6 +298,7 @@ export function CalendarScreen({
           waiting={shown.waitingKeys.has(opened.key)}
           group={groups.data?.groups.find((group) => group.id === opened.groupId)}
           zone={zone}
+          today={quipDay}
           onClose={() => setOpened(null)}
           onChange={(change) => queueChange(opened, change)}
         />

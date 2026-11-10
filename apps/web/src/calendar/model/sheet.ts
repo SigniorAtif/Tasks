@@ -3,14 +3,21 @@
 // any queued change already applied, model/queued.ts) and its group's
 // attendance setting. Kept apart from React, so the rules are tested in Node.
 
-import type { CancelReason, Occurrence, ScheduleGroup, UpdateOccurrence } from '@tasks/core';
+import type {
+  CancelReason,
+  ISODate,
+  Occurrence,
+  ScheduleGroup,
+  UpdateOccurrence,
+} from '@tasks/core';
+import { quip } from '../../lib/quips.ts';
 import { reasonLabel } from './format.ts';
 
 /** A button that cancels the occurrence, or changes the reason it was cancelled for. */
 export interface CancelButton {
   /** The first word, which never changes, so the right one is found at 8 am without reading. */
   word: 'Prof' | 'Me' | 'Not today';
-  /** The small line under the word (#15 makes it rotate). `null` under Not today. */
+  /** The small line under the word: the day's quip (lib/quips.ts). `null` under Not today. */
   line: string | null;
   /** The body of the `PATCH` the button sends. */
   change: UpdateOccurrence;
@@ -31,16 +38,16 @@ export interface SheetActions {
 /** The `PATCH` body of Restore, and of Undo, which does exactly the same. */
 export const RESTORE: UpdateOccurrence = { status: null, cancelReason: null };
 
-const PROF: CancelButton = {
+const prof = (day: ISODate): CancelButton => ({
   word: 'Prof',
-  line: "Class didn't happen",
+  line: quip('prof', day),
   change: { status: 'cancelled', cancelReason: 'not_held' },
-};
-const ME: CancelButton = {
+});
+const me = (day: ISODate): CancelButton => ({
   word: 'Me',
-  line: "I didn't go",
+  line: quip('me', day),
   change: { status: 'cancelled', cancelReason: 'skipped' },
-};
+});
 const NOT_TODAY: CancelButton = {
   word: 'Not today',
   line: null,
@@ -53,23 +60,26 @@ const NOTHING: SheetActions = { state: null, cancel: [], restore: null, changeRe
  * The actions for one occurrence. A saved reason is always shown as it was saved,
  * whatever the group's attendance setting is now; a cancel saved with no reason
  * reads "No reason given" in a group that tracks attendance, and is never guessed.
+ * `day` is the user's day (`todayFor`): it picks the lines under Prof and Me,
+ * and nothing else.
  */
 export function sheetActions(
   occ: Pick<Occurrence, 'status' | 'cancelReason' | 'originalDate'>,
   group: Pick<ScheduleGroup, 'attendance'>,
+  day: ISODate,
 ): SheetActions {
   // An extra has no original date to name it by; changing one arrives with extras in v0.3b.
   if (occ.originalDate === null) return NOTHING;
 
   if (occ.status !== 'cancelled') {
-    return { ...NOTHING, cancel: group.attendance ? [PROF, ME] : [NOT_TODAY] };
+    return { ...NOTHING, cancel: group.attendance ? [prof(day), me(day)] : [NOT_TODAY] };
   }
   return {
     state: reasonInWords(occ.cancelReason, group.attendance),
     cancel: [],
     restore: RESTORE,
     changeReason: group.attendance
-      ? [PROF, ME].filter((b) => b.change.cancelReason !== occ.cancelReason)
+      ? [prof(day), me(day)].filter((b) => b.change.cancelReason !== occ.cancelReason)
       : [],
   };
 }
