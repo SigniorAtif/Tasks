@@ -126,6 +126,23 @@ export interface Impact {
   changesAfter: number;
 }
 
+/**
+ * A series' answer, which can also weigh a new first day (`?firstDay=`) and a new
+ * timing (`?byDay=&interval=`). Each change is counted once, by the date it shows
+ * on, so the form can word each warning.
+ */
+export interface SeriesImpact extends Impact {
+  /** Before a later `firstDay`: "1 change before 1 Oct will stop showing". 0 without one. */
+  changesBefore: number;
+  /**
+   * Between the two, on a day the class no longer meets: one the new timing doesn't
+   * produce, or, every 2 or more weeks, one a new first day moves it off (its weeks
+   * count from the first day's week). 0 without either. From v0.3b a new timing
+   * applies from a chosen day (ADR v0.3b), and this counts only the changes from then on.
+   */
+  changesOffTiming: number;
+}
+
 /** Stable, machine-readable error codes. Clients branch on these, never on `title` or `detail`. */
 export type ErrorCode =
   /** No session, or it expired. HTTP 401. */

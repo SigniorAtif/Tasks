@@ -21,7 +21,7 @@ import {
 } from '../components/form-controls.tsx';
 import { ApiError, describeSaveError } from '../lib/api.ts';
 import { hasProblems, mergeProblems, NO_PROBLEMS } from '../lib/form-problems.ts';
-import { useHiddenChangesNote } from '../lib/impact.ts';
+import { useHiddenChangesNote, useSeriesChangeNotes } from '../lib/impact.ts';
 import {
   newId,
   useCreateGroup,
@@ -40,6 +40,7 @@ import {
   checkUpdateSeries,
   type FieldName,
   firstProblemField,
+  impactAsk,
   LABELS,
   NEW_GROUP,
   problemsFromErrors,
@@ -115,8 +116,8 @@ export function SeriesForm({
   const [archiving, setArchiving] = useState(false);
 
   // Archive takes the earlier of the last day as typed, the group's and
-  // yesterday (none for a class that starts today or later), and what either
-  // would hide is said before saving.
+  // yesterday (none for a class that starts today or later). What Archive, or
+  // the first day, last day and timing as typed, would hide is said before saving.
   const rowPath = series === null ? null : `${paths.series}/${series.id}`;
   const typed = {
     startDate: values.startDate,
@@ -130,7 +131,7 @@ export function SeriesForm({
           today,
           groups.find((g) => g.id === values.groupId),
         );
-  const hiddenByTyped = useHiddenChangesNote(rowPath, values.untilDate, initial.untilDate);
+  const notes = useSeriesChangeNotes(rowPath, impactAsk(values, initial));
   const hiddenByArchive = useHiddenChangesNote(rowPath, archiveOn, initial.untilDate);
 
   const choices = selectableGroups(groups, today, series?.groupId);
@@ -354,14 +355,20 @@ export function SeriesForm({
         firstRef={register('days')}
       />
 
-      <Field id="series-interval" label={LABELS.interval} error={errors.interval}>
+      {/* The timing warning covers the days above too. */}
+      <Field
+        id="series-interval"
+        label={LABELS.interval}
+        error={errors.interval}
+        warning={notes.timing ?? ''}
+      >
         <select
           id="series-interval"
           ref={register('interval')}
           value={values.interval}
           onChange={(e) => set('interval', Number(e.target.value))}
           className={inputClass}
-          {...describedBy('series-interval', { error: errors.interval })}
+          {...describedBy('series-interval', { error: errors.interval, warning: notes.timing })}
         >
           {[1, 2, 3, 4].map((n) => (
             <option key={n} value={n}>
@@ -418,7 +425,12 @@ export function SeriesForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field id="series-start-date" label={LABELS.startDate} error={errors.startDate}>
+        <Field
+          id="series-start-date"
+          label={LABELS.startDate}
+          error={errors.startDate}
+          warning={notes.firstDay ?? ''}
+        >
           <input
             id="series-start-date"
             ref={register('startDate')}
@@ -426,7 +438,10 @@ export function SeriesForm({
             value={values.startDate}
             onChange={(e) => set('startDate', e.target.value)}
             className={inputClass}
-            {...describedBy('series-start-date', { error: errors.startDate })}
+            {...describedBy('series-start-date', {
+              error: errors.startDate,
+              warning: notes.firstDay,
+            })}
           />
         </Field>
         <Field
@@ -434,7 +449,7 @@ export function SeriesForm({
           label={LABELS.untilDate}
           hint={HINTS.untilDate}
           error={errors.untilDate}
-          warning={hiddenByTyped ?? ''}
+          warning={notes.lastDay ?? ''}
         >
           <input
             id="series-until-date"
@@ -447,7 +462,7 @@ export function SeriesForm({
             {...describedBy('series-until-date', {
               hint: HINTS.untilDate,
               error: errors.untilDate,
-              warning: hiddenByTyped,
+              warning: notes.lastDay,
             })}
           />
         </Field>
