@@ -19,6 +19,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | adapter boundary | A small fixed interface in front of a part you might swap; ours is `TimeGridProps`, so FullCalendar could replace the grid | [[Calendar grid]], [[Calendar grid choices]] |
 | allowlist | The list of emails allowed to sign in (`AUTH_ALLOWED_EMAILS`); everyone else is refused before a user row exists | [[Auth]] |
 | anchor date | The day the calendar is looking at; Previous / Next move it a day or a week | [[Calendar grid]] |
+| anchor week | The Monday of the week a series starts; "every 2 weeks" counts its weeks from here, so a new first day can move the class onto the other weeks | [[Recurrence engine]], [[Series change warnings]] |
 | `any` | "Stop checking this value"; switches TypeScript off for it, so our code avoids it | [[TypeScript essentials]] |
 | API | The program on the server that answers the app's requests (`apps/api`) | [[API server]] |
 | `app.user_id` | The custom setting that tells RLS who is asking, set per transaction with `set_config` | [[Row-level security]], [[Row-level security in our database]] |
@@ -134,6 +135,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `GRANT` / `REVOKE` | Give / take away a privilege, e.g. `grant select on series to tasks_app` | [[Roles and privileges]] |
 | greedy algorithm | One that takes the best-looking choice at each step and never goes back; for interval partitioning it's exactly optimal | [[Interval partitioning]] |
 | `groupSections` | Splits the groups into running and archived, each sorted by name | [[Groups screen]] |
+| half-typed year | What a date box holds while you type the year: 0002-11-20, then 0020-…, then 0202-… before 2026-11-20; the impact read waits it out | [[Series change warnings]] |
 | hand-over (one tab) | The running tab saves both copies at once and lets go of its lock, so the tab that asked can run the app | [[Offline cancels]] |
 | handler | The function that answers one route (`GET /api/v1/me` → `me.ts`) | [[API server]] |
 | hash | A one-way fingerprint of data (SHA-256) | [[Hashing and signing]] |
@@ -156,7 +158,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | idempotent | Doing it twice has the same effect as once; our creates are, thanks to client-made ids | [[Idempotency and retries]], [[HTTP basics]] |
 | `ifAvailable` (Web Locks) | Ask for a lock without waiting: the callback gets `null` if another tab holds it | [[Web Locks and BroadcastChannel]] |
 | image | A frozen bundle of an OS userland, Node, our code and deps; built once, runs anywhere | [[Containers and images]] |
-| impact read | `GET /api/v1/groups/:id/impact` or `/series/:id/impact`, with `?lastDay=`: how many changes that last day would hide, `{ changesAfter }` | [[Archive and last days]], [[Archive choices]] |
+| impact read | `GET /api/v1/groups/:id/impact` or `/series/:id/impact`, with `?lastDay=`: how many changes that last day would hide, `{ changesAfter }`; a series can also be asked about `?firstDay=` and `?byDay=&interval=` | [[Archive and last days]], [[Archive choices]], [[Series change warnings]] |
 | `import type` | An import used only for types, deleted before running (`verbatimModuleSyntax`) | [[TypeScript essentials]] |
 | index (database) | A sorted side structure that makes lookups by a column fast | [[Postgres and SQL basics]] |
 | IndexedDB | The browser's built-in asynchronous database, one per origin; our cached API data lives there | [[IndexedDB and offline storage]], [[Offline reads]] |
@@ -314,6 +316,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | `stopShowing` | The engine's list of changes that show now and wouldn't with a new last day; the impact read counts it | [[Archive and last days]], [[Archive choices]] |
 | strict mode | Our TypeScript setting that, among other things, forbids `null` where a value is expected | [[TypeScript essentials]] |
 | structured clone | The browser's built-in deep copy, used to store values in IndexedDB | [[IndexedDB and offline storage]] |
+| `superRefine` (zod) | A check over a whole object that can blame any field, or several; ours: `byDay` and `interval` must come together | [[Series change warnings]] |
 | superuser | A Postgres role that skips every permission check and RLS; our `tasks` login is one | [[Roles and privileges]] |
 | sweep (clash check) | Sort the expanded occurrences by start and walk through once, noting every pair that overlaps; how clashes are found | [[Swap, days off and series choices]], [[Interval partitioning]] |
 | sync badge | The "offline · last synced 2:02 PM" pill: the screen shows saved answers, last confirmed at that time; since v0.3 it also counts waiting changes | [[Offline reads]], [[Offline cancels]] |
@@ -363,6 +366,8 @@ Every technical term used in this vault and the code: one line each, plus the no
 | your day (the user's day) | "Today" as the app means it: in your profile's zone, starting at your day boundary | [[The user's day]] |
 | `z.input` / `z.output` | A schema's two types: what a client may send / what the code gets after defaults and transforms | [[Validating input with schemas]] |
 | zod | Our schema library: parses settings at start-up and every request body and query string | [[Validating input with schemas]], [[Environment variables and config]] |
+| zod coerce | `z.coerce.number()` turns text like `"2"` into the number 2, then checks it; a query string is always text | [[Series change warnings]] |
+| zod extend | `a.extend({ … })`: a new object schema with `a`'s fields and more; the series impact query is the group's plus three | [[Series change warnings]] |
 | zod pipe | `a.pipe(b)`: check with `a`, and run `b` only if `a` passed; how the calendar route keeps bad dates away from the 62-day check | [[Calendar API]] |
 | `ZonedDateTime` | Temporal's moment plus a zone: what a wall clock there shows | [[The user's day]] |
 

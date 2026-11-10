@@ -54,6 +54,7 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 5. The end-to-end test (ticket #10): [[End-to-end tests and Playwright]] first, then [[End-to-end test]]: the server it starts, the empty database, signing in without Google, the steps, the fresh browser, and the bug it found in the saved copy (the fix is in [[Offline reads]]). The "why": [[End-to-end test choices]].
 6. The Groups screen (ticket #11): [[Time zones and daylight saving]] first if it's been a while, then [[The user's day]] (when "today" starts, and when a group counts as ended), [[Shared form pieces]] (what the series form gave up so a second form could use it), and [[Groups screen]] (the list, the natural sort, the form). The "why": [[Groups screen choices]].
 7. Archive and last days (ticket #12): [[Recurrence engine]] again for dormant changes (its Orphans section), then [[Archive and last days]]: which day Archive sets, how the engine counts what a last day would hide, the impact read, and the warning in the forms. The "why": [[Archive choices]].
+8. Warnings for a new first day or timing (ticket #13): [[Series change warnings]]: one question for the whole edit, each hidden change counted once by its date, the every-2-weeks case review found, and the half-typed year. The "why": [[Series warning choices]].
 
 ## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
 
