@@ -8,6 +8,7 @@ import {
   checkUpdateSeries,
   fieldMessage,
   firstProblemField,
+  impactAsk,
   NEW_GROUP,
   problemsFromErrors,
   type SeriesFormValues,
@@ -220,6 +221,33 @@ describe('request bodies', () => {
       // The subject was following the title, so it follows the new one.
       subject: 'Lab',
     });
+  });
+});
+
+describe('what the impact read is asked about an edit', () => {
+  it('asks about the first day, last day and timing Save would send', () => {
+    // The lab: Thursdays every 2 weeks since 16 Jul, no last day.
+    const initial = valuesFromSeries(lab);
+    expect(impactAsk(initial, initial)).toBeUndefined();
+    expect(impactAsk({ ...initial, location: 'Lab 3' }, initial)).toBeUndefined();
+    expect(
+      impactAsk(
+        { ...initial, startDate: '2026-10-01', untilDate: '2026-11-20', days: ['TH', 'TU'] },
+        initial,
+      ),
+    ).toEqual({ firstDay: '2026-10-01', lastDay: '2026-11-20', byDay: ['TU', 'TH'], interval: 2 });
+    expect(impactAsk({ ...initial, interval: 1 }, initial)).toEqual({
+      byDay: ['TH'],
+      interval: 1,
+    });
+  });
+
+  it('asks nothing about a change that hides nothing or is not filled in', () => {
+    const initial = valuesFromSeries({ ...lab, untilDate: '2026-11-27' });
+    // A cleared last day hides nothing; an empty first day and no days aren't a change yet.
+    expect(
+      impactAsk({ ...initial, untilDate: '', startDate: '', days: [] }, initial),
+    ).toBeUndefined();
   });
 });
 

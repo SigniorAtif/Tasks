@@ -17,6 +17,7 @@ import {
   isArchived,
   type ScheduleGroup,
   type Series,
+  type SeriesImpactQuery,
   type UpdateSeries,
   updateSeriesSchema,
   type Weekday,
@@ -283,6 +284,26 @@ export function changedFields(
     }
   }
   return changes as UpdateSeries;
+}
+
+/**
+ * What the series impact read is asked about an edit: the first day, last day
+ * and timing Save would send, the three changes that can hide cancels. A cleared
+ * last day hides nothing, and an empty first day or no days isn't a change yet.
+ */
+export function impactAsk(
+  values: SeriesFormValues,
+  initial: SeriesFormValues,
+): SeriesImpactQuery | undefined {
+  const { startDate, untilDate, rule } = changedFields(values, initial, values.groupId);
+  const ask: SeriesImpactQuery = {};
+  if (startDate) ask.firstDay = startDate;
+  if (untilDate) ask.lastDay = untilDate;
+  if (rule?.freq === 'weekly' && rule.byDay.length > 0) {
+    ask.byDay = rule.byDay;
+    ask.interval = rule.interval;
+  }
+  return Object.keys(ask).length > 0 ? ask : undefined;
 }
 
 // ---------------------------------------------------------------------------

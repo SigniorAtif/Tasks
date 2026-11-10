@@ -1,38 +1,82 @@
-// What a new last day would hide, for the group and series forms: the
-// server's count (`GET .../impact`, which sees every date, where the phone
-// holds only the weeks it has loaded) and the sentence a form shows before
-// saving.
+// What a change to a group or series would hide, for their forms: the server's
+// count (`GET .../impact`, which sees every date, where the phone holds only the
+// weeks it has loaded) and the sentences a form shows before saving.
 
 import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
-import type { Impact, ISODate } from '@tasks/core';
+import type { Impact, ISODate, SeriesImpact, SeriesImpactQuery } from '@tasks/core';
 import { dateLabel } from '../calendar/model/format.ts';
 import { apiGet } from './api.ts';
 
 /**
- * What giving the row at `rowPath` (`/api/v1/groups/<id>` or `/api/v1/series/<id>`)
- * the last day `lastDay` would hide. Without both, it asks nothing. Not kept for
- * offline (persist.ts): a form asks again each time it opens.
+ * What the change in `ask` would hide in the row at `rowPath` (`/api/v1/groups/<id>`,
+ * asked only about a `lastDay` and answered with an `Impact`, or `/api/v1/series/<id>`,
+ * with a `SeriesImpact`). Without both, it asks nothing. Not kept for offline
+ * (persist.ts): a form asks again each time it opens.
  */
-export function impactQuery(rowPath: string | null, lastDay: ISODate | undefined) {
+export function impactQuery<T extends Impact = Impact>(
+  rowPath: string | null,
+  ask: SeriesImpactQuery | undefined,
+) {
   return queryOptions({
-    queryKey: ['impact', rowPath, lastDay],
+    queryKey: ['impact', rowPath, ask],
     // Dropped as soon as no form shows it: a count from an earlier visit could
     // be out of date (a new cancel, another last day) and flash before the refetch.
     gcTime: 0,
     queryFn:
-      rowPath === null || lastDay === undefined
+      rowPath === null || ask === undefined
         ? skipToken
-        : ({ signal }) =>
-            apiGet<Impact>(`${rowPath}/impact?${new URLSearchParams({ lastDay })}`, { signal }),
+        : ({ signal }) => {
+            // String() writes the days as `MO,FR`, the way the query string has them.
+            const search = Object.entries(ask).map(([key, value]) => [key, String(value)]);
+            return apiGet<T>(`${rowPath}/impact?${new URLSearchParams(search)}`, { signal });
+          },
   });
+}
+
+/** "3 changes after 27 Nov 2026 will stop showing. A later date brings them back." */
+function note(count: number, where: string, undo: string): string | undefined {
+  if (count === 0) return undefined;
+  const changes = count === 1 ? '1 change' : `${count} changes`;
+  const them = count === 1 ? 'it' : 'them';
+  return `${changes} ${where} will stop showing. ${undo} brings ${them} back.`;
 }
 
 /** "3 changes after 27 Nov 2026 will stop showing…", or nothing when it hides none. */
 export function hiddenChangesNote(changesAfter: number, lastDay: ISODate): string | undefined {
-  if (changesAfter === 0) return undefined;
-  const changes = changesAfter === 1 ? '1 change' : `${changesAfter} changes`;
-  const them = changesAfter === 1 ? 'it' : 'them';
-  return `${changes} after ${dateLabel(lastDay)} will stop showing. A later date brings ${them} back.`;
+  return note(changesAfter, `after ${dateLabel(lastDay)}`, 'A later date');
+}
+
+/** A series form's warnings, each under the field it's about. */
+export interface SeriesChangeNotes {
+  firstDay?: string | undefined;
+  lastDay?: string | undefined;
+  timing?: string | undefined;
+}
+
+/** The warning for each part of `ask` that hides something. */
+export function seriesChangeNotes(impact: SeriesImpact, ask: SeriesImpactQuery): SeriesChangeNotes {
+  const { firstDay, lastDay, byDay } = ask;
+  const notes: SeriesChangeNotes = {};
+  if (firstDay !== undefined) {
+    const lines = [note(impact.changesBefore, `before ${dateLabel(firstDay)}`, 'An earlier date')];
+    // Every 2 weeks counts from the first day's week, so a new first day alone can
+    // move the class off a change's week. With a new timing, its own warning says so.
+    if (byDay === undefined) {
+      lines.push(
+        note(impact.changesOffTiming, 'in weeks the class no longer meets', 'The old first day'),
+      );
+    }
+    notes.firstDay = lines.filter(Boolean).join(' ') || undefined;
+  }
+  if (lastDay !== undefined) notes.lastDay = hiddenChangesNote(impact.changesAfter, lastDay);
+  if (byDay !== undefined) {
+    notes.timing = note(
+      impact.changesOffTiming,
+      "on days the new timing doesn't produce",
+      'The old timing',
+    );
+  }
+  return notes;
 }
 
 /**
@@ -46,7 +90,19 @@ export function useHiddenChangesNote(
   saved: string,
 ): string | undefined {
   const asking = lastDay !== undefined && lastDay !== '' && lastDay !== saved ? lastDay : undefined;
-  const { data } = useQuery(impactQuery(rowPath, asking));
+  const { data } = useQuery(
+    impactQuery(rowPath, asking === undefined ? undefined : { lastDay: asking }),
+  );
   if (data === undefined || asking === undefined) return undefined;
   return hiddenChangesNote(data.changesAfter, asking);
+}
+
+/** The series form's warnings for `ask`, what its edit would change (`undefined`: nothing). */
+export function useSeriesChangeNotes(
+  rowPath: string | null,
+  ask: SeriesImpactQuery | undefined,
+): SeriesChangeNotes {
+  const { data } = useQuery(impactQuery<SeriesImpact>(rowPath, ask));
+  if (data === undefined || ask === undefined) return {};
+  return seriesChangeNotes(data, ask);
 }
