@@ -56,6 +56,7 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 7. Archive and last days (ticket #12): [[Recurrence engine]] again for dormant changes (its Orphans section), then [[Archive and last days]]: which day Archive sets, how the engine counts what a last day would hide, the impact read, and the warning in the forms. The "why": [[Archive choices]].
 8. Warnings for a new first day or timing (ticket #13): [[Series change warnings]]: one question for the whole edit, each hidden change counted once by its date, the every-2-weeks case review found, and the half-typed year. The "why": [[Series warning choices]].
 9. Delete with the typed name (ticket #14): [[Delete with the typed name]]: what counts as history, the forgiving name check and its emoji-only rule, and the one Delete question both forms share. The "why": [[Delete choices]].
+10. Quips (ticket #15): [[Quips]]: one module of lines, how the day picks one, the three easter eggs, and why the word on a button never changes. The "why": [[Quip choices]].
 
 ## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
 

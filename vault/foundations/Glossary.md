@@ -26,6 +26,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | Archive | The button on the group and class forms that sets the last day to yesterday, so the day you archive doesn't count; shown only when it changes something | [[Archive and last days]], [[Archive choices]] |
 | archived | A group or series whose last day is before your day; worked out from the last day, never stored | [[The user's day]], [[Cancel and group choices]] |
 | `aria-describedby` / `aria-invalid` | Link an input to its hint and error text, and mark it as wrong, so a screen reader reads them when the input is focused | [[Series form]] |
+| `aria-hidden` | An HTML attribute that hides an element from screen readers while it stays on screen | [[Quips]] |
 | `aria-live="polite"` | Makes an element a polite live region without giving it a role; ours: the Last day warning | [[Archive and last days]] |
 | arm64 / amd64 | The two CPU families: phones and Oracle Ampere vs most laptops and VPSs | [[Containers and images]] |
 | `as` (type assertion) | Tells the checker "trust me, this is a T"; checks nothing at run time | [[TypeScript essentials]] |
@@ -104,6 +105,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | dormant (override) | A change hidden by a last day, not erased: still in the database, and drawn again when the date moves later | [[Recurrence engine]], [[Archive and last days]] |
 | Drizzle | Our query builder: SQL queries written in TypeScript, checked against the schema | [[Postgres and SQL basics]], [[Database and migrations]] |
 | drop (queued change) | A queued change the server refused for good (a 404, another 4xx): it leaves the queue, the weeks are fetched again, and a toast says so | [[Offline cancels]] |
+| Easter egg | A rare line that shows only in a special case: every class today cancelled, a rare loading roll, three skips in one day | [[Quips]] |
 | ENABLE / FORCE ROW LEVEL SECURITY | `ENABLE` turns RLS on for a table; `FORCE` makes it apply to the table's owner too | [[Row-level security]] |
 | `ensureQueryData` | Return a query's cached answer, or fetch it if there is none; used in a route's `beforeLoad` and loader | [[Offline reads]], [[Web app]] |
 | end-to-end test | A test where a real browser drives the real built app, through the API to the database and back; ours: `pnpm e2e` | [[End-to-end tests and Playwright]], [[End-to-end test]] |
@@ -200,6 +202,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | middleware | Functions every request passes through before and after its handler | [[Middleware]] |
 | migration | A numbered SQL file that changes the database's tables, applied once in order | [[Database migrations]] |
 | mobile-first | Phone styles are the default; wider screens add rules with `min-width` | [[Responsive layouts]] |
+| Moment | A place in the app with quips of its own: the toast, loading, an empty day, the badge, the delete question, under Prof and Me | [[Quips]] |
 | monorepo | One repo holding several packages (`apps/*`, `packages/*`) | [[Monorepo and workspaces]] |
 | mounted (`QueryClient`) | Switched on by `QueryClientProvider` when the app draws: only then does the client hear `online`, `offline` and focus | [[Mutations and offline queues]] |
 | multi-stage build | A Dockerfile with throwaway stages; only the final one becomes the image | [[Containers and images]] |
@@ -262,9 +265,11 @@ Every technical term used in this vault and the code: one line each, plus the no
 | PWA | A website your phone can install like an app | [[PWAs and service workers]] |
 | query string | The `?lastDay=2026-11-20` part of an address: named values a `GET` carries, checked with a schema like a body | [[How a request travels]], [[Archive and last days]] |
 | `QUEUE_FORMAT` | The saved queue's own version string (`'v1'`); never bumped to start clean, so a new version can't throw away a waiting change | [[Offline cancels]] |
+| Quip | A line of humour the app says at a small moment; the same one all day, never saved or sent | [[Quips]] |
 | quota (storage) | The most a site may store in the browser; Chrome allows about 60% of the disk | [[IndexedDB and offline storage]] |
 | refresh token | A long-lived key from Google that gets the app a fresh, hour-long access pass without asking you again; we don't store one yet | [[Swap, days off and series choices]], [[OAuth sign-in]] |
 | registry | Where images are stored and downloaded from (GHCR, Docker Hub) | [[Containers and images]] |
+| Remainder (`%`) | What is left after dividing: `20770 % 8` is 2. Used to make a growing count wrap round a list | [[Quips]] |
 | request id | A unique id per request, in the `X-Request-Id` header, the log line and error bodies | [[Structured logging]], [[Error responses]] |
 | resource | A thing an API lets you work with, named by a URL | [[REST resources and CRUD]] |
 | responsive layout | A layout that changes shape with the screen's width | [[Responsive layouts]] |
@@ -308,6 +313,7 @@ Every technical term used in this vault and the code: one line each, plus the no
 | SPA | A single-page app: one HTML page, JavaScript swaps the screens | [[Single-page apps and routing]] |
 | SQL / SQL injection | The language for asking Postgres / an attack that sneaks SQL in through a value | [[Postgres and SQL basics]] |
 | SQLSTATE | Postgres' five-character error code, stable unlike the message: `23505` unique, `23503` foreign key, `23514` check, `42501` not allowed | [[Calendar API]] |
+| `sr-only` | A Tailwind class that hides text from the eye and leaves it for screen readers | [[Quips]] |
 | SSH | Encrypted remote login; the deploy job uses it to run `deploy.sh` on the server | [[Deploy and CI]] |
 | SSRF | Server-side request forgery: tricking a server that fetches URLs into reaching places only it can see; our notes' links are never fetched | [[Swap, days off and series choices]] |
 | `staleTime` | How long TanStack Query treats an answer as fresh and won't refetch it; the calendar uses a minute. An invalidated answer is stale whatever its age | [[Calendar grid]], [[Server state and caching]], [[Offline reads]] |
