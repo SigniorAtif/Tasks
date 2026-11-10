@@ -1,7 +1,8 @@
 import { useRouter } from '@tanstack/react-router';
-import type { ScheduleGroup } from '@tasks/core';
+import { archiveDay, type ISODate, paths, type ScheduleGroup } from '@tasks/core';
 import { type FormEvent, useRef, useState } from 'react';
 import {
+  ArchiveSection,
   ColorSwatches,
   describedBy,
   Field,
@@ -11,6 +12,7 @@ import {
 } from '../components/form-controls.tsx';
 import { ApiError, describeSaveError } from '../lib/api.ts';
 import { hasProblems } from '../lib/form-problems.ts';
+import { useHiddenChangesNote } from '../lib/impact.ts';
 import { newId, useCreateGroup, useUpdateGroup } from '../lib/mutations.ts';
 import { useFormProblems } from '../lib/use-form-problems.ts';
 import { useSyncStatus } from '../lib/use-sync-status.ts';
@@ -40,11 +42,18 @@ const GROUP_GONE = "This group doesn't exist any more";
 
 /**
  * The form to make a group (`group` is `null`) or change one: name, colour,
- * attendance and last day. Checks what was typed with the API's own schema
- * before sending anything, and goes back to Groups once it's saved. Archive
- * and Delete join it in later tickets (#12, #14), below the Save row.
+ * attendance and last day, and Archive below the Save row (Delete joins it in
+ * #14). Checks what was typed with the API's own schema before sending
+ * anything, and goes back to Groups once it's saved.
  */
-export function GroupForm({ group }: { group: ScheduleGroup | null }) {
+export function GroupForm({
+  group,
+  today,
+}: {
+  group: ScheduleGroup | null;
+  /** The user's day (`todayFor`): the last day Archive sets. */
+  today: ISODate;
+}) {
   const router = useRouter();
   // Writes are online-only (D-048): Save is off while the badge says offline.
   const online = useSyncStatus().state !== 'offline';
@@ -61,7 +70,16 @@ export function GroupForm({ group }: { group: ScheduleGroup | null }) {
   const createGroup = useCreateGroup();
   const updateGroup = useUpdateGroup();
   const saving = createGroup.isPending || updateGroup.isPending;
+  const [archiving, setArchiving] = useState(false);
   const errors = problems.fields;
+
+  // Archive takes the earlier of the last day as typed and today, and what
+  // either would hide is said before saving.
+  const rowPath = group === null ? null : `${paths.groups}/${group.id}`;
+  const typedLastDay = values.untilDate === '' ? null : values.untilDate;
+  const archiveOn = group === null ? undefined : archiveDay({ untilDate: typedLastDay }, today);
+  const hiddenByTyped = useHiddenChangesNote(rowPath, values.untilDate, initial.untilDate);
+  const hiddenByArchive = useHiddenChangesNote(rowPath, archiveOn, initial.untilDate);
 
   function set<K extends keyof GroupFormValues>(key: K, value: GroupFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -69,20 +87,35 @@ export function GroupForm({ group }: { group: ScheduleGroup | null }) {
     if (key !== 'attendance') clearProblem(key as GroupField);
   }
 
-  async function save(event: FormEvent<HTMLFormElement>) {
+  function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    void submit(values);
+  }
+
+  /** Save, with today as the last day. */
+  async function archive(day: ISODate) {
+    const next = { ...values, untilDate: day };
+    setValues(next);
+    clearProblem('untilDate');
+    setArchiving(true);
+    await submit(next);
+    setArchiving(false);
+  }
+
+  /** Checks and sends `next`, then goes back to Groups. */
+  async function submit(next: GroupFormValues) {
     if (saving || !online) return;
     reset();
 
-    const found = checkGroupForm(values);
+    const found = checkGroupForm(next);
     if (hasProblems(found)) return showProblems(found);
 
     try {
       if (group === null) {
         pendingId.current ??= newId();
-        await createGroup.mutateAsync(groupCreateBody(values, pendingId.current));
+        await createGroup.mutateAsync(groupCreateBody(next, pendingId.current));
       } else {
-        const changes = groupChanges(values, initial);
+        const changes = groupChanges(next, initial);
         if (Object.keys(changes).length > 0) {
           await updateGroup.mutateAsync({ id: group.id, changes });
         }
@@ -153,6 +186,7 @@ export function GroupForm({ group }: { group: ScheduleGroup | null }) {
         label={GROUP_LABELS.untilDate}
         hint={HINTS.untilDate}
         error={errors.untilDate}
+        warning={hiddenByTyped ?? ''}
       >
         <input
           id="group-until-date"
@@ -164,11 +198,29 @@ export function GroupForm({ group }: { group: ScheduleGroup | null }) {
           {...describedBy('group-until-date', {
             hint: HINTS.untilDate,
             error: errors.untilDate,
+            warning: hiddenByTyped,
           })}
         />
       </Field>
 
-      <SaveRow saving={saving} disabled={saving || !online} offline={!online} cancelTo="groups" />
+      <SaveRow
+        saving={saving && !archiving}
+        disabled={saving || !online}
+        offline={!online}
+        cancelTo="groups"
+      />
+
+      {archiveOn !== undefined && (
+        <ArchiveSection
+          what="group"
+          day={archiveOn}
+          hiddenNote={hiddenByArchive}
+          onArchive={() => void archive(archiveOn)}
+          archiving={archiving}
+          disabled={saving || !online}
+          offline={!online}
+        />
+      )}
     </form>
   );
 }

@@ -5,6 +5,7 @@ import { GroupForm } from '../groups/GroupForm.tsx';
 import { isUnauthenticated } from '../lib/api.ts';
 import { meQuery } from '../lib/queries.ts';
 import { requireSession } from '../lib/require-session.ts';
+import { todayFor } from '../lib/time.ts';
 
 // `/groups/new`: make a group before its first class.
 export const Route = createFileRoute('/groups/new')({
@@ -18,7 +19,7 @@ function NewGroupRoute() {
 
   return (
     <ScreenFrame title="New group" back="groups">
-      <GroupForm group={null} />
+      <GroupForm group={null} today={todayFor(me.data.profile)} />
     </ScreenFrame>
   );
 }

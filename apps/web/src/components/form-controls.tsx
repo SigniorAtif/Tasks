@@ -6,11 +6,13 @@
 // Accessibility, the same way everywhere: every input has a <label>; its hint
 // and its error are linked with `aria-describedby`, so a screen reader reads
 // them when the input gets the focus; an input with an error has
-// `aria-invalid`.
+// `aria-invalid`. A warning that arrives while the user types (what a last day
+// would hide) sits in a polite live region, so it's read out when it appears.
 
 import { Link } from '@tanstack/react-router';
-import { COLOR_TOKENS, type ColorToken } from '@tasks/core';
+import { COLOR_TOKENS, type ColorToken, type ISODate } from '@tasks/core';
 import type { ReactNode, Ref } from 'react';
+import { dateLabel } from '../calendar/model/format.ts';
 import { groupColor } from '../calendar/model/palette.ts';
 import type { ErrorText } from '../lib/api.ts';
 import { BACK, type BackTo } from './ScreenFrame.tsx';
@@ -21,34 +23,42 @@ export const inputClass =
 
 const hintId = (id: string) => `${id}-hint`;
 const errorId = (id: string) => `${id}-error`;
+const warningId = (id: string) => `${id}-warning`;
 
-/** The ARIA attributes that tie an input to its hint and error. Spread onto the input. */
-export function describedBy(
-  id: string,
-  { hint, error }: { hint?: string | undefined; error?: string | undefined },
-) {
-  const ids = [hint && hintId(id), error && errorId(id)].filter(Boolean).join(' ');
+/** What can be said under an input. `warning: ''` keeps its live region, empty, for one to come. */
+interface Notes {
+  hint?: string | undefined;
+  error?: string | undefined;
+  warning?: string | undefined;
+}
+
+/** The ARIA attributes that tie an input to its notes. Spread onto the input. */
+export function describedBy(id: string, { hint, error, warning }: Notes) {
+  const ids = [hint && hintId(id), warning && warningId(id), error && errorId(id)]
+    .filter(Boolean)
+    .join(' ');
   return {
     'aria-describedby': ids === '' ? undefined : ids,
     'aria-invalid': error === undefined ? undefined : true,
   };
 }
 
-/** A field's hint and error lines, under the input. */
-export function FieldNotes({
-  id,
-  hint,
-  error,
-}: {
-  id: string;
-  hint?: string | undefined;
-  error?: string | undefined;
-}) {
+/** A field's hint, warning and error lines, under the input. */
+export function FieldNotes({ id, hint, error, warning }: Notes & { id: string }) {
   return (
     <>
       {hint !== undefined && (
         <p id={hintId(id)} className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {hint}
+        </p>
+      )}
+      {warning !== undefined && (
+        <p
+          id={warningId(id)}
+          aria-live="polite"
+          className="mt-1 text-sm text-amber-800 empty:hidden dark:text-amber-300"
+        >
+          {warning}
         </p>
       )}
       {error !== undefined && (
@@ -60,27 +70,22 @@ export function FieldNotes({
   );
 }
 
-/** A label above one input, with its hint and error below. */
+/** A label above one input, with its notes below. */
 export function Field({
   id,
   label,
   hint,
   error,
+  warning,
   children,
-}: {
-  id: string;
-  label: string;
-  hint?: string | undefined;
-  error?: string | undefined;
-  children: ReactNode;
-}) {
+}: Notes & { id: string; label: string; children: ReactNode }) {
   return (
     <div>
       <label htmlFor={id} className="mb-1 block text-sm font-medium">
         {label}
       </label>
       {children}
-      <FieldNotes id={id} hint={hint} error={error} />
+      <FieldNotes id={id} hint={hint} error={error} warning={warning} />
     </div>
   );
 }
@@ -228,5 +233,61 @@ export function SaveRow({
         </Link>
       </div>
     </div>
+  );
+}
+
+/** What Archive says it does, per kind of row (CONTEXT.md: a last day ends things). */
+const ARCHIVE_EFFECT = {
+  group: 'Every class in it ends today',
+  class: 'It ends today',
+};
+
+/**
+ * Archive, below the Save row. One tap saves the form with `day` (today) as the
+ * last day, so the other edits go with it; `hiddenNote` says beforehand what
+ * that would hide. Nothing is erased: the weeks up to today stay on the calendar,
+ * and a later last day brings back what it hid.
+ */
+export function ArchiveSection({
+  what,
+  day,
+  hiddenNote,
+  onArchive,
+  archiving,
+  disabled,
+  offline,
+}: {
+  what: keyof typeof ARCHIVE_EFFECT;
+  day: ISODate;
+  hiddenNote: string | undefined;
+  onArchive: () => void;
+  archiving: boolean;
+  disabled: boolean;
+  offline: boolean;
+}) {
+  const noteId = 'archive-note';
+  return (
+    <section
+      aria-label={`Archive this ${what}`}
+      className="mt-2 border-t border-slate-200 pt-5 dark:border-slate-800"
+    >
+      <button
+        type="button"
+        onClick={onArchive}
+        disabled={disabled}
+        aria-describedby={offline ? `${noteId} ${OFFLINE_NOTE_ID}` : noteId}
+        className="w-full rounded-lg px-4 py-2.5 font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800"
+      >
+        {archiving ? 'Archiving…' : `Archive this ${what}`}
+      </button>
+      <div id={noteId} className="mt-2 text-sm">
+        <p className="text-slate-600 dark:text-slate-400">
+          {ARCHIVE_EFFECT[what]}, {dateLabel(day)}. Everything up to then stays on the calendar.
+        </p>
+        {hiddenNote !== undefined && (
+          <p className="mt-1 text-amber-800 dark:text-amber-300">{hiddenNote}</p>
+        )}
+      </div>
+    </section>
   );
 }

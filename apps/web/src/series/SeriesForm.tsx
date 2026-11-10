@@ -1,7 +1,15 @@
 import { useRouter } from '@tanstack/react-router';
-import { type ISODate, isArchived, type ScheduleGroup, type Series } from '@tasks/core';
+import {
+  archiveDay,
+  type ISODate,
+  isArchived,
+  paths,
+  type ScheduleGroup,
+  type Series,
+} from '@tasks/core';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import {
+  ArchiveSection,
   ColorSwatches,
   describedBy,
   Field,
@@ -13,6 +21,7 @@ import {
 } from '../components/form-controls.tsx';
 import { ApiError, describeSaveError } from '../lib/api.ts';
 import { hasProblems, mergeProblems, NO_PROBLEMS } from '../lib/form-problems.ts';
+import { useHiddenChangesNote } from '../lib/impact.ts';
 import {
   newId,
   useCreateGroup,
@@ -61,9 +70,11 @@ const QUICK_DURATIONS = [
 ];
 
 /**
- * The form to add a class (`series` is `null`) or change one. Checks what was
- * typed with the API's own schemas before sending anything, creates a new group
- * first when one was asked for, and goes back to the calendar once it's saved.
+ * The form to add a class (`series` is `null`) or change one, with Archive and
+ * Delete below the Save row (a class that hasn't started offers only Delete).
+ * Checks what was typed with the API's own schemas before sending anything,
+ * creates a new group first when one was asked for, and goes back to the
+ * calendar once it's saved.
  */
 export function SeriesForm({
   series,
@@ -75,7 +86,7 @@ export function SeriesForm({
   groups: readonly ScheduleGroup[];
   /** Every series, for a new class: its first day suggests the earliest future first day in its group. */
   seriesList?: readonly Series[];
-  /** The user's day (`todayFor`): the default first day, and what counts as archived. */
+  /** The user's day (`todayFor`): the default first day, what counts as archived, Archive's last day. */
   today: ISODate;
 }) {
   const router = useRouter();
@@ -101,6 +112,26 @@ export function SeriesForm({
   const deleteSeries = useDeleteSeries();
   const saving = createGroup.isPending || createSeries.isPending || updateSeries.isPending;
   const busy = saving || deleteSeries.isPending;
+  const [archiving, setArchiving] = useState(false);
+
+  // Archive takes the earlier of the last day as typed, the group's and today
+  // (none for a class that hasn't started), and what either would hide is said
+  // before saving.
+  const rowPath = series === null ? null : `${paths.series}/${series.id}`;
+  const typed = {
+    startDate: values.startDate,
+    untilDate: values.untilDate === '' ? null : values.untilDate,
+  };
+  const archiveOn =
+    series === null
+      ? undefined
+      : archiveDay(
+          typed,
+          today,
+          groups.find((g) => g.id === values.groupId),
+        );
+  const hiddenByTyped = useHiddenChangesNote(rowPath, values.untilDate, initial.untilDate);
+  const hiddenByArchive = useHiddenChangesNote(rowPath, archiveOn, initial.untilDate);
 
   const choices = selectableGroups(groups, today, series?.groupId);
   const makingGroup = values.groupId === NEW_GROUP;
@@ -133,23 +164,39 @@ export function SeriesForm({
     pendingIds.current[kind] = id;
     return id;
   }
-  async function save(event: FormEvent<HTMLFormElement>) {
+  function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    void submit(values);
+  }
+
+  /** Save, with today as the last day. */
+  async function archive(day: ISODate) {
+    const next = { ...values, untilDate: day };
+    setValues(next);
+    clearProblem('untilDate');
+    setArchiving(true);
+    await submit(next);
+    setArchiving(false);
+  }
+
+  /** Checks and sends `next`, then goes back to the calendar. */
+  async function submit(next: SeriesFormValues) {
     if (busy || !online) return;
     reset();
 
-    const groupId = makingGroup ? pendingId('group') : values.groupId;
+    const making = next.groupId === NEW_GROUP;
+    const groupId = making ? pendingId('group') : next.groupId;
 
     // Check everything before sending anything.
-    const groupBody = makingGroup ? toCreateGroup(values, groupId) : null;
+    const groupBody = making ? toCreateGroup(next, groupId) : null;
     const createBody =
       series === null
-        ? toCreateSeries(values, { series: pendingId('series'), group: groupId })
+        ? toCreateSeries(next, { series: pendingId('series'), group: groupId })
         : null;
     const found = mergeProblems(
       groupBody === null ? NO_PROBLEMS : checkGroup(groupBody),
       createBody === null
-        ? checkUpdateSeries(toFullUpdate(values, groupId))
+        ? checkUpdateSeries(toFullUpdate(next, groupId))
         : checkCreateSeries(createBody),
     );
     if (hasProblems(found)) return showProblems(found);
@@ -161,7 +208,7 @@ export function SeriesForm({
       if (createBody !== null) {
         await createSeries.mutateAsync(createBody);
       } else if (series !== null) {
-        const changes = changedFields(values, initial, groupId);
+        const changes = changedFields(next, initial, groupId);
         if (Object.keys(changes).length > 0) {
           await updateSeries.mutateAsync({ id: series.id, changes });
         }
@@ -387,6 +434,7 @@ export function SeriesForm({
           label={LABELS.untilDate}
           hint={HINTS.untilDate}
           error={errors.untilDate}
+          warning={hiddenByTyped ?? ''}
         >
           <input
             id="series-until-date"
@@ -399,12 +447,30 @@ export function SeriesForm({
             {...describedBy('series-until-date', {
               hint: HINTS.untilDate,
               error: errors.untilDate,
+              warning: hiddenByTyped,
             })}
           />
         </Field>
       </div>
 
-      <SaveRow saving={saving} disabled={busy || !online} offline={!online} cancelTo="calendar" />
+      <SaveRow
+        saving={saving && !archiving}
+        disabled={busy || !online}
+        offline={!online}
+        cancelTo="calendar"
+      />
+
+      {archiveOn !== undefined && (
+        <ArchiveSection
+          what="class"
+          day={archiveOn}
+          hiddenNote={hiddenByArchive}
+          onArchive={() => void archive(archiveOn)}
+          archiving={archiving}
+          disabled={busy || !online}
+          offline={!online}
+        />
+      )}
 
       {series !== null && (
         <DeleteSection

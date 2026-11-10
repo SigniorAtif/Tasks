@@ -5,6 +5,7 @@ import { GroupForm } from '../groups/GroupForm.tsx';
 import { isUnauthenticated } from '../lib/api.ts';
 import { groupsQuery, meQuery } from '../lib/queries.ts';
 import { requireSession } from '../lib/require-session.ts';
+import { todayFor } from '../lib/time.ts';
 
 // `/groups/<id>`: change one group. The Groups screen opens it from a row.
 export const Route = createFileRoute('/groups/$groupId')({
@@ -33,7 +34,7 @@ function EditGroupScreen({ groupId }: { groupId: string }) {
 
   return (
     <ScreenFrame title="Edit group" back="groups">
-      <GroupForm group={group} />
+      <GroupForm group={group} today={todayFor(me.data.profile)} />
     </ScreenFrame>
   );
 }
