@@ -36,7 +36,7 @@ sequenceDiagram
 
 ## 1. In the browser: before anything is sent
 
-**`apps/web/src/series/SeriesForm.tsx`, `save()`**
+**`apps/web/src/series/SeriesForm.tsx`, `save()` and `submit()`**
 
 1. `event.preventDefault()` stops the browser's own form submission, which would reload the page. From here, our code decides what happens.
 2. If you're offline, nothing happens: the Save button was already disabled, with "You're offline. Changes need a connection." (Writes need a connection in v0.2.)
@@ -45,12 +45,18 @@ sequenceDiagram
    ```tsx
      const online = useSyncStatus().state !== 'offline';
      // …
-     async function save(event: FormEvent<HTMLFormElement>) {
+     function save(event: FormEvent<HTMLFormElement>) {
        event.preventDefault();
+       void submit(values);
+     }
+     // …
+     async function submit(next: SeriesFormValues) {
        if (busy || !online) return;
    ```
 
-   `online` is worked out again on every render, from the same state as the sync badge. The Save button has `disabled={busy || !online}`, and `save()` checks the same thing again, so even a tap that slips through sends nothing. `busy` is true while an earlier save or delete is still running, so a double tap can't send two requests.
+   `save()` only hands the form's values to `submit()`, which does the work. Archive calls the same `submit()` with its own last day ([[Archive and last days]]), so the steps below are the same for both buttons; `next` is the copy being sent. `void` in front of `submit(values)` says "start it and don't wait": `submit` returns a promise, and the lint rule against forgotten promises wants that choice written down.
+
+   `online` is worked out again on every render, from the same state as the sync badge. The Save button has `disabled={busy || !online}`, and `submit()` checks the same thing again, so even a tap that slips through sends nothing. `busy` is true while an earlier save or delete is still running, so a double tap can't send two requests.
 3. **An id is made on the phone.** `pendingId('series')` calls `newId()` in `src/lib/mutations.ts`, which returns a **UUIDv7** such as `01a1…`. It's kept in a `useRef`, so if this save fails and you tap Save again, **the same id** goes again. That's what makes a retry safe: the server recognises the id instead of creating a second Gym ([[Idempotency and retries]]).
 
    *From `apps/web/src/series/SeriesForm.tsx` and `apps/web/src/lib/mutations.ts` (shortened):*
@@ -93,15 +99,15 @@ sequenceDiagram
    ```tsx
    // apps/web/src/series/SeriesForm.tsx
        // Check everything before sending anything.
-       const groupBody = makingGroup ? toCreateGroup(values, groupId) : null;
+       const groupBody = making ? toCreateGroup(next, groupId) : null;
        const createBody =
          series === null
-           ? toCreateSeries(values, { series: pendingId('series'), group: groupId })
+           ? toCreateSeries(next, { series: pendingId('series'), group: groupId })
            : null;
        const found = mergeProblems(
          groupBody === null ? NO_PROBLEMS : checkGroup(groupBody),
          createBody === null
-           ? checkUpdateSeries(toFullUpdate(values, groupId))
+           ? checkUpdateSeries(toFullUpdate(next, groupId))
            : checkCreateSeries(createBody),
        );
        if (hasProblems(found)) return showProblems(found);
@@ -114,7 +120,7 @@ sequenceDiagram
    }
    ```
 
-   `series === null` means "adding a class", since the same form also edits one. `groupBody` is `null` here because you picked an existing group; with "New group" chosen, the group is checked in the same pass. `return showProblems(found)` ends `save()` before any request. `createSeriesSchema` is imported from `@tasks/core`: the same object the server hands to `jsonBody` in step 15.
+   `series === null` means "adding a class", since the same form also edits one. `groupBody` is `null` here because you picked an existing group; with "New group" chosen, the group is checked in the same pass. `return showProblems(found)` ends `submit()` before any request. `createSeriesSchema` is imported from `@tasks/core`: the same object the server hands to `jsonBody` in step 15.
 6. `createSeries.mutateAsync(body)` hands the write to TanStack Query (`useCreateSeries` in `src/lib/mutations.ts`). It's a **mutation**: a request that changes something, tracked (running / failed / done) but not cached.
 
    *From `apps/web/src/series/SeriesForm.tsx` and `apps/web/src/lib/mutations.ts` (shortened):*

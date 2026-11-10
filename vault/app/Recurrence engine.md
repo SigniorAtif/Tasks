@@ -138,18 +138,16 @@ Here are the three loops, with the middle of passes 2 and 3 cut (pass 2 is shown
     if (o.kind !== 'extra') continue;
     const s = seriesById.get(o.seriesId);
     if (!s) continue;
-    const date = Temporal.PlainDate.from(o.newDate);
-    const lastDay = groupOf(s).untilDate;
-    const afterLastDay =
-      lastDay !== null && Temporal.PlainDate.compare(date, Temporal.PlainDate.from(lastDay)) > 0;
-    if (inWindow(date) && !afterLastDay) out.push(resolveExtra(s, o));
+    if (inWindow(Temporal.PlainDate.from(o.newDate)) && extraShows(o, groupOf(s))) {
+      out.push(resolveExtra(s, o));
+    }
   }
 ```
 
 What to notice:
 - `modified` is a `Map` from occurrence key to override, built once before the loops. Pass 1 finds a date's override with one lookup, `modified.get(occurrenceKey(...))`, instead of searching the whole list every time.
 - Pass 1 pushes only if `inWindow(occ.date)`, and pass 2 only if the original date is *outside* the window. Together they make sure a moved class appears exactly once, wherever you look from.
-- Pass 3 calls `resolveExtra`, not `resolve`, so no day exception is consulted at all. It checks only the group's last day, by hand, because an extra's date doesn't come from the rule, so `seriesDates` never sees it. `Temporal.PlainDate.compare(a, b)` answers `-1`, `0` or `1`, like a sort comparator: `> 0` means "the extra's date is after the last day". The last day itself still shows, because the range is inclusive.
+- Pass 3 calls `resolveExtra`, not `resolve`, so no day exception is consulted at all. It checks only the group's last day, by hand, because an extra's date doesn't come from the rule, so `seriesDates` never sees it. That check is `extraShows(o, g)`, further down the same file: `g.untilDate === null || o.newDate <= g.untilDate`. Both dates are ISO strings (`'2026-11-27'`), and text in that shape sorts in date order, so a plain `<=` compares them. The last day itself still shows, because the range is inclusive. `extraShows` is its own function since #12, because `stopShowing` asks the same question ([[Archive and last days]]): one copy, so the warning's count and the calendar can't disagree.
 
 Then it sorts by real start time, with the key as a tie-breaker, so the order is always the same.
 
@@ -305,7 +303,7 @@ An orphan is an override whose date its series no longer generates (the series m
   });
 ```
 
-`occursOn` is called without the group, on purpose: an override after the group's last day is *dormant*, not orphaned, and it comes back if the last day moves later. `(o): o is ModifiedOverride` is a *type guard*: it tells TypeScript that whatever passes the filter is a `ModifiedOverride`, so the result is typed `ModifiedOverride[]`.
+`occursOn` is called without the group, on purpose: an override after the group's last day is *dormant*, not orphaned, and it comes back if the last day moves later. Counting the overrides a new last day would make dormant is `stopShowing`'s job, next to this one ([[Archive and last days]]). `(o): o is ModifiedOverride` is a *type guard*: it tells TypeScript that whatever passes the filter is a `ModifiedOverride`, so the result is typed `ModifiedOverride[]`.
 
 ## Trace it yourself
 

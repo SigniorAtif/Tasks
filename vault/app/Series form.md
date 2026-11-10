@@ -211,20 +211,21 @@ sequenceDiagram
 
 The group is created first, because the series must point at a group that exists (the database's foreign key). Both are checked before either is sent, so a typo in the second form never leaves you with a half-made pair.
 
-*From `apps/web/src/series/SeriesForm.tsx` (inside `save`, shortened):*
+*From `apps/web/src/series/SeriesForm.tsx` (inside `submit`, shortened):*
 ```tsx
-    const groupId = makingGroup ? pendingId('group') : values.groupId;
+    const making = next.groupId === NEW_GROUP;
+    const groupId = making ? pendingId('group') : next.groupId;
 
     // Check everything before sending anything.
-    const groupBody = makingGroup ? toCreateGroup(values, groupId) : null;
+    const groupBody = making ? toCreateGroup(next, groupId) : null;
     const createBody =
       series === null
-        ? toCreateSeries(values, { series: pendingId('series'), group: groupId })
+        ? toCreateSeries(next, { series: pendingId('series'), group: groupId })
         : null;
     const found = mergeProblems(
       groupBody === null ? NO_PROBLEMS : checkGroup(groupBody),
       createBody === null
-        ? checkUpdateSeries(toFullUpdate(values, groupId))
+        ? checkUpdateSeries(toFullUpdate(next, groupId))
         : checkCreateSeries(createBody),
     );
     if (hasProblems(found)) return showProblems(found);
@@ -236,7 +237,7 @@ The group is created first, because the series must point at a group that exists
       if (createBody !== null) {
         await createSeries.mutateAsync(createBody);
       } else if (series !== null) {
-        const changes = changedFields(values, initial, groupId);
+        const changes = changedFields(next, initial, groupId);
         if (Object.keys(changes).length > 0) {
           await updateSeries.mutateAsync({ id: series.id, changes });
         }

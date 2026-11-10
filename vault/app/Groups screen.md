@@ -126,21 +126,21 @@ Two empty states: no groups at all shows "No groups yet" and what a group is for
 
 **Last day** ends every class in the group on that day. Once it has passed, the group moves to Archived by itself.
 
-"Observes holidays" exists in the database but stays hidden until v0.3b, when days off arrive. Archive and Delete come in tickets #12 and #14, below the Save row.
+"Observes holidays" exists in the database but stays hidden until v0.3b, when days off arrive. **Archive** arrived below the Save row in #12 ([[Archive and last days]]); Delete comes in #14.
 
 ### Save
 
-*From `apps/web/src/groups/GroupForm.tsx` (shortened):*
+*From `apps/web/src/groups/GroupForm.tsx` (inside `submit`, shortened):*
 ```tsx
-    const found = checkGroupForm(values);
+    const found = checkGroupForm(next);
     if (hasProblems(found)) return showProblems(found);
 
     try {
       if (group === null) {
         pendingId.current ??= newId();
-        await createGroup.mutateAsync(groupCreateBody(values, pendingId.current));
+        await createGroup.mutateAsync(groupCreateBody(next, pendingId.current));
       } else {
-        const changes = groupChanges(values, initial);
+        const changes = groupChanges(next, initial);
         if (Object.keys(changes).length > 0) {
           await updateGroup.mutateAsync({ id: group.id, changes });
         }
@@ -150,6 +150,8 @@ Two empty states: no groups at all shows "No groups yet" and what a group is for
     }
     await router.navigate({ to: '/groups' });
 ```
+
+Save calls `submit(values)`, with the form as you typed it. `next` is that copy; Archive calls the same `submit` with its own last day in it ([[Archive and last days]]), so both buttons check and send the same way.
 
 What to notice:
 - **Checked before sending.** `checkGroupForm` runs the API's own `updateGroupSchema` on what you typed, so an empty name shows "Name must not be empty" under the field, with the focus on it, and nothing is sent. The update schema has the same fields as create minus the id, which is why it fits both.
