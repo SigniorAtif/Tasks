@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, skipToken } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hiddenChangesNote, impactQuery, seriesChangeNotes } from './impact.ts';
 
@@ -85,5 +85,14 @@ describe('impactQuery', () => {
       '/api/v1/series/s/impact?firstDay=2026-10-01&byDay=TU%2CTH&interval=1',
       expect.anything(),
     );
+  });
+
+  it('asks nothing while a year is still being typed', () => {
+    // Typing 2026 into a date box sets 0002-11-20, then 0020-…, then 0202-… first.
+    for (const lastDay of ['0002-11-20', '0020-11-20', '0202-11-20']) {
+      expect(impactQuery('/api/v1/groups/g', { lastDay }).queryFn, lastDay).toBe(skipToken);
+    }
+    expect(impactQuery('/api/v1/series/s', { firstDay: '0202-10-01' }).queryFn).toBe(skipToken);
+    expect(impactQuery('/api/v1/groups/g', { lastDay: '2026-11-20' }).queryFn).not.toBe(skipToken);
   });
 });

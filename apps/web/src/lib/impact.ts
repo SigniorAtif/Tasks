@@ -8,10 +8,17 @@ import { dateLabel } from '../calendar/model/format.ts';
 import { apiGet } from './api.ts';
 
 /**
+ * A date box's value while its year is still being typed: typing 2026 sets
+ * 0002-11-20, then 0020-…, then 0202-… before 2026-11-20. Asking about those
+ * would flash a count for the year 2. No class is dated before the year 1000.
+ */
+const halfTyped = (date: ISODate | undefined) => date !== undefined && date < '1000';
+
+/**
  * What the change in `ask` would hide in the row at `rowPath` (`/api/v1/groups/<id>`,
  * asked only about a `lastDay` and answered with an `Impact`, or `/api/v1/series/<id>`,
- * with a `SeriesImpact`). Without both, it asks nothing. Not kept for offline
- * (persist.ts): a form asks again each time it opens.
+ * with a `SeriesImpact`). Without both, or while a year is half typed, it asks
+ * nothing. Not kept for offline (persist.ts): a form asks again each time it opens.
  */
 export function impactQuery<T extends Impact = Impact>(
   rowPath: string | null,
@@ -23,7 +30,7 @@ export function impactQuery<T extends Impact = Impact>(
     // be out of date (a new cancel, another last day) and flash before the refetch.
     gcTime: 0,
     queryFn:
-      rowPath === null || ask === undefined
+      rowPath === null || ask === undefined || halfTyped(ask.lastDay) || halfTyped(ask.firstDay)
         ? skipToken
         : ({ signal }) => {
             // String() writes the days as `MO,FR`, the way the query string has them.
