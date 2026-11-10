@@ -27,7 +27,10 @@ export const paths = {
   /** Everything else is versioned under this prefix and needs a session. */
   apiV1: '/api/v1',
   me: '/api/v1/me',
-  /** `GET` lists, `POST` creates; `/api/v1/groups/:id` for `GET`, `PATCH`, `DELETE`. */
+  /**
+   * `GET` lists, `POST` creates; `/api/v1/groups/:id` for `GET`, `PATCH`, `DELETE`;
+   * `GET /api/v1/groups/:id/impact` for what a new last day would hide (`Impact`).
+   */
   groups: '/api/v1/groups',
   /** Same shape as `groups`. */
   series: '/api/v1/series',
@@ -107,6 +110,20 @@ export interface CalendarResponse {
   from: ISODate;
   to: ISODate;
   occurrences: Occurrence[];
+}
+
+/**
+ * `GET /api/v1/groups/:id/impact` and `/api/v1/series/:id/impact`, with an optional
+ * `?lastDay=YYYY-MM-DD`: what giving the group or series that last day would hide.
+ * The server works it out because the phone holds only the weeks it has loaded.
+ */
+export interface Impact {
+  /**
+   * How many changes (cancels, and later notes, moves and extras) show now and wouldn't
+   * with `lastDay`: "3 changes after 27 Nov will stop showing". 0 without a `lastDay`.
+   * Hidden, never erased: they come back when the last day moves later.
+   */
+  changesAfter: number;
 }
 
 /** Stable, machine-readable error codes. Clients branch on these, never on `title` or `detail`. */

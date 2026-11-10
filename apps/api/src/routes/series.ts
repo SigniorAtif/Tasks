@@ -1,8 +1,15 @@
 // `/api/v1/series`: list, create, read, change and delete series. Same shape
 // and status codes as `/api/v1/groups` (routes/groups.ts).
 
-import { createSeriesSchema, paths, type SeriesList, updateSeriesSchema } from '@tasks/core';
+import {
+  createSeriesSchema,
+  impactQuerySchema,
+  paths,
+  type SeriesList,
+  updateSeriesSchema,
+} from '@tasks/core';
 import type { Hono } from 'hono';
+import { seriesImpact } from '../calendar/impact.ts';
 import {
   createSeries,
   deleteSeries,
@@ -12,6 +19,7 @@ import {
 } from '../calendar/series.ts';
 import type { Database } from '../db/client.ts';
 import type { AppEnv } from '../http/context.ts';
+import { validationFailed } from '../http/errors.ts';
 import { jsonBody } from '../http/json-body.ts';
 import { noSuchRow, rowId } from '../http/row-id.ts';
 import { getProfile } from '../profile/profile.ts';
@@ -49,6 +57,16 @@ export function seriesRoutes(app: Hono<AppEnv>, deps: { db: Database }): void {
     const updated = await c.var.asUser((scope) => updateSeries(scope, id, changes));
     if (!updated) throw noSuchRow('series');
     return c.json(updated);
+  });
+
+  // What a new last day would hide: `?lastDay=YYYY-MM-DD`, optional.
+  app.get(`${one}/impact`, async (c) => {
+    const id = rowId(c.req.param('id'), 'series');
+    const query = impactQuerySchema.safeParse(c.req.query());
+    if (!query.success) throw validationFailed(query.error);
+    const impact = await c.var.asUser((scope) => seriesImpact(scope, id, query.data.lastDay));
+    if (!impact) throw noSuchRow('series');
+    return c.json(impact);
   });
 
   app.delete(one, async (c) => {

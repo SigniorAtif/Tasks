@@ -70,15 +70,16 @@ describe("bob, through the API, against alice's calendar", () => {
     expect((await json<CalendarResponse>(await asBob.get(WEEK))).occurrences).toEqual([]);
   });
 
-  it("gets 404 for reading, changing or deleting her rows, and they don't change", async () => {
+  it("gets 404 for reading her rows, their impact, changing or deleting them, and they don't change", async () => {
     const { asAlice, asBob, group, ds } = await twoUsers();
     const before = await alicesRows();
 
     for (const path of [`${GROUPS}/${group.id}`, `${SERIES}/${ds.id}`]) {
       const reads = await asBob.get(path);
+      const impact = await asBob.get(`${path}/impact?lastDay=2026-10-01`);
       const changes = await asBob.patch(path, { name: 'Mine now', title: 'Mine now' });
       const deletes = await asBob.delete(path);
-      for (const response of [reads, changes, deletes]) {
+      for (const response of [reads, impact, changes, deletes]) {
         expect(response.status).toBe(404);
         expect((await json<Problem>(response)).code).toBe('not_found');
       }

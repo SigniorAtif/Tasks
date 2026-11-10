@@ -9,7 +9,7 @@ import type {
   OccurrenceOverride,
   updateOccurrenceSchema,
 } from '@tasks/core';
-import { and, between, eq, getTableColumns, isNull, or } from 'drizzle-orm';
+import { and, between, eq, getTableColumns, inArray, isNull, or } from 'drizzle-orm';
 import type { z } from 'zod';
 import { occurrenceOverride } from '../db/schema.ts';
 import type { UserScope } from '../db/user-scope.ts';
@@ -35,6 +35,24 @@ export async function listOverridesIn(
           between(occurrenceOverride.originalDate, window.from, window.to),
           between(occurrenceOverride.newDate, window.from, window.to),
         ),
+      ),
+    );
+  return rows.map(toOverride);
+}
+
+/** Every override of these series, whatever its dates: what a new last day could hide. */
+export async function listOverridesOf(
+  scope: UserScope,
+  seriesIds: readonly string[],
+): Promise<OccurrenceOverride[]> {
+  if (seriesIds.length === 0) return [];
+  const rows = await scope.tx
+    .select()
+    .from(occurrenceOverride)
+    .where(
+      and(
+        eq(occurrenceOverride.userId, scope.userId),
+        inArray(occurrenceOverride.seriesId, [...seriesIds]),
       ),
     );
   return rows.map(toOverride);
