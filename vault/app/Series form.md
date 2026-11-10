@@ -346,21 +346,25 @@ Details:
 
 ## Deleting
 
-"Delete this class" turns into a question in place: "Delete this class? Every week of it disappears from the calendar, past weeks too.", with **Delete** and **Keep it** (the focus moves to Keep it, the safe answer). There's no pop-up. Delete sends `DELETE /api/v1/series/<id>` with no body (the server answers 204) and goes home. A 404 counts as done: if an earlier try worked but its answer was lost, the class is gone either way.
+"Delete this class" turns into a question in place, with no pop-up. Since #14 the question is the same piece the group form uses, and what it asks depends on whether the class has history: a plain "Delete this class?" when nothing would be lost, and a name to type when something would. That piece, and the server's `hasHistory` behind it, are in [[Delete with the typed name]]. This note keeps what is specific to the series form: the request.
+
+Delete sends `DELETE /api/v1/series/<id>` with no body (the server answers 204) and goes home. A 404 counts as done: if an earlier try worked but its answer was lost, the class is gone either way.
 
 *From `apps/web/src/lib/mutations.ts`:*
 ```ts
-export async function deleteSeries(id: string): Promise<void> {
+async function deleteRow(path: string): Promise<void> {
   try {
-    await apiSend<undefined>('DELETE', `${paths.series}/${id}`);
+    await apiSend<undefined>('DELETE', path);
   } catch (error) {
     if (error instanceof ApiError && error.code === 'not_found') return;
     throw error;
   }
 }
+
+export const deleteSeries = (id: string) => deleteRow(`${paths.series}/${id}`);
 ```
 
-`apiSend<undefined>` says "no body expected" (the 204). A `not_found` error simply returns, as if the delete had worked, and anything else is thrown on to the form's red box.
+`apiSend<undefined>` says "no body expected" (the 204). A `not_found` error simply returns, as if the delete had worked, and anything else is thrown on to the form's red box. `deleteRow` is shared with `deleteGroup`, which only differs in its path.
 
 ## Offline
 

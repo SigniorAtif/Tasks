@@ -46,7 +46,7 @@ export function archiveDay(
   today: ISODate,
   group?: { untilDate: ISODate | null },
 ): ISODate | undefined {
-  const yesterday = Temporal.PlainDate.from(today).subtract({ days: 1 }).toString();
+  const yesterday = dayBefore(today);
   if (item.startDate !== undefined && item.startDate > yesterday) return undefined;
   const endsBy = (lastDay: ISODate | null | undefined) => lastDay != null && lastDay <= yesterday;
   if (endsBy(item.untilDate) || endsBy(group?.untilDate)) return undefined;
@@ -55,7 +55,7 @@ export function archiveDay(
 ```
 
 What to notice:
-- **Yesterday, from your day.** `today` comes from `todayFor(profile)`, the date in your profile's zone ([[The user's day]]). `Temporal.PlainDate` does the date maths, so 1 Jan 2027 gives 31 Dec 2026 without anyone counting days in a month. A group is archived once its last day is before today (`isArchived`, a few lines above), so a last day of yesterday archives it at once.
+- **Yesterday, from your day.** `today` comes from `todayFor(profile)`, the date in your profile's zone ([[The user's day]]). `dayBefore` (in core, wrapping `Temporal.PlainDate`) does the date maths, so 1 Jan 2027 gives 31 Dec 2026 without anyone counting days in a month. A group is archived once its last day is before today (`isArchived`, a few lines above), so a last day of yesterday archives it at once.
 - **Dates compared as text.** `item.startDate > yesterday` compares two strings like `'2026-11-10'`. Year, then month, then day, each padded with zeros: text in that shape sorts in date order, so `<` and `>` work. That's why the dates stay strings in core.
 - **`undefined` means "don't offer Archive".** Three cases:
   - **A series that starts today or later.** Its last day (yesterday) would come before its first day, and the database refuses that: a `CHECK` on the series table says `until_date is null or until_date >= start_date`. Such a series offers only Delete. Groups have no first day, so the group form never passes one.
@@ -138,10 +138,13 @@ The phone holds only the weeks it has loaded ([[Offline reads]]), and a cancel c
     groups: [{ ...group, untilDate: lastDay ?? group.untilDate }],
     series: inGroup,
   };
-  return { changesAfter: stopShowing(overrides, current, proposed).length };
+  return {
+    changesAfter: stopShowing(overrides, current, proposed).length,
+    hasHistory: overrides.length > 0 || inGroup.some((s) => metBefore(s, group, today)),
+  };
 ```
 
-`{ ...group, untilDate: … }` copies the group with one field replaced; nothing is saved. `lastDay ?? group.untilDate` keeps the saved last day when none was asked about, so `current` and `proposed` are the same and the count is 0. #14 will ask that way, when Delete needs to know whether a group has any history at all. `seriesImpact` is the same for one class and its own last day. Since #13 it can also be asked about a new first day and a new timing: [[Series change warnings]].
+`{ ...group, untilDate: … }` copies the group with one field replaced; nothing is saved. `lastDay ?? group.untilDate` keeps the saved last day when none was asked about, so `current` and `proposed` are the same and the count is 0. Delete asks that way (#14): the same read, with no last day, also carries `hasHistory`, whether deleting the group would lose anything ([[Delete with the typed name]]). `seriesImpact` is the same for one class and its own last day. Since #13 it can also be asked about a new first day and a new timing: [[Series change warnings]].
 
 *From `apps/api/src/routes/groups.ts`:*
 ```ts
@@ -149,7 +152,8 @@ The phone holds only the weeks it has loaded ([[Offline reads]]), and a cancel c
     const id = rowId(c.req.param('id'), 'group');
     const query = impactQuerySchema.safeParse(c.req.query());
     if (!query.success) throw validationFailed(query.error);
-    const impact = await c.var.asUser((scope) => groupImpact(scope, id, query.data.lastDay));
+    const today = await todayOf(deps.db, c.get('user').id, deps.now());
+    const impact = await c.var.asUser((scope) => groupImpact(scope, id, query.data.lastDay, today));
     if (!impact) throw noSuchRow('group');
     return c.json(impact);
   });

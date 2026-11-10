@@ -93,7 +93,12 @@ The query's type, `SeriesImpactQuery`, is this schema's `z.output`: the days as 
 
   // Each change once, by the date it shows on: before the new first day, after
   // the new last day, or else on a day the new timing doesn't produce.
-  const counts: SeriesImpact = { changesAfter: 0, changesBefore: 0, changesOffTiming: 0 };
+  const counts: SeriesImpact = {
+    changesAfter: 0,
+    changesBefore: 0,
+    changesOffTiming: 0,
+    hasHistory: overrides.length > 0 || metBefore(series, group, today),
+  };
   for (const o of hidden) {
     const date = o.kind === 'extra' ? o.newDate : o.originalDate;
     if (date < next.startDate) counts.changesBefore += 1;

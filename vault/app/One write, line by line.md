@@ -193,8 +193,8 @@ sequenceDiagram
   for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
     app.use(`${prefix}/*`, scoped);
   }
-  groupsRoutes(app);
-  seriesRoutes(app, { db });
+  groupsRoutes(app, { db, now });
+  seriesRoutes(app, { db, now });
 ```
 
 The order of the `app.use` lines is the order a request meets them (steps 9 to 14). The first argument, when there is one, is a path pattern: `requireSession` guards everything under `/api/` (it lets Better Auth's own `/api/auth/…` routes through), and `userScope` only the three calendar prefixes. `MAX_BODY_BYTES` is `256 * 1024`. The routes are added last, so every layer above runs before them.

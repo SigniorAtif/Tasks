@@ -55,6 +55,7 @@ The "why" behind this path: [[Calendar API choices]] · [[Calendar grid choices]
 6. The Groups screen (ticket #11): [[Time zones and daylight saving]] first if it's been a while, then [[The user's day]] (when "today" starts, and when a group counts as ended), [[Shared form pieces]] (what the series form gave up so a second form could use it), and [[Groups screen]] (the list, the natural sort, the form). The "why": [[Groups screen choices]].
 7. Archive and last days (ticket #12): [[Recurrence engine]] again for dormant changes (its Orphans section), then [[Archive and last days]]: which day Archive sets, how the engine counts what a last day would hide, the impact read, and the warning in the forms. The "why": [[Archive choices]].
 8. Warnings for a new first day or timing (ticket #13): [[Series change warnings]]: one question for the whole edit, each hidden change counted once by its date, the every-2-weeks case review found, and the half-typed year. The "why": [[Series warning choices]].
+9. Delete with the typed name (ticket #14): [[Delete with the typed name]]: what counts as history, the forgiving name check and its emoji-only rule, and the one Delete question both forms share. The "why": [[Delete choices]].
 
 ## Path 5: v0.3b, the swap, days off and changing a series (decided, built after v0.3)
 

@@ -135,8 +135,8 @@ The same order in `createApp`, line by line (the numbers in the comments are the
   for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
     app.use(`${prefix}/*`, scoped); // 8a
   }
-  groupsRoutes(app); // 8b
-  seriesRoutes(app, { db });
+  groupsRoutes(app, { db, now }); // 8b
+  seriesRoutes(app, { db, now });
   calendarRoute(app);
 
   // The built PWA, in production (STATIC_DIR). Last, so it never shadows the API.
