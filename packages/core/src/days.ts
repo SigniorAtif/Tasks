@@ -32,19 +32,21 @@ export function isArchived(item: { untilDate: ISODate | null }, today: ISODate):
 }
 
 /**
- * The last day Archive sets: the earlier of the current last day and `today`,
- * so ending something never extends it. `undefined` when there's nothing to
- * archive: it already ends today or earlier, by its own last day or, for a
- * series, its group's; or a series starts after today (the database refuses a
- * last day before the first, so it can only be deleted). Groups have no first day.
+ * The last day Archive sets: the earlier of the current last day and the day
+ * before `today`, so the day you archive doesn't count and ending something
+ * never extends it. `undefined` when there's nothing to archive: it already
+ * ends yesterday or earlier, by its own last day or, for a series, its group's;
+ * or a series starts today or later (the database refuses a last day before
+ * the first, so it can only be deleted). Groups have no first day.
  */
 export function archiveDay(
   item: { untilDate: ISODate | null; startDate?: ISODate },
   today: ISODate,
   group?: { untilDate: ISODate | null },
 ): ISODate | undefined {
-  if (item.startDate !== undefined && item.startDate > today) return undefined;
-  const endsBy = (lastDay: ISODate | null | undefined) => lastDay != null && lastDay <= today;
+  const yesterday = Temporal.PlainDate.from(today).subtract({ days: 1 }).toString();
+  if (item.startDate !== undefined && item.startDate > yesterday) return undefined;
+  const endsBy = (lastDay: ISODate | null | undefined) => lastDay != null && lastDay <= yesterday;
   if (endsBy(item.untilDate) || endsBy(group?.untilDate)) return undefined;
-  return today;
+  return yesterday;
 }

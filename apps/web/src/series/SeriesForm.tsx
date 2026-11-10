@@ -86,7 +86,7 @@ export function SeriesForm({
   groups: readonly ScheduleGroup[];
   /** Every series, for a new class: its first day suggests the earliest future first day in its group. */
   seriesList?: readonly Series[];
-  /** The user's day (`todayFor`): the default first day, what counts as archived, Archive's last day. */
+  /** The user's day (`todayFor`): the default first day, what counts as archived, the day Archive ends before. */
   today: ISODate;
 }) {
   const router = useRouter();
@@ -114,9 +114,9 @@ export function SeriesForm({
   const busy = saving || deleteSeries.isPending;
   const [archiving, setArchiving] = useState(false);
 
-  // Archive takes the earlier of the last day as typed, the group's and today
-  // (none for a class that hasn't started), and what either would hide is said
-  // before saving.
+  // Archive takes the earlier of the last day as typed, the group's and
+  // yesterday (none for a class that starts today or later), and what either
+  // would hide is said before saving.
   const rowPath = series === null ? null : `${paths.series}/${series.id}`;
   const typed = {
     startDate: values.startDate,
@@ -169,7 +169,7 @@ export function SeriesForm({
     void submit(values);
   }
 
-  /** Save, with today as the last day. */
+  /** Save, with Archive's last day. */
   async function archive(day: ISODate) {
     const next = { ...values, untilDate: day };
     setValues(next);

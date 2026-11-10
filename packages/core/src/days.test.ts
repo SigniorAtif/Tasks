@@ -55,26 +55,32 @@ describe('archived: a last day that has passed, in the user’s day', () => {
 });
 
 describe('Archive: the last day it sets', () => {
+  // Archive ends things yesterday, so the day you archive doesn't count.
   const today = '2026-11-10';
+  const yesterday = '2026-11-09';
 
-  it('is today for a group or series with no last day, or a later one', () => {
-    expect(archiveDay({ untilDate: null }, today)).toBe(today);
-    expect(archiveDay({ untilDate: '2026-11-27' }, today)).toBe(today);
+  it('is yesterday for a group or series with no last day, or a later one', () => {
+    expect(archiveDay({ untilDate: null }, today)).toBe(yesterday);
+    expect(archiveDay({ untilDate: '2026-11-27' }, today)).toBe(yesterday);
+    expect(archiveDay({ untilDate: today }, today)).toBe(yesterday);
   });
 
-  it('is nothing to set when the last day is already today or earlier: never later', () => {
-    expect(archiveDay({ untilDate: today }, today)).toBeUndefined();
+  it('is nothing to set when the last day is already yesterday or earlier: never later', () => {
+    expect(archiveDay({ untilDate: yesterday }, today)).toBeUndefined();
     expect(archiveDay({ untilDate: '2026-10-30' }, today)).toBeUndefined();
   });
 
-  it("is nothing when the group's last day is already today or earlier: the class has ended", () => {
-    const ended = { untilDate: '2026-10-30' };
-    expect(archiveDay({ untilDate: null }, today, ended)).toBeUndefined();
-    expect(archiveDay({ untilDate: null }, today, { untilDate: '2026-12-18' })).toBe(today);
+  it("is nothing when the group's last day is already yesterday or earlier: the class has ended", () => {
+    expect(archiveDay({ untilDate: null }, today, { untilDate: yesterday })).toBeUndefined();
+    expect(archiveDay({ untilDate: null }, today, { untilDate: today })).toBe(yesterday);
   });
 
-  it('is nothing for a series that starts after today: it can only be deleted', () => {
-    expect(archiveDay({ startDate: '2026-11-11', untilDate: null }, today)).toBeUndefined();
-    expect(archiveDay({ startDate: today, untilDate: null }, today)).toBe(today);
+  it('is nothing for a series that starts today or later: it can only be deleted', () => {
+    expect(archiveDay({ startDate: today, untilDate: null }, today)).toBeUndefined();
+    expect(archiveDay({ startDate: yesterday, untilDate: null }, today)).toBe(yesterday);
+  });
+
+  it('crosses month and year ends', () => {
+    expect(archiveDay({ untilDate: null }, '2027-01-01')).toBe('2026-12-31');
   });
 });
