@@ -4,6 +4,7 @@ import { type FormEvent, useRef, useState } from 'react';
 import {
   ArchiveSection,
   ColorSwatches,
+  DeleteSection,
   describedBy,
   Field,
   FormBanner,
@@ -12,8 +13,8 @@ import {
 } from '../components/form-controls.tsx';
 import { ApiError, describeSaveError } from '../lib/api.ts';
 import { hasProblems } from '../lib/form-problems.ts';
-import { useHiddenChangesNote } from '../lib/impact.ts';
-import { newId, useCreateGroup, useUpdateGroup } from '../lib/mutations.ts';
+import { useHasHistory, useHiddenChangesNote } from '../lib/impact.ts';
+import { newId, useCreateGroup, useDeleteGroup, useUpdateGroup } from '../lib/mutations.ts';
 import { useFormProblems } from '../lib/use-form-problems.ts';
 import { useSyncStatus } from '../lib/use-sync-status.ts';
 import {
@@ -42,9 +43,9 @@ const GROUP_GONE = "This group doesn't exist any more";
 
 /**
  * The form to make a group (`group` is `null`) or change one: name, colour,
- * attendance and last day, and Archive below the Save row (Delete joins it in
- * #14). Checks what was typed with the API's own schema before sending
- * anything, and goes back to Groups once it's saved.
+ * attendance and last day, with Archive and Delete below the Save row. Checks
+ * what was typed with the API's own schema before sending anything, and goes
+ * back to Groups once it's saved or deleted.
  */
 export function GroupForm({
   group,
@@ -69,7 +70,9 @@ export function GroupForm({
 
   const createGroup = useCreateGroup();
   const updateGroup = useUpdateGroup();
+  const deleteGroup = useDeleteGroup();
   const saving = createGroup.isPending || updateGroup.isPending;
+  const busy = saving || deleteGroup.isPending;
   const [archiving, setArchiving] = useState(false);
   const errors = problems.fields;
 
@@ -80,6 +83,7 @@ export function GroupForm({
   const archiveOn = group === null ? undefined : archiveDay({ untilDate: typedLastDay }, today);
   const hiddenByTyped = useHiddenChangesNote(rowPath, values.untilDate, initial.untilDate);
   const hiddenByArchive = useHiddenChangesNote(rowPath, archiveOn, initial.untilDate);
+  const hasHistory = useHasHistory(rowPath);
 
   function set<K extends keyof GroupFormValues>(key: K, value: GroupFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -104,7 +108,7 @@ export function GroupForm({
 
   /** Checks and sends `next`, then goes back to Groups. */
   async function submit(next: GroupFormValues) {
-    if (saving || !online) return;
+    if (busy || !online) return;
     reset();
 
     const found = checkGroupForm(next);
@@ -128,6 +132,18 @@ export function GroupForm({
       // The id is already used by a row we can't see (with UUIDv7, practically
       // never): make a new one for the next try.
       if (error instanceof ApiError && error.code === 'conflict') pendingId.current = undefined;
+      return showFailure(error);
+    }
+    await router.navigate({ to: '/groups' });
+  }
+
+  /** Deletes the group, with every class in it, then goes back to Groups. */
+  async function remove() {
+    if (group === null || busy || !online) return;
+    reset();
+    try {
+      await deleteGroup.mutateAsync(group.id);
+    } catch (error) {
       return showFailure(error);
     }
     await router.navigate({ to: '/groups' });
@@ -205,7 +221,7 @@ export function GroupForm({
 
       <SaveRow
         saving={saving && !archiving}
-        disabled={saving || !online}
+        disabled={busy || !online}
         offline={!online}
         cancelTo="groups"
       />
@@ -217,7 +233,20 @@ export function GroupForm({
           hiddenNote={hiddenByArchive}
           onArchive={() => void archive(archiveOn)}
           archiving={archiving}
-          disabled={saving || !online}
+          disabled={busy || !online}
+          offline={!online}
+        />
+      )}
+
+      {group !== null && (
+        <DeleteSection
+          what="group"
+          name={group.name}
+          hasHistory={hasHistory}
+          onDelete={() => void remove()}
+          deleting={deleteGroup.isPending}
+          onArchive={archiveOn === undefined ? undefined : () => void archive(archiveOn)}
+          disabled={busy || !online}
           offline={!online}
         />
       )}

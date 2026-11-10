@@ -7,21 +7,21 @@ import {
   type ScheduleGroup,
   type Series,
 } from '@tasks/core';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import {
   ArchiveSection,
   ColorSwatches,
+  DeleteSection,
   describedBy,
   Field,
   FieldNotes,
   FormBanner,
   inputClass,
-  OFFLINE_NOTE_ID,
   SaveRow,
 } from '../components/form-controls.tsx';
 import { ApiError, describeSaveError } from '../lib/api.ts';
 import { hasProblems, mergeProblems, NO_PROBLEMS } from '../lib/form-problems.ts';
-import { useHiddenChangesNote, useSeriesChangeNotes } from '../lib/impact.ts';
+import { useHasHistory, useHiddenChangesNote, useSeriesChangeNotes } from '../lib/impact.ts';
 import {
   newId,
   useCreateGroup,
@@ -101,7 +101,6 @@ export function SeriesForm({
   const [values, setValues] = useState<SeriesFormValues>(initial);
   const { problems, failure, banner, register, reset, clearProblem, showProblems, showFailure } =
     useFormProblems<FieldName>(firstProblemField);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Ids for the rows this form creates: made on the first Save and kept, so
   // pressing Save again after a failure re-sends the same ids (D-042).
@@ -133,6 +132,7 @@ export function SeriesForm({
         );
   const notes = useSeriesChangeNotes(rowPath, impactAsk(values, initial));
   const hiddenByArchive = useHiddenChangesNote(rowPath, archiveOn, initial.untilDate);
+  const hasHistory = useHasHistory(rowPath);
 
   const choices = selectableGroups(groups, today, series?.groupId);
   const makingGroup = values.groupId === NEW_GROUP;
@@ -489,89 +489,16 @@ export function SeriesForm({
 
       {series !== null && (
         <DeleteSection
-          confirming={confirmingDelete}
-          onConfirmingChange={setConfirmingDelete}
-          onDelete={remove}
+          what="class"
+          name={series.title}
+          hasHistory={hasHistory}
+          onDelete={() => void remove()}
           deleting={deleteSeries.isPending}
+          onArchive={archiveOn === undefined ? undefined : () => void archive(archiveOn)}
           disabled={busy || !online}
           offline={!online}
         />
       )}
     </form>
-  );
-}
-
-/**
- * Delete, in two steps without a pop-up: the first tap asks "Delete this
- * class?" in place, the second deletes. A mistaken tap costs nothing.
- */
-function DeleteSection({
-  confirming,
-  onConfirmingChange,
-  onDelete,
-  deleting,
-  disabled,
-  offline,
-}: {
-  confirming: boolean;
-  onConfirmingChange: (confirming: boolean) => void;
-  onDelete: () => void;
-  deleting: boolean;
-  disabled: boolean;
-  offline: boolean;
-}) {
-  const keepButton = useRef<HTMLButtonElement>(null);
-  // Moving to the question moves the focus to its safe answer.
-  useEffect(() => {
-    if (confirming) keepButton.current?.focus();
-  }, [confirming]);
-
-  const quiet =
-    'rounded-lg px-4 py-2.5 font-medium ring-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60';
-
-  return (
-    <section
-      aria-label="Delete this class"
-      className="mt-2 border-t border-slate-200 pt-5 dark:border-slate-800"
-    >
-      {confirming ? (
-        <div className="flex flex-col gap-3">
-          <p className="font-medium">Delete this class?</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Every week of it disappears from the calendar, past weeks too.
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={disabled}
-              aria-describedby={offline ? OFFLINE_NOTE_ID : undefined}
-              className={`${quiet} flex-1 bg-red-600 text-white ring-red-600 hover:bg-red-700 dark:bg-red-500 dark:ring-red-500`}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </button>
-            <button
-              ref={keepButton}
-              type="button"
-              onClick={() => onConfirmingChange(false)}
-              disabled={deleting}
-              className={`${quiet} text-slate-700 ring-slate-300 hover:bg-slate-100 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800`}
-            >
-              Keep it
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onConfirmingChange(true)}
-          disabled={disabled}
-          aria-describedby={offline ? OFFLINE_NOTE_ID : undefined}
-          className={`${quiet} w-full text-red-700 ring-red-200 hover:bg-red-50 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950`}
-        >
-          Delete this class
-        </button>
-      )}
-    </section>
   );
 }
