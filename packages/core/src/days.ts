@@ -30,3 +30,21 @@ export function localDateOf(epochMs: number, tzid: IanaZone, dayBoundary: WallTi
 export function isArchived(item: { untilDate: ISODate | null }, today: ISODate): boolean {
   return item.untilDate !== null && item.untilDate < today;
 }
+
+/**
+ * The last day Archive sets: the earlier of the current last day and `today`,
+ * so ending something never extends it. `undefined` when there's nothing to
+ * archive: it already ends today or earlier, by its own last day or, for a
+ * series, its group's; or a series starts after today (the database refuses a
+ * last day before the first, so it can only be deleted). Groups have no first day.
+ */
+export function archiveDay(
+  item: { untilDate: ISODate | null; startDate?: ISODate },
+  today: ISODate,
+  group?: { untilDate: ISODate | null },
+): ISODate | undefined {
+  if (item.startDate !== undefined && item.startDate > today) return undefined;
+  const endsBy = (lastDay: ISODate | null | undefined) => lastDay != null && lastDay <= today;
+  if (endsBy(item.untilDate) || endsBy(group?.untilDate)) return undefined;
+  return today;
+}
