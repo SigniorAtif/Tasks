@@ -105,16 +105,18 @@ function normaliseDays(days: readonly Weekday[]): Weekday[] {
   return WEEKDAYS.filter((day) => days.includes(day));
 }
 
+const weeklyRuleSchema = z.object({
+  freq: z.literal('weekly'),
+  interval: z.number().int().min(1).max(MAX_INTERVAL.weekly),
+  byDay: z.array(z.enum(WEEKDAYS)).min(1, 'pick at least one day').transform(normaliseDays),
+});
+
 export const ruleSchema = z.discriminatedUnion('freq', [
   z.object({
     freq: z.literal('daily'),
     interval: z.number().int().min(1).max(MAX_INTERVAL.daily),
   }),
-  z.object({
-    freq: z.literal('weekly'),
-    interval: z.number().int().min(1).max(MAX_INTERVAL.weekly),
-    byDay: z.array(z.enum(WEEKDAYS)).min(1, 'pick at least one day').transform(normaliseDays),
-  }),
+  weeklyRuleSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -237,6 +239,30 @@ export const calendarQuerySchema = z
  */
 export const impactQuerySchema = z.object({ lastDay: isoDateSchema.optional() });
 
+/**
+ * `GET /api/v1/series/:id/impact`: a series can also be asked about a new first day
+ * (`?firstDay=2026-10-01`), since moving it later hides what came before, and a new
+ * weekly timing (`?byDay=MO,FR&interval=2`, always the two together), which hides
+ * what was on the days it no longer produces.
+ */
+export const seriesImpactQuerySchema = impactQuerySchema
+  .extend({
+    firstDay: isoDateSchema.optional(),
+    byDay: z
+      .string()
+      .transform((days) => days.split(','))
+      .pipe(weeklyRuleSchema.shape.byDay)
+      .optional(),
+    interval: z.coerce.number().pipe(weeklyRuleSchema.shape.interval).optional(),
+  })
+  .superRefine(({ byDay, interval }, ctx) => {
+    if (byDay === undefined && interval !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['byDay'], message: 'is needed with interval' });
+    } else if (byDay !== undefined && interval === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['interval'], message: 'is needed with byDay' });
+    }
+  });
+
 // ---------------------------------------------------------------------------
 // One occurrence
 // ---------------------------------------------------------------------------
@@ -267,3 +293,10 @@ export type UpdateSeries = z.input<typeof updateSeriesSchema>;
 export type CalendarQuery = z.input<typeof calendarQuerySchema>;
 export type UpdateOccurrence = z.input<typeof updateOccurrenceSchema>;
 export type ImpactQuery = z.input<typeof impactQuerySchema>;
+
+/**
+ * A series' impact question as the server reads it: the days as a list, the
+ * interval a number. The PWA builds one from its form and writes it into the
+ * query string.
+ */
+export type SeriesImpactQuery = z.output<typeof seriesImpactQuerySchema>;

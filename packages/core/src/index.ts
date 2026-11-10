@@ -9,6 +9,7 @@ export {
   type Problem,
   type Profile,
   paths,
+  type SeriesImpact,
   type SeriesList,
 } from './api.ts';
 export { archiveDay, isArchived, localDateOf } from './days.ts';
@@ -50,6 +51,8 @@ export {
   isoDateSchema,
   MAX_CALENDAR_DAYS,
   ruleSchema,
+  type SeriesImpactQuery,
+  seriesImpactQuerySchema,
   type UpdateGroup,
   type UpdateOccurrence,
   type UpdateSeries,
