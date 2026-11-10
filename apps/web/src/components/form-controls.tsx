@@ -236,17 +236,12 @@ export function SaveRow({
   );
 }
 
-/** What Archive says it does, per kind of row (CONTEXT.md: a last day ends things). */
-const ARCHIVE_EFFECT = {
-  group: 'Every class in it ends today',
-  class: 'It ends today',
-};
-
 /**
- * Archive, below the Save row. One tap saves the form with `day` (today) as the
- * last day, so the other edits go with it; `hiddenNote` says beforehand what
- * that would hide. Nothing is erased: the weeks up to today stay on the calendar,
- * and a later last day brings back what it hid.
+ * Archive, below the Save row. One tap saves the form with `day` (yesterday) as
+ * the last day, so the day you archive doesn't count and the other edits go
+ * with it; `hiddenNote` says beforehand what that would hide. Nothing is
+ * erased: the weeks before stay on the calendar, and a later last day brings
+ * back what it hid.
  */
 export function ArchiveSection({
   what,
@@ -257,7 +252,7 @@ export function ArchiveSection({
   disabled,
   offline,
 }: {
-  what: keyof typeof ARCHIVE_EFFECT;
+  what: 'group' | 'class';
   day: ISODate;
   hiddenNote: string | undefined;
   onArchive: () => void;
@@ -282,7 +277,8 @@ export function ArchiveSection({
       </button>
       <div id={noteId} className="mt-2 text-sm">
         <p className="text-slate-600 dark:text-slate-400">
-          {ARCHIVE_EFFECT[what]}, {dateLabel(day)}. Everything up to then stays on the calendar.
+          Its last day becomes yesterday, {dateLabel(day)}, so today doesn't count. Everything up to
+          then stays on the calendar.
         </p>
         {hiddenNote !== undefined && (
           <p className="mt-1 text-amber-800 dark:text-amber-300">{hiddenNote}</p>

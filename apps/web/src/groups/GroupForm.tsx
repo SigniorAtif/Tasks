@@ -51,7 +51,7 @@ export function GroupForm({
   today,
 }: {
   group: ScheduleGroup | null;
-  /** The user's day (`todayFor`): the last day Archive sets. */
+  /** The user's day (`todayFor`): Archive ends the group the day before. */
   today: ISODate;
 }) {
   const router = useRouter();
@@ -73,7 +73,7 @@ export function GroupForm({
   const [archiving, setArchiving] = useState(false);
   const errors = problems.fields;
 
-  // Archive takes the earlier of the last day as typed and today, and what
+  // Archive takes the earlier of the last day as typed and yesterday, and what
   // either would hide is said before saving.
   const rowPath = group === null ? null : `${paths.groups}/${group.id}`;
   const typedLastDay = values.untilDate === '' ? null : values.untilDate;
@@ -92,7 +92,7 @@ export function GroupForm({
     void submit(values);
   }
 
-  /** Save, with today as the last day. */
+  /** Save, with Archive's last day. */
   async function archive(day: ISODate) {
     const next = { ...values, untilDate: day };
     setValues(next);
