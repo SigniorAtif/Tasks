@@ -23,7 +23,7 @@ describe('hiddenChangesNote', () => {
 
 describe('seriesChangeNotes', () => {
   it('words each warning for what was asked, by what it hides', () => {
-    const impact = { changesAfter: 2, changesBefore: 1, changesOffTiming: 3 };
+    const impact = { changesAfter: 2, changesBefore: 1, changesOffTiming: 3, hasHistory: true };
     expect(
       seriesChangeNotes(impact, {
         firstDay: '2026-10-01',
@@ -40,13 +40,13 @@ describe('seriesChangeNotes', () => {
   });
 
   it('says nothing about what hides nothing, or what was not asked', () => {
-    const impact = { changesAfter: 3, changesBefore: 0, changesOffTiming: 0 };
+    const impact = { changesAfter: 3, changesBefore: 0, changesOffTiming: 0, hasHistory: true };
     expect(seriesChangeNotes(impact, { firstDay: '2026-10-01' })).toEqual({});
   });
 
   it('warns under First day when a new first day alone moves the class off a change', () => {
     // Every 2 weeks counts from the first day's week: a week later, the class meets the other weeks.
-    const impact = { changesAfter: 0, changesBefore: 1, changesOffTiming: 2 };
+    const impact = { changesAfter: 0, changesBefore: 1, changesOffTiming: 2, hasHistory: true };
     expect(seriesChangeNotes(impact, { firstDay: '2026-07-20' })).toEqual({
       firstDay:
         '1 change before 20 Jul 2026 will stop showing. An earlier date brings it back. ' +

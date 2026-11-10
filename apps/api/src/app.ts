@@ -72,8 +72,8 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   for (const prefix of [paths.groups, paths.series, paths.calendar, paths.occurrences]) {
     app.use(`${prefix}/*`, scoped);
   }
-  groupsRoutes(app);
-  seriesRoutes(app, { db });
+  groupsRoutes(app, { db, now });
+  seriesRoutes(app, { db, now });
   calendarRoute(app);
   occurrenceRoutes(app);
 

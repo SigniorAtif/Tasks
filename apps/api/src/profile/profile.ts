@@ -3,7 +3,7 @@
 // can never read another user's row (A10: no row-level security yet; this
 // rule, and the cross-user test, stand in for it).
 
-import { DEFAULT_PROFILE, type Profile } from '@tasks/core';
+import { DEFAULT_PROFILE, type ISODate, localDateOf, type Profile } from '@tasks/core';
 import { eq } from 'drizzle-orm';
 import type { Database } from '../db/client.ts';
 import { profile } from '../db/schema.ts';
@@ -34,4 +34,10 @@ export async function getProfile(db: Database, userId: string): Promise<Profile>
   if (existing) return existing;
   await ensureProfile(db, userId);
   return (await findProfile(db, userId)) ?? DEFAULT_PROFILE;
+}
+
+/** The user's day at `now` (`localDateOf`): in their zone, from their day boundary. */
+export async function todayOf(db: Database, userId: string, now: Date): Promise<ISODate> {
+  const { tzid, dayBoundary } = await getProfile(db, userId);
+  return localDateOf(now.getTime(), tzid, dayBoundary);
 }

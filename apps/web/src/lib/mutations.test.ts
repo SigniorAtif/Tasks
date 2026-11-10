@@ -5,6 +5,7 @@ import { occurrence } from '../calendar/model/test-builders.ts';
 import { ApiError } from './api.ts';
 import {
   changeOccurrence,
+  deleteGroup,
   deleteSeries,
   invalidateAfterWrite,
   newId,
@@ -90,24 +91,24 @@ describe('updateGroup', () => {
   });
 });
 
-describe('deleteSeries', () => {
+describe.each([
+  ['deleteSeries', deleteSeries, '/api/v1/series/x'],
+  ['deleteGroup', deleteGroup, '/api/v1/groups/x'],
+])('%s', (_name, deleteRow, path) => {
   it('sends DELETE and accepts 204', async () => {
     const fetchMock = answerWith(204);
-    await expect(deleteSeries('x')).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/series/x',
-      expect.objectContaining({ method: 'DELETE' }),
-    );
+    await expect(deleteRow('x')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(path, expect.objectContaining({ method: 'DELETE' }));
   });
 
   it('counts a 404 as done: an earlier try already deleted it', async () => {
     answerWith(404, { code: 'not_found', title: 'Not found', status: 404, requestId: 'r' });
-    await expect(deleteSeries('x')).resolves.toBeUndefined();
+    await expect(deleteRow('x')).resolves.toBeUndefined();
   });
 
   it('still fails on any other error', async () => {
     answerWith(500, { code: 'internal_error', title: 'Oops', status: 500, requestId: 'r' });
-    await expect(deleteSeries('x')).rejects.toBeInstanceOf(ApiError);
+    await expect(deleteRow('x')).rejects.toBeInstanceOf(ApiError);
   });
 });
 

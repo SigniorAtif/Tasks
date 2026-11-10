@@ -1,7 +1,8 @@
 // The building blocks every form draws with: a labelled field with its hint
 // and error, the colour swatches, the banner for a failed save and the Save
-// row. They only draw; the forms (series/SeriesForm.tsx, groups/GroupForm.tsx)
-// own the values.
+// row, and Archive and Delete below it. They only draw; the forms
+// (series/SeriesForm.tsx, groups/GroupForm.tsx) own the values. The one
+// exception is Delete's question, which keeps its own typed name.
 //
 // Accessibility, the same way everywhere: every input has a <label>; its hint
 // and its error are linked with `aria-describedby`, so a screen reader reads
@@ -11,10 +12,11 @@
 
 import { Link } from '@tanstack/react-router';
 import { COLOR_TOKENS, type ColorToken, type ISODate } from '@tasks/core';
-import type { ReactNode, Ref } from 'react';
+import { type ReactNode, type Ref, useEffect, useRef, useState } from 'react';
 import { dateLabel } from '../calendar/model/format.ts';
 import { groupColor } from '../calendar/model/palette.ts';
 import type { ErrorText } from '../lib/api.ts';
+import { nameMatches } from '../lib/name-match.ts';
 import { BACK, type BackTo } from './ScreenFrame.tsx';
 
 /** The look of every text, date, time, number and select input. 16px text: iOS zooms in on less. */
@@ -236,6 +238,13 @@ export function SaveRow({
   );
 }
 
+/** The buttons below the Save row: outlined, so Save stays the one filled button. */
+const quietButton =
+  'rounded-lg px-4 py-2.5 font-medium ring-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60';
+const neutralTone =
+  'text-slate-700 ring-slate-300 hover:bg-slate-100 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800';
+const belowSaveRow = 'mt-2 border-t border-slate-200 pt-5 dark:border-slate-800';
+
 /**
  * Archive, below the Save row. One tap saves the form with `day` (yesterday) as
  * the last day, so the day you archive doesn't count and the other edits go
@@ -262,16 +271,13 @@ export function ArchiveSection({
 }) {
   const noteId = 'archive-note';
   return (
-    <section
-      aria-label={`Archive this ${what}`}
-      className="mt-2 border-t border-slate-200 pt-5 dark:border-slate-800"
-    >
+    <section aria-label={`Archive this ${what}`} className={belowSaveRow}>
       <button
         type="button"
         onClick={onArchive}
         disabled={disabled}
         aria-describedby={offline ? `${noteId} ${OFFLINE_NOTE_ID}` : noteId}
-        className="w-full rounded-lg px-4 py-2.5 font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800"
+        className={`${quietButton} ${neutralTone} w-full`}
       >
         {archiving ? 'Archiving…' : `Archive this ${what}`}
       </button>
@@ -283,6 +289,153 @@ export function ArchiveSection({
         {hiddenNote !== undefined && (
           <p className="mt-1 text-amber-800 dark:text-amber-300">{hiddenNote}</p>
         )}
+      </div>
+    </section>
+  );
+}
+
+/** What Delete takes with it, said before the second tap. */
+const DELETE_LOSES = {
+  group:
+    'Every class in it goes too, and every week of them leaves the calendar, past weeks included.',
+  class: 'Every week of it disappears from the calendar, past weeks too.',
+};
+
+/**
+ * Delete, below Archive, in two steps without a pop-up: the first tap asks in
+ * place, the second deletes. When deleting would lose history (`hasHistory`:
+ * a past week, or any change), the second step also asks for the name, so a
+ * semester can't go in two quick taps. Nothing to lose, a plain confirm. Not
+ * known yet (`undefined`), it asks for the name: the safer of the two. And
+ * whenever Archive is possible (`onArchive`), the question offers it instead.
+ */
+export function DeleteSection({
+  what,
+  name,
+  hasHistory,
+  onDelete,
+  deleting,
+  onArchive,
+  disabled,
+  offline,
+}: {
+  what: 'group' | 'class';
+  /** The saved name: the one the user knows it by, whatever the form now says. */
+  name: string;
+  hasHistory: boolean | undefined;
+  onDelete: () => void;
+  deleting: boolean;
+  onArchive: (() => void) | undefined;
+  disabled: boolean;
+  offline: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState('');
+  const askName = hasHistory !== false;
+  const allowed = !askName || nameMatches(name, typed);
+
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  // The focus follows the question: into it when it opens (the name box, or
+  // the safe answer when there's none, also if the box goes because the answer
+  // came late), and back to the button that asked once it's closed.
+  const asked = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: askName swaps the name box in or out
+  useEffect(() => {
+    if (confirming) (nameInput.current ?? keepButton.current)?.focus();
+    else if (asked.current) deleteButton.current?.focus();
+    asked.current = confirming;
+  }, [confirming, askName]);
+
+  function keep() {
+    setConfirming(false);
+    setTyped('');
+  }
+
+  if (!confirming) {
+    return (
+      <section aria-label={`Delete this ${what}`} className={belowSaveRow}>
+        <button
+          ref={deleteButton}
+          type="button"
+          onClick={() => setConfirming(true)}
+          disabled={disabled}
+          aria-describedby={offline ? OFFLINE_NOTE_ID : undefined}
+          className={`${quietButton} w-full text-red-700 ring-red-200 hover:bg-red-50 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950`}
+        >
+          Delete this {what}
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label={`Delete this ${what}`} className={`${belowSaveRow} flex flex-col gap-3`}>
+      <p className="font-medium">Delete this {what}?</p>
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        {DELETE_LOSES[what]} This can't be undone.
+        {onArchive !== undefined && ' Archive ends it and keeps everything up to yesterday.'}
+      </p>
+      {askName && (
+        <div>
+          <label htmlFor="delete-name" className="mb-1 block text-sm font-medium">
+            Type its name to delete it: <span className="break-words font-semibold">{name}</span>
+          </label>
+          <input
+            id="delete-name"
+            ref={nameInput}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            // Enter here would save the form: it deletes instead, once the name is right.
+            // Not the Enter that picks a word while composing (Japanese, Chinese…).
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              if (allowed && !disabled) onDelete();
+            }}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-describedby="delete-name-hint"
+            className={inputClass}
+          />
+          <p id="delete-name-hint" className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Capitals, spaces and symbols don't matter.
+          </p>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={disabled || !allowed}
+          aria-describedby={offline ? OFFLINE_NOTE_ID : undefined}
+          className={`${quietButton} flex-1 bg-red-600 text-white ring-red-600 hover:bg-red-700 dark:bg-red-500 dark:ring-red-500`}
+        >
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
+        {onArchive !== undefined && (
+          <button
+            type="button"
+            onClick={onArchive}
+            disabled={disabled}
+            aria-describedby={offline ? OFFLINE_NOTE_ID : undefined}
+            className={`${quietButton} ${neutralTone}`}
+          >
+            Archive instead
+          </button>
+        )}
+        <button
+          ref={keepButton}
+          type="button"
+          onClick={keep}
+          disabled={deleting}
+          className={`${quietButton} ${neutralTone}`}
+        >
+          Keep it
+        </button>
       </div>
     </section>
   );
