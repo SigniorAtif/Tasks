@@ -79,18 +79,24 @@ export function updateSeries({ id, changes }: { id: string; changes: UpdateSerie
 }
 
 /**
- * `DELETE /api/v1/series/:id`. A 404 counts as done: the class is gone either
+ * `DELETE` the row at `path`. A 404 counts as done: the row is gone either
  * way. That happens when an earlier try worked but its answer was lost, so the
  * user tapped Delete again.
  */
-export async function deleteSeries(id: string): Promise<void> {
+async function deleteRow(path: string): Promise<void> {
   try {
-    await apiSend<undefined>('DELETE', `${paths.series}/${id}`);
+    await apiSend<undefined>('DELETE', path);
   } catch (error) {
     if (error instanceof ApiError && error.code === 'not_found') return;
     throw error;
   }
 }
+
+/** `DELETE /api/v1/series/:id`: the series and its overrides. */
+export const deleteSeries = (id: string) => deleteRow(`${paths.series}/${id}`);
+
+/** `DELETE /api/v1/groups/:id`: the group, its series and their overrides. */
+export const deleteGroup = (id: string) => deleteRow(`${paths.groups}/${id}`);
 
 /** A change to one occurrence, named by its series and the date the rule generated (D-022). */
 export interface OccurrenceChange {
@@ -144,6 +150,15 @@ export function useUpdateGroup() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: updateGroup,
+    onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
+  });
+}
+
+/** Its series go with it, off the calendar and the series list. */
+export function useDeleteGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteGroup,
     onSuccess: () => invalidateAfterWrite(queryClient, { groups: true }),
   });
 }

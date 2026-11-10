@@ -1,6 +1,7 @@
 // What a change to a group or series would hide, for their forms: the server's
 // count (`GET .../impact`, which sees every date, where the phone holds only the
-// weeks it has loaded) and the sentences a form shows before saving.
+// weeks it has loaded) and the sentences a form shows before saving. The same
+// read says whether Delete would lose anything (`useHasHistory`).
 
 import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 import type { Impact, ISODate, SeriesImpact, SeriesImpactQuery } from '@tasks/core';
@@ -18,7 +19,7 @@ const halfTyped = (date: ISODate | undefined) => date !== undefined && date < '1
  * What the change in `ask` would hide in the row at `rowPath` (`/api/v1/groups/<id>`,
  * asked only about a `lastDay` and answered with an `Impact`, or `/api/v1/series/<id>`,
  * with a `SeriesImpact`). Without both, or while a year is half typed, it asks
- * nothing. Not kept for offline (persist.ts): a form asks again each time it opens.
+ * nothing. An empty `ask` asks about no change: only `hasHistory` matters then. Not kept for offline (persist.ts): a form asks again each time it opens.
  */
 export function impactQuery<T extends Impact = Impact>(
   rowPath: string | null,
@@ -102,6 +103,14 @@ export function useHiddenChangesNote(
   );
   if (data === undefined || asking === undefined) return undefined;
   return hiddenChangesNote(data.changesAfter, asking);
+}
+
+/**
+ * Whether deleting the saved row at `rowPath` would lose anything (`Impact.hasHistory`).
+ * `undefined` until the answer is in, and if it never comes.
+ */
+export function useHasHistory(rowPath: string | null): boolean | undefined {
+  return useQuery(impactQuery(rowPath, {})).data?.hasHistory;
 }
 
 /** The series form's warnings for `ask`, what its edit would change (`undefined`: nothing). */
