@@ -497,6 +497,7 @@ export function SeriesForm({
           onArchive={archiveOn === undefined ? undefined : () => void archive(archiveOn)}
           disabled={busy || !online}
           offline={!online}
+          today={today}
         />
       )}
     </form>

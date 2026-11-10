@@ -17,6 +17,7 @@ import { dateLabel } from '../calendar/model/format.ts';
 import { groupColor } from '../calendar/model/palette.ts';
 import type { ErrorText } from '../lib/api.ts';
 import { nameMatches } from '../lib/name-match.ts';
+import { quip } from '../lib/quips.ts';
 import { BACK, type BackTo } from './ScreenFrame.tsx';
 
 /** The look of every text, date, time, number and select input. 16px text: iOS zooms in on less. */
@@ -318,6 +319,7 @@ export function DeleteSection({
   onArchive,
   disabled,
   offline,
+  today,
 }: {
   what: 'group' | 'class';
   /** The saved name: the one the user knows it by, whatever the form now says. */
@@ -328,6 +330,8 @@ export function DeleteSection({
   onArchive: (() => void) | undefined;
   disabled: boolean;
   offline: boolean;
+  /** The user's day (`todayFor`): which quip sits under the question. */
+  today: ISODate;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState('');
@@ -372,7 +376,12 @@ export function DeleteSection({
 
   return (
     <section aria-label={`Delete this ${what}`} className={`${belowSaveRow} flex flex-col gap-3`}>
-      <p className="font-medium">Delete this {what}?</p>
+      <p className="font-medium">
+        Delete this {what}?{' '}
+        <span className="font-normal text-slate-500 dark:text-slate-400">
+          {quip('confirmDelete', today)}
+        </span>
+      </p>
       <p className="text-sm text-slate-600 dark:text-slate-400">
         {DELETE_LOSES[what]} This can't be undone.
         {onArchive !== undefined && ' Archive ends it and keeps everything up to yesterday.'}

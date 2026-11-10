@@ -248,6 +248,7 @@ export function GroupForm({
           onArchive={archiveOn === undefined ? undefined : () => void archive(archiveOn)}
           disabled={busy || !online}
           offline={!online}
+          today={today}
         />
       )}
     </form>
