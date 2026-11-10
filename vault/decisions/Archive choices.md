@@ -82,7 +82,7 @@ The spec's sentence was "3 changes after 20 Nov will stop showing. They're kept:
 ## Not in this ticket
 
 - **Delete** (#14) asks the same read without a date, for `hasHistory`. Without `lastDay` the count is 0, ready for it. Archive's button repeats Delete's classes; #14 brings Delete to the group form, which is the moment to share them.
-- **Warnings for a new first day or a new timing** (#13) extend `stopShowing` and the read with more of the series' fields.
+- **Warnings for a new first day or a new timing** (#13) extend the read with more of the series' fields. `stopShowing` needed no change: given the whole proposed series, it already accounts for them. See [[Series warning choices]].
 
 ## Check yourself
 

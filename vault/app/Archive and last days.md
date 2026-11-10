@@ -141,7 +141,7 @@ The phone holds only the weeks it has loaded ([[Offline reads]]), and a cancel c
   return { changesAfter: stopShowing(overrides, current, proposed).length };
 ```
 
-`{ ...group, untilDate: … }` copies the group with one field replaced; nothing is saved. `lastDay ?? group.untilDate` keeps the saved last day when none was asked about, so `current` and `proposed` are the same and the count is 0. #14 will ask that way, when Delete needs to know whether a group has any history at all. `seriesImpact` is the same for one class and its own last day.
+`{ ...group, untilDate: … }` copies the group with one field replaced; nothing is saved. `lastDay ?? group.untilDate` keeps the saved last day when none was asked about, so `current` and `proposed` are the same and the count is 0. #14 will ask that way, when Delete needs to know whether a group has any history at all. `seriesImpact` is the same for one class and its own last day. Since #13 it can also be asked about a new first day and a new timing: [[Series change warnings]].
 
 *From `apps/api/src/routes/groups.ts`:*
 ```ts
@@ -171,30 +171,37 @@ The 18th is on or before the 20th, so it stays.
 
 ## In the forms
 
-*From `apps/web/src/lib/impact.ts`:*
+*From `apps/web/src/lib/impact.ts` (shortened):*
 ```ts
-export function impactQuery(rowPath: string | null, lastDay: ISODate | undefined) {
+export function impactQuery<T extends Impact = Impact>(
+  rowPath: string | null,
+  ask: SeriesImpactQuery | undefined,
+) {
   return queryOptions({
-    queryKey: ['impact', rowPath, lastDay],
+    queryKey: ['impact', rowPath, ask],
     // Dropped as soon as no form shows it: a count from an earlier visit could
     // be out of date (a new cancel, another last day) and flash before the refetch.
     gcTime: 0,
     queryFn:
-      rowPath === null || lastDay === undefined
+      rowPath === null || ask === undefined || halfTyped(ask.lastDay) || halfTyped(ask.firstDay)
         ? skipToken
-        : ({ signal }) =>
-            apiGet<Impact>(`${rowPath}/impact?${new URLSearchParams({ lastDay })}`, { signal }),
+        : ({ signal }) => {
+            // …the question as a query string, `lastDay=2026-11-20`
+            return apiGet<T>(`${rowPath}/impact?${new URLSearchParams(search)}`, { signal });
+          },
   });
 }
 ```
 
+`ask` is the question, `{ lastDay: '2026-11-20' }` for a last day. #13 widened it to a series' first day and timing, and added `halfTyped`, which waits while a year is still being typed; [[Series change warnings]] explains both. `T` is the answer's type: `Impact` for a group, `SeriesImpact` for a series.
+
 What to notice:
-- **One cache entry per date, dropped once unused.** The key holds `lastDay`, so each date is its own query ([[Server state and caching]]). Type 20 Nov, then 25 Nov, then 20 Nov again, and three requests go: once the field moves to 25 Nov, nothing shows the 20 Nov answer, and `gcTime: 0` drops it straight away.
+- **One cache entry per date, dropped once unused.** The key holds `ask`, so each date is its own query ([[Server state and caching]]). Type 20 Nov, then 25 Nov, then 20 Nov again, and three requests go: once the field moves to 25 Nov, nothing shows the 20 Nov answer, and `gcTime: 0` drops it straight away.
 - **`skipToken`** is TanStack Query's "don't ask yet". A new group has no row to ask about (`rowPath` is `null`), and an empty field has no date; then the query sits idle instead of sending a request that can only fail.
 - **`gcTime: 0`.** The app keeps every other query forever and saves it for offline (`gcTime: Infinity`, [[Offline reads]]). A count is different: it goes stale the moment someone cancels a class, so it's dropped as soon as nothing shows it. It's also left out of the offline copy, which keeps only the queries named in `persist.ts` (`me`, `groups`, `series`, `calendar`). Writes need a connection anyway, so offline there's nothing to warn about.
 - **`signal`** lets TanStack Query cancel the request if you type another date before the answer comes. `URLSearchParams` builds `lastDay=2026-11-20` with any escaping done for us.
 
-`useHiddenChangesNote(rowPath, lastDay, saved)` asks only when the date differs from the saved one, and turns the answer into the sentence: "1 change after 14 Nov 2026 will stop showing. A later date brings it back.", or nothing for 0. Each form calls it twice: once for the typed date, once for Archive's.
+`useHiddenChangesNote(rowPath, lastDay, saved)` asks only when the date differs from the saved one, and turns the answer into the sentence: "1 change after 14 Nov 2026 will stop showing. A later date brings it back.", or nothing for 0. The group form calls it twice: once for the typed date, once for Archive's. The series form uses it only for Archive's day; since #13 it asks about everything typed at once ([[Series change warnings]]).
 
 *From `apps/web/src/groups/GroupForm.tsx` (shortened):*
 ```tsx
