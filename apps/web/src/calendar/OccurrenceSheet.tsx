@@ -11,7 +11,7 @@
 // a bottom sheet on a phone and a dialog in the middle of the screen from 768 px.
 
 import { Link } from '@tanstack/react-router';
-import type { IanaZone, Occurrence, ScheduleGroup, UpdateOccurrence } from '@tasks/core';
+import type { IanaZone, ISODate, Occurrence, ScheduleGroup, UpdateOccurrence } from '@tasks/core';
 import { useEffect, useId, useRef } from 'react';
 import { longDayLabel, timeRangeLabel } from './model/format.ts';
 import { type CancelButton, sheetActions } from './model/sheet.ts';
@@ -21,6 +21,7 @@ export function OccurrenceSheet({
   waiting,
   group,
   zone,
+  today,
   onClose,
   onChange,
 }: {
@@ -31,6 +32,8 @@ export function OccurrenceSheet({
   /** Its group. Until the groups have loaded, the sheet offers no actions. */
   group: Pick<ScheduleGroup, 'attendance'> | undefined;
   zone: IanaZone;
+  /** The user's day (`todayFor`): which lines Prof and Me carry. */
+  today: ISODate;
   /** The sheet closed, by a button, Escape, a tap outside it, or after an action. */
   onClose: () => void;
   /** An action was tapped: queue this change. The sheet then closes itself. */
@@ -51,7 +54,7 @@ export function OccurrenceSheet({
     return () => sheet.removeEventListener('click', closeOnBackdrop);
   }, []);
 
-  const actions = group ? sheetActions(occurrence, group) : null;
+  const actions = group ? sheetActions(occurrence, group, today) : null;
 
   const send = (change: UpdateOccurrence) => {
     onChange(change);

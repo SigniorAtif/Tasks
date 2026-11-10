@@ -5,6 +5,8 @@ const TOAST_MS = 8_000;
 
 export interface ToastMessage {
   text: string;
+  /** A second, quieter line under the text (lib/quips.ts). The text alone says what happened. */
+  quip?: string;
   /** One button, such as Undo. Tapping it also dismisses the toast. */
   action?: { label: string; onClick: () => void };
 }
@@ -37,7 +39,14 @@ export function Toast({
     >
       {message !== null && (
         <div className="pointer-events-auto flex max-w-sm items-center gap-4 rounded-xl bg-slate-900 py-2 pr-2 pl-4 text-sm text-white shadow-lg dark:bg-slate-100 dark:text-slate-900">
-          <span className="min-w-0 flex-1">{message.text}</span>
+          <span className="min-w-0 flex-1">
+            {message.text}
+            {message.quip && (
+              <span className="block text-xs text-slate-300 dark:text-slate-600">
+                {message.quip}
+              </span>
+            )}
+          </span>
           {message.action && (
             <button
               type="button"
