@@ -4,6 +4,7 @@ import type {
   Problem,
   ScheduleGroup,
   Series,
+  SeriesImpact,
   UpdateOccurrence,
 } from '@tasks/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,11 +61,15 @@ async function cancel(client: Client, seriesId: string, ...dates: string[]): Pro
   }
 }
 
-async function impact(client: Client, path: string, lastDay?: string): Promise<Impact> {
-  const query = lastDay === undefined ? '' : `?lastDay=${lastDay}`;
-  const response = await client.get(`${path}/impact${query}`);
+/** What the change in `ask` (`{ lastDay: '2026-11-20' }`, …) would hide in the row at `path`. */
+async function impact(
+  client: Client,
+  path: string,
+  ask: Record<string, string> = {},
+): Promise<Impact | SeriesImpact> {
+  const response = await client.get(`${path}/impact?${new URLSearchParams(ask)}`);
   expect(response.status).toBe(200);
-  return json<Impact>(response);
+  return json<Impact | SeriesImpact>(response);
 }
 
 /** What the calendar shows for one series in the week of Mon 23 Nov, by original date. */
@@ -85,7 +90,7 @@ describe('GET /api/v1/groups/:id/impact', () => {
     await cancel(client, ds.id, '2026-11-18', '2026-11-23', '2026-11-25');
     await cancel(client, lab.id, '2026-11-26');
 
-    expect(await impact(client, `${GROUPS}/${group.id}`, '2026-11-20')).toEqual({
+    expect(await impact(client, `${GROUPS}/${group.id}`, { lastDay: '2026-11-20' })).toEqual({
       changesAfter: 3,
     });
   });
@@ -95,7 +100,7 @@ describe('GET /api/v1/groups/:id/impact', () => {
     await cancel(client, ds.id, '2026-11-23');
 
     expect(await impact(client, `${GROUPS}/${group.id}`)).toEqual({ changesAfter: 0 });
-    expect(await impact(client, `${GROUPS}/${group.id}`, '2026-11-23')).toEqual({
+    expect(await impact(client, `${GROUPS}/${group.id}`, { lastDay: '2026-11-23' })).toEqual({
       changesAfter: 0,
     });
   });
@@ -106,10 +111,10 @@ describe('GET /api/v1/groups/:id/impact', () => {
     await client.patch(`${GROUPS}/${group.id}`, { untilDate: '2026-11-27' });
 
     // 30 Nov is hidden already; only 23 Nov would stop showing now.
-    expect(await impact(client, `${GROUPS}/${group.id}`, '2026-11-20')).toEqual({
+    expect(await impact(client, `${GROUPS}/${group.id}`, { lastDay: '2026-11-20' })).toEqual({
       changesAfter: 1,
     });
-    expect(await impact(client, `${GROUPS}/${group.id}`, '2026-12-31')).toEqual({
+    expect(await impact(client, `${GROUPS}/${group.id}`, { lastDay: '2026-12-31' })).toEqual({
       changesAfter: 0,
     });
   });
@@ -135,11 +140,15 @@ describe('GET /api/v1/series/:id/impact', () => {
     await cancel(client, ds.id, '2026-11-18', '2026-11-23', '2026-11-25');
     await cancel(client, lab.id, '2026-11-26');
 
-    expect(await impact(client, `${SERIES}/${ds.id}`, '2026-11-20')).toEqual({
+    expect(await impact(client, `${SERIES}/${ds.id}`, { lastDay: '2026-11-20' })).toEqual({
       changesAfter: 2,
+      changesBefore: 0,
+      changesOffTiming: 0,
     });
-    expect(await impact(client, `${SERIES}/${lab.id}`, '2026-11-20')).toEqual({
+    expect(await impact(client, `${SERIES}/${lab.id}`, { lastDay: '2026-11-20' })).toEqual({
       changesAfter: 1,
+      changesBefore: 0,
+      changesOffTiming: 0,
     });
   });
 
@@ -147,6 +156,125 @@ describe('GET /api/v1/series/:id/impact', () => {
     const { client } = await withTimetable();
     const unknown = await client.get(`${SERIES}/${newId()}/impact`);
     expect(unknown.status).toBe(404);
+  });
+});
+
+// Edge cases 2 and 3 of spec #6: Data Structures runs Mon, Wed and Fri since 13 Jul.
+describe('GET /api/v1/series/:id/impact: a new first day or timing', () => {
+  it('counts the changes before a later first day', async () => {
+    const { client, ds } = await withTimetable();
+    await cancel(client, ds.id, '2026-09-09', '2026-10-05');
+
+    expect(await impact(client, `${SERIES}/${ds.id}`, { firstDay: '2026-10-01' })).toEqual({
+      changesAfter: 0,
+      changesBefore: 1,
+      changesOffTiming: 0,
+    });
+  });
+
+  it('counts the changes on days the new days leave out', async () => {
+    const { client, ds } = await withTimetable();
+    await cancel(client, ds.id, '2026-09-09', '2026-09-11');
+
+    // Mon and Fri only: the Wednesday cancel stops showing, the Friday one stays.
+    expect(await impact(client, `${SERIES}/${ds.id}`, { byDay: 'MO,FR', interval: '1' })).toEqual({
+      changesAfter: 0,
+      changesBefore: 0,
+      changesOffTiming: 1,
+    });
+  });
+
+  it("counts the changes in weeks a new interval doesn't produce", async () => {
+    const { client, ds } = await withTimetable();
+    await cancel(client, ds.id, '2026-09-09', '2026-09-14');
+
+    // Every 2 weeks counts from the week of 13 Jul: the week of 7 Sep stays, 14 Sep goes.
+    expect(
+      await impact(client, `${SERIES}/${ds.id}`, { byDay: 'MO,WE,FR', interval: '2' }),
+    ).toEqual({ changesAfter: 0, changesBefore: 0, changesOffTiming: 1 });
+  });
+
+  it('counts the changes in weeks a new first day moves an every-2-weeks class off', async () => {
+    const { client, lab } = await withTimetable();
+    await client.patch(`${SERIES}/${lab.id}`, {
+      rule: { freq: 'weekly', interval: 2, byDay: ['TH'] },
+    });
+    await cancel(client, lab.id, '2026-09-24');
+
+    // Every 2 weeks counts from the first day's week. From 13 Jul the lab meets on
+    // Thu 24 Sep; from 20 Jul on 17 Sep and 1 Oct instead.
+    expect(await impact(client, `${SERIES}/${lab.id}`, { firstDay: '2026-07-20' })).toEqual({
+      changesAfter: 0,
+      changesBefore: 0,
+      changesOffTiming: 1,
+    });
+  });
+
+  it('counts nothing for a change that hides nothing', async () => {
+    const { client, ds } = await withTimetable();
+    await cancel(client, ds.id, '2026-09-09', '2026-09-14');
+
+    // An earlier first day, the same days written another way, a later last day.
+    expect(
+      await impact(client, `${SERIES}/${ds.id}`, {
+        firstDay: '2026-07-01',
+        byDay: 'FR,WE,MO',
+        interval: '1',
+        lastDay: '2026-12-31',
+      }),
+    ).toEqual({ changesAfter: 0, changesBefore: 0, changesOffTiming: 0 });
+  });
+
+  it('counts each change once, by its date: before the first day, after the last, or else the timing', async () => {
+    const { client, ds } = await withTimetable();
+    await cancel(client, ds.id, '2026-09-09', '2026-09-14', '2026-09-16', '2026-11-25');
+
+    // Wed 9 Sep is before the new first day (and on a Wednesday): it counts as before.
+    // Mon 14 Sep still happens. Wed 16 Sep is off the new days. Wed 25 Nov is after the last day.
+    expect(
+      await impact(client, `${SERIES}/${ds.id}`, {
+        firstDay: '2026-09-10',
+        byDay: 'MO,FR',
+        interval: '1',
+        lastDay: '2026-11-20',
+      }),
+    ).toEqual({ changesAfter: 1, changesBefore: 1, changesOffTiming: 1 });
+  });
+
+  it('refuses a timing that is half there or not a timing', async () => {
+    const { client, ds } = await withTimetable();
+    const ask = (query: string) => client.get(`${SERIES}/${ds.id}/impact?${query}`);
+
+    expect((await json<Problem>(await ask('byDay=MO'))).errors).toEqual([
+      { path: 'interval', message: 'is needed with byDay' },
+    ]);
+    expect((await json<Problem>(await ask('interval=2'))).errors).toEqual([
+      { path: 'byDay', message: 'is needed with interval' },
+    ]);
+    for (const query of ['byDay=XX&interval=1', 'byDay=&interval=1', 'byDay=MO&interval=0']) {
+      expect((await ask(query)).status, query).toBe(422);
+    }
+  });
+});
+
+describe('PATCH /api/v1/series/:id: new days hide, never erase', () => {
+  it('keeps the changes new days hide, and the old days bring them back', async () => {
+    const { client, ds } = await withTimetable();
+    await cancel(client, ds.id, '2026-11-25');
+
+    const moved = await client.patch(`${SERIES}/${ds.id}`, {
+      rule: { freq: 'weekly', interval: 1, byDay: ['MO', 'FR'] },
+    });
+    expect(moved.status).toBe(200);
+    expect(await lastWeek(client, ds.id)).toEqual({
+      '2026-11-23': 'scheduled',
+      '2026-11-27': 'scheduled',
+    });
+
+    await client.patch(`${SERIES}/${ds.id}`, {
+      rule: { freq: 'weekly', interval: 1, byDay: ['MO', 'WE', 'FR'] },
+    });
+    expect(await lastWeek(client, ds.id)).toMatchObject({ '2026-11-25': 'cancelled' });
   });
 });
 

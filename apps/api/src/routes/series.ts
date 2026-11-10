@@ -3,9 +3,9 @@
 
 import {
   createSeriesSchema,
-  impactQuerySchema,
   paths,
   type SeriesList,
+  seriesImpactQuerySchema,
   updateSeriesSchema,
 } from '@tasks/core';
 import type { Hono } from 'hono';
@@ -59,12 +59,13 @@ export function seriesRoutes(app: Hono<AppEnv>, deps: { db: Database }): void {
     return c.json(updated);
   });
 
-  // What a new last day would hide: `?lastDay=YYYY-MM-DD`, optional.
+  // What a new last day, first day or timing would hide: `?lastDay=`, `?firstDay=`,
+  // `?byDay=MO,FR&interval=2`, all optional.
   app.get(`${one}/impact`, async (c) => {
     const id = rowId(c.req.param('id'), 'series');
-    const query = impactQuerySchema.safeParse(c.req.query());
+    const query = seriesImpactQuerySchema.safeParse(c.req.query());
     if (!query.success) throw validationFailed(query.error);
-    const impact = await c.var.asUser((scope) => seriesImpact(scope, id, query.data.lastDay));
+    const impact = await c.var.asUser((scope) => seriesImpact(scope, id, query.data));
     if (!impact) throw noSuchRow('series');
     return c.json(impact);
   });
